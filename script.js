@@ -17,6 +17,9 @@
           // clear any selected row (user asked to clear the previously selected row)
           try{ selectedRows.clear(); anchorRow = null; }catch(_){ }
           // refresh reference state (will set refIndex if any row exactly matches consensus)
+          // note: we intentionally do NOT auto-select any matching row when the reference
+          // is the consensus; rows that happen to equal the consensus should be treated
+          // the same as other sequences (no special highlight).
           refreshRefStr();
           // enable reference colouring UI so effect is visible
           if(refToggle){ try{ refToggle.checked = true; }catch(_){ } }
@@ -66,9 +69,13 @@
   const LABEL_WIDTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--label-width')) || 260;
   let CHAR_WIDTH = 12; // px per base/column (will be measured)
   const HEADER_HEIGHT = 30;
-  const CONSENSUS_HEIGHT = 20;
+  // consensus row height (CSS pixels). Make mutable so it can follow ROW_HEIGHT/font changes.
+  let CONSENSUS_HEIGHT = 20;
   const OVERVIEW_HEIGHT = 48;
-  const FONT = '14px monospace';
+  let FONT_SIZE = 14;
+  let FONT = FONT_SIZE + 'px monospace';
+  // fixed header font: keep ruler/header font constant regardless of FONT_SIZE
+  const HEADER_FONT = '12px sans-serif';
   // extra vertical padding added to measured text height so rows are taller
   const ROW_PADDING = 6; // px
   const BUFFER_ROWS = 2; // draw 2 rows above/below viewport
@@ -140,6 +147,14 @@
         refIndex = null;
       }
     }catch(_){ refIndex = null; }
+    // If the reference string is the consensus sequence, do not treat any real row as the "reference row".
+    // This prevents highlighting an existing sequence as the canonical reference when the reference is
+    // the computed consensus (a synthetic aggregate), per UX request.
+    try{
+      if(refStr && window && window.consensusSequence && String(refStr) === String(window.consensusSequence)){
+        refIndex = null;
+      }
+    }catch(_){ }
     try{ window.__refStr = refStr; window.__refIndex = refIndex; }catch(_){ }
     return refStr;
   }
@@ -147,6 +162,11 @@
   const REDUCED_COL_WIDTH = 1; // CSS pixels for compressed columns
   // extra right-side padding (CSS pixels) added to expanded columns to avoid clipping
   const EXPANDED_RIGHT_PAD = 2;
+  // vertical padding inside compressed cell blocks so background peeks above/below
+  const COMPRESSED_CELL_VPAD = 2; // CSS pixels
+  // vertical padding inside consensus row (fixed top and bottom pads)
+  const CONSENSUS_TOP_PAD = 4; // px
+  const CONSENSUS_BOTTOM_PAD = 8; // px
   // Mask compression is always enabled; start with a mask of all '1's (no actual compression)
   let maskEnabled = true;
   let refModeEnabled = refToggle ? !!refToggle.checked : false;
@@ -396,6 +416,29 @@
       });
     }
 
+    // Font size controls: increase/decrease text (labels and nucleotides)
+    const fontIncreaseBtn = document.getElementById('font-increase-btn');
+    const fontDecreaseBtn = document.getElementById('font-decrease-btn');
+    function updateFontSize(delta){
+      try{
+        FONT_SIZE = Math.max(8, Math.min(32, FONT_SIZE + delta));
+        FONT = FONT_SIZE + 'px monospace';
+        // re-measure and resize canvases to apply new font
+        measureCharWidthFromReal();
+        measureRowHeightFromFonts();
+  // make consensus row equal to a sequence ROW_HEIGHT
+  CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
+  try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
+  setCanvasCSSSizes();
+        measureTextVerticalOffset();
+        resizeBackings();
+        scheduleRender();
+        console.info('FONT_SIZE set to', FONT_SIZE);
+      }catch(e){ console.warn('updateFontSize failed', e); }
+    }
+    if(fontIncreaseBtn) fontIncreaseBtn.addEventListener('click', ()=> updateFontSize(1));
+    if(fontDecreaseBtn) fontDecreaseBtn.addEventListener('click', ()=> updateFontSize(-1));
+
   // Animation helpers for mask toggle
   let maskAnimRequest = null;
   const MASK_ANIM_MS = 220;
@@ -466,6 +509,8 @@
   function setCanvasCSSSizes(){
     // set outer CSS size so scrollbars reflect full content
     labelCanvas.style.width = LABEL_WIDTH + 'px';
+    // ensure label canvas is positioned at the top of its container
+    try{ labelCanvas.style.position = labelCanvas.style.position || 'absolute'; labelCanvas.style.left = '0px'; labelCanvas.style.top = '0px'; labelCanvas.style.zIndex = '1'; }catch(_){ }
   // left spacer defines the full vertical scroll height; label canvas stays viewport-sized
   // keep canvas CSS height equal to the visible scroll area (use right scroll as canonical)
   // use clientWidth/clientHeight (integers) to avoid fractional-pixel drift from getBoundingClientRect
@@ -616,6 +661,9 @@
   const totalHeight = rowCount * ROW_HEIGHT;
 
   // CSS pixels (integers) - canvases are viewport-backed so keep them viewport-sized
+  // force top-alignment for label and sequence canvases so drawing lines up with spacer at the top
+  try{ labelCanvas.style.position = labelCanvas.style.position || 'absolute'; labelCanvas.style.left = '0px'; labelCanvas.style.top = '0px'; }catch(_){ }
+  try{ seqCanvas.style.position = seqCanvas.style.position || 'absolute'; seqCanvas.style.left = '0px'; seqCanvas.style.top = '0px'; }catch(_){ }
   labelCanvas.style.height = viewportHeight + 'px';
   seqCanvas.style.height = viewportHeight + 'px';
   seqCanvas.style.width = viewportWidth + 'px';
@@ -872,7 +920,8 @@
     const cssW = headerCanvas.width / pr;
     // clear header area
     ctx.clearRect(0,0, cssW, HEADER_HEIGHT);
-    ctx.font = FONT;
+  // header uses a fixed font size independent of the main FONT
+  ctx.font = HEADER_FONT;
     ctx.textBaseline = 'alphabetic';
 
   // background
@@ -980,15 +1029,17 @@
     // background (match header background)
     ctx.fillStyle = '#fafafa';
     ctx.fillRect(0,0, cssW, cssH);
-    // top separator line so consensus visually sits under the header
-    ctx.strokeStyle = '#e0e0e0';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, 0.5); ctx.lineTo(cssW, 0.5); ctx.stroke();
+  // draw a bottom separator line so the divider appears below the consensus sequence
+  ctx.strokeStyle = '#e0e0e0';
+  ctx.lineWidth = 1;
+  const sepY = Math.max(0.5, cssH - 0.5);
+  ctx.beginPath(); ctx.moveTo(0, sepY); ctx.lineTo(cssW, sepY); ctx.stroke();
 
     ctx.font = FONT;
     ctx.textBaseline = 'alphabetic';
 
-    // compute vertical baseline for text in this canvas
+    // compute vertical metrics inside the inner box (cssH minus top+bottom pads)
+    const innerH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
     let ascent = 0, descent = 0;
     try{
       const m = ctx.measureText('Mg');
@@ -997,7 +1048,7 @@
         descent = m.actualBoundingBoxDescent || 0;
       }
     }catch(e){}
-    const baselineY = Math.round((cssH - (ascent + descent)) / 2 + ascent);
+    const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
 
     // ensure we have a consensus string
     const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
@@ -1014,9 +1065,11 @@
       const base = ch ? ch.charAt(0).toUpperCase() : '';
       const color = BASE_COLORS[base] || DEFAULT_BASE_COLOR;
       if(maskEnabled && maskStr && maskStr.charAt(c) === '0'){
-        // compressed: draw a block
+        // compressed: draw a block inset by the top/bottom pads so the bg shows above/below
         ctx.fillStyle = color;
-        ctx.fillRect(x, 0, w, cssH);
+        const blockTop = CONSENSUS_TOP_PAD;
+        const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+        ctx.fillRect(x, blockTop, w, blockH);
       } else {
         ctx.fillStyle = color;
         ctx.fillText(ch, x + 3, baselineY);
@@ -1096,7 +1149,8 @@
     const pr = window.devicePixelRatio || 1;
     const w = labelsHeaderCanvas.width / pr;
     ctx.clearRect(0,0,w,HEADER_HEIGHT);
-    ctx.font = FONT;
+  // labels header (the little "Labels" title) uses the fixed header font
+  ctx.font = HEADER_FONT;
     ctx.textBaseline = 'alphabetic';
     // background
     ctx.fillStyle = '#f3f3f3';
@@ -1169,9 +1223,14 @@
       // Reference row should always keep nucleotide colours; other rows may be de-emphasized when matching reference
       const color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
       if(maskEnabled && maskStr && maskStr.charAt(c) === '0'){
-        // compressed cell: fill the entire cell with chosen color and do not draw character
+        // compressed cell: draw a slightly shorter colored block so the row background is visible
         ctx.fillStyle = color;
-        ctx.fillRect(x, Math.round(rawRowY * pr) / pr, w, Math.round(ROW_HEIGHT * pr) / pr);
+        // compute vertical inset so the block is centered within the row
+        const topCss = rawRowY + COMPRESSED_CELL_VPAD;
+        const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
+        const topQ = Math.round(topCss * pr) / pr;
+        const hQ = Math.round(blockH * pr) / pr;
+        ctx.fillRect(x, topQ, w, hQ);
       } else {
         ctx.fillStyle = color;
         // draw at local canvas coordinate relative to visible scroll
@@ -1285,13 +1344,20 @@
   measureCharWidth();
   // measure fonts to determine ROW_HEIGHT before sizing
   measureRowHeightFromFonts();
+  // consensus row should match sequence row height
+  CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
+  try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
   setCanvasCSSSizes();
   // give the spacer a moment to size (if DOM still settling) then measure real width and backings
   requestAnimationFrame(()=>{
     measureCharWidthFromReal();
     // remeasure row height in case font rendering differs in the real canvas
     measureRowHeightFromFonts();
-    setCanvasCSSSizes();
+    // update consensus height to match new row measurements
+    // ensure consensus height equals ROW_HEIGHT so it matches sequence rows on first paint
+    CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
+  try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
+  setCanvasCSSSizes();
     measureTextVerticalOffset();
     resizeBackings();
     scheduleRender();

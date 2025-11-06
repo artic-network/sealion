@@ -2,11 +2,12 @@ td, th {
   padding: 1px 4px;
 }
 
-#root{
+:root{
   --label-width: 260px;
   --header-height: 30px;
   --overview-height: 48px;
   --row-height: 20px;
+  --consensus-height: 20px;
 }
 
 html, body { height:100%; margin:0; overflow:hidden; }
@@ -15,7 +16,7 @@ html, body { height:100%; margin:0; overflow:hidden; }
 
 /* 2x2 grid: corner | header
         labels | alignment */
-#grid{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: calc(var(--overview-height) + var(--header-height)) 1fr; flex:1; min-height:0; }
+#grid{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: calc(var(--overview-height) + var(--header-height) + var(--consensus-height)) 1fr; flex:1; min-height:0; }
 #corner{ grid-column:1; grid-row:1; background:#f3f3f3; }
 #header{ grid-column:2; grid-row:1; background:#f3f3f3; overflow:hidden; display:flex; flex-direction:column; }
 #labels{ grid-column:1; grid-row:2; position:relative; overflow:hidden; }
@@ -41,7 +42,7 @@ html, body { height:100%; margin:0; overflow:hidden; }
 #overview-canvas{ width:100%; height: var(--overview-height); display:block; }
 #labels-header-canvas{ width: var(--label-width); height: var(--header-height); }
 #header-canvas{ width:100%; height: var(--header-height); }
-#consensus-canvas{ width:100%; height: 20px; display:block; }
+#consensus-canvas{ width:100%; height: var(--consensus-height); display:block; }
 #labels-canvas{ width: var(--label-width); position:absolute; left:0; top:0; }
 #seq-canvas{ position:absolute; left:0; top:0; z-index: 3; pointer-events: auto; }
 /* seq-canvas receives pointer events for selection; script forwards wheel events to the scroller. */
