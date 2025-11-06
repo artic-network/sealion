@@ -3,7 +3,62 @@
 
 (function(){
   const __statusEl = document.getElementById('init-status');
-  function setStatus(msg){ try{ if(__statusEl) __statusEl.textContent = msg; }catch(e){} }
+  // Feature flag: show a centered translucent status box during initialization
+  const USE_CENTER_STATUS = true;
+  let __centerStatusEl = null;
+  let __centerStatusText = null;
+  function ensureCenterStatus(){
+    if(!USE_CENTER_STATUS) return null;
+    if(__centerStatusEl) return __centerStatusEl;
+    try{
+      __centerStatusEl = document.getElementById('center-status');
+      if(!__centerStatusEl){
+        __centerStatusEl = document.createElement('div');
+        __centerStatusEl.id = 'center-status';
+        __centerStatusEl.setAttribute('role','status');
+        __centerStatusEl.setAttribute('aria-live','polite');
+
+        const spinner = document.createElement('div');
+        spinner.className = 'center-spinner';
+        const txt = document.createElement('div');
+        txt.className = 'center-status-text';
+        txt.textContent = '';
+        __centerStatusText = txt;
+
+        __centerStatusEl.appendChild(spinner);
+        __centerStatusEl.appendChild(txt);
+        document.body.appendChild(__centerStatusEl);
+      } else {
+        __centerStatusText = __centerStatusEl.querySelector('.center-status-text') || __centerStatusText;
+      }
+    }catch(e){ __centerStatusEl = null; }
+    return __centerStatusEl;
+  }
+  function setStatus(msg){
+    try{
+      if(USE_CENTER_STATUS){
+        const el = ensureCenterStatus();
+        if(el){
+          if(msg){ if(__centerStatusText) __centerStatusText.textContent = msg; el.classList.add('visible'); }
+          else { el.classList.remove('visible'); }
+          return;
+        }
+      }
+      // fallback to inline status element if present
+      if(__statusEl) __statusEl.textContent = msg || '';
+    }catch(e){}
+  }
+
+  // expose for console/debug convenience
+  try{ window.setStatus = setStatus }catch(e){}
+
+  // Show the status box immediately on script load so users see progress while other
+  // initialization (DOM/layout/measure) proceeds. Use a generic message that will be
+  // replaced by more specific updates later.
+  try{
+    ensureCenterStatus();
+    setStatus('Initializing...');
+  }catch(e){}
 
     // Button to set the consensus sequence as the reference and clear any selected row
     const diffConsensusBtn = document.getElementById('diff-consensus-btn');
@@ -1333,6 +1388,8 @@
     measureTextVerticalOffset();
     resizeBackings();
     scheduleRender();
+    // initialization complete: hide the status overlay if present
+    try{ setStatus(null); }catch(_){ }
   });
 
   // reflow handler: when the spacer's width might change (e.g., charset measurement), recompute
@@ -1890,6 +1947,30 @@
     });
   }
 
+  // helpers to set scroll positions programmatically while suppressing the scroll handler actions
+  function setScrollLeftImmediate(x){
+    try{
+      // cancel any pending snap timeout so it doesn't override our programmatic move
+      try{ if(snapTimeout){ clearTimeout(snapTimeout); snapTimeout = null; } }catch(_){ }
+      scrollingProgrammatic = true;
+      if(scroller) scroller.scrollLeft = x;
+      // record start position so any subsequent snap logic (if triggered) has correct base
+      try{ scrollStartLeft = scroller ? scroller.scrollLeft : 0; }catch(_){ }
+      scheduleRender();
+      setTimeout(()=>{ scrollingProgrammatic = false; }, 60);
+    }catch(_){ scrollingProgrammatic = false; }
+  }
+  function setScrollTopImmediate(y){
+    try{
+      // cancel pending horizontal snap as a precaution
+      try{ if(snapTimeout){ clearTimeout(snapTimeout); snapTimeout = null; } }catch(_){ }
+      scrollingProgrammatic = true;
+      if(scroller) scroller.scrollTop = y;
+      scheduleRender();
+      setTimeout(()=>{ scrollingProgrammatic = false; }, 60);
+    }catch(_){ scrollingProgrammatic = false; }
+  }
+
   // when the right horizontally scrolls we only need to redraw header and sequences
   // re-enable snapping to integer character after scrolling stops (direction-aware)
   let snapTimeout = null;
@@ -1972,29 +2053,32 @@
           if(ke.key === 'ArrowLeft'){
             const newCol = Math.max(0, vis.rawFirstCol - 1);
             const targetLeft = colOffsets[newCol] || 0;
-            if(scroller) scroller.scrollLeft = targetLeft;
-            scheduleRender();
+            setScrollLeftImmediate(targetLeft);
             return;
           }
           if(ke.key === 'ArrowRight'){
-            // move one column to the right relative to the current leftmost visible column
-            const newCol = Math.min(maxSeqLen - 1, vis.rawFirstCol + 1);
-            const targetLeft = colOffsets[newCol] || 0;
-            if(scroller) scroller.scrollLeft = targetLeft;
-            scheduleRender();
+            // move one column to the right: align the next column AFTER the current rightmost visible column
+            // to the RIGHT edge of the viewport so movement is guaranteed when there is any hidden content to the right.
+            const viewportW = (scroller ? scroller.clientWidth : window.innerWidth);
+            const newCol = Math.min(maxSeqLen - 1, vis.rawLastCol + 1);
+            // right boundary of the column is colOffsets[newCol+1]
+            const rightBoundary = (typeof colOffsets[newCol+1] !== 'undefined') ? colOffsets[newCol+1] : colOffsets[maxSeqLen] || 0;
+            const totalWidth = colOffsets[maxSeqLen] || 0;
+            let targetLeft = Math.round(rightBoundary - viewportW);
+            // clamp to valid scroll range
+            targetLeft = Math.max(0, Math.min(totalWidth - viewportW, targetLeft));
+            setScrollLeftImmediate(targetLeft);
             return;
           }
           if(ke.key === 'ArrowUp'){
             const targetTop = Math.max(0, (scroller ? scroller.scrollTop : 0) - ROW_HEIGHT);
-            if(scroller) scroller.scrollTop = targetTop;
-            scheduleRender();
+            setScrollTopImmediate(targetTop);
             return;
           }
           if(ke.key === 'ArrowDown'){
             const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : window.innerHeight));
             const targetTop = Math.min(maxTop, (scroller ? scroller.scrollTop : 0) + ROW_HEIGHT);
-            if(scroller) scroller.scrollTop = targetTop;
-            scheduleRender();
+            setScrollTopImmediate(targetTop);
             return;
           }
         }
