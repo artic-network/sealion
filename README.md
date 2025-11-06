@@ -54,7 +54,7 @@ Notes:
   - `Set selected as reference`: set the currently selected sequence as the reference used for de-emphasis.
   - `Difference from consensus`: set the consensus sequence as the reference (clears selected row).
   - `Snap to char` toggle: when enabled, horizontal scroll snaps to column boundaries.
-  - `Show marker` toggle: draws marker lines in the header and sequence canvases.
+  
 
 ## Developer notes
 

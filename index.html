@@ -10,10 +10,9 @@
   <body>
     <div id="app">
       <div id="controls">
-        <button id="Top">Top:Next</button>
-        <button id="copy-row">Copy row</button>
+        
         <label><input id="snap-toggle" type="checkbox" checked> Snap to char</label>
-        <label><input id="marker-toggle" type="checkbox"> Show marker</label>
+        
         
       <label><button id="apply-constant-mask-btn" type="button">Apply constant mask</button></label>
   <label><button id="apply-constant-ambiguous-btn" type="button">Apply constant (allow N)</button></label>
@@ -45,6 +44,8 @@
           <div id="left-inner">
             <canvas id="labels-canvas" class="labels-canvas"></canvas>
           </div>
+          <!-- draggable divider to resize the labels panel -->
+          <div id="label-divider" title="Drag to resize labels" aria-hidden="true"></div>
         </div>
 
         <div id="alignment">

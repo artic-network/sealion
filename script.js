@@ -59,14 +59,16 @@
   const scroller = alignScroll || rightScroll || leftScroll || null;
   const searchInput = document.getElementById('search-input');
   const searchNextBtn = document.getElementById('search-next');
-  const copyRowBtn = document.getElementById('copy-row');
+  
   const snapToggle = document.getElementById('snap-toggle');
-  const markerToggle = document.getElementById('marker-toggle');
+  
+  // divider element for resizing the labels column
+  const labelDivider = document.getElementById('label-divider');
   const maskToggle = document.getElementById('mask-toggle');
   const refToggle = document.getElementById('ref-toggle');
 
   let ROW_HEIGHT = 20; // px per row (may be recomputed from font metrics)
-  const LABEL_WIDTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--label-width')) || 260;
+  let LABEL_WIDTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--label-width')) || 260;
   let CHAR_WIDTH = 12; // px per base/column (will be measured)
   const HEADER_HEIGHT = 30;
   // consensus row height (CSS pixels). Make mutable so it can follow ROW_HEIGHT/font changes.
@@ -489,6 +491,7 @@
   let anchorRow = null; // for shift-extend
   let isSelecting = false;
   let selectionStartRow = null;
+  let selectionOrigin = null;
   let selectionMode = 'replace';
   // rectangular selection state
   let isRectSelecting = false;
@@ -999,22 +1002,7 @@
       }
     }
 
-    // draw marker(s) if enabled (compute positions in the same local coordinate space)
-    if(markerEnabled || window.__showMarker){
-      try{
-        const ctxm = headerCanvas.getContext('2d');
-        ctxm.save();
-  const gx = Math.round((colOffsets[0] || 0) - visible.scrollLeft + 0.5);
-  const gx2 = Math.round((colOffsets[1] || (colOffsets[0] + CHAR_WIDTH + EXPANDED_RIGHT_PAD)) - visible.scrollLeft + 0.5);
-        ctxm.strokeStyle = 'rgba(0,200,0,0.9)';
-        ctxm.lineWidth = 2;
-        const h = headerCanvas.height / (window.devicePixelRatio || 1);
-        ctxm.beginPath(); ctxm.moveTo(gx,0); ctxm.lineTo(gx,h); ctxm.stroke();
-        ctxm.strokeStyle = 'rgba(0,120,200,0.9)';
-        ctxm.beginPath(); ctxm.moveTo(gx2,0); ctxm.lineTo(gx2,h); ctxm.stroke();
-        ctxm.restore();
-      }catch(e){ }
-    }
+    
   }
 
   // Draw consensus row underneath the header (single-raster representing per-column consensus)
@@ -1291,23 +1279,7 @@
       ctx.restore();
     }
     // record draw extents for HUD
-    // draw marker(s) if enabled
-    if(markerEnabled || window.__showMarker){
-      try{
-    ctx.save();
-    // quantize marker positions to device pixels for seq canvas as well
-    const dpr_s = window.devicePixelRatio || 1;
-    const fullH = seqCanvas.height / dpr_s;
-  const gx_css = -visible.scrollLeft + 0.5;
-  const gx2_css = -(visible.scrollLeft - CHAR_WIDTH) + 0.5;
-  const gx = Math.round(gx_css * dpr_s) / dpr_s;
-  const gx2 = Math.round(gx2_css * dpr_s) / dpr_s;
-    ctx.strokeStyle = 'rgba(0,200,0,0.9)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,fullH); ctx.stroke();
-    ctx.strokeStyle = 'rgba(0,120,200,0.9)'; ctx.beginPath(); ctx.moveTo(gx2,0); ctx.lineTo(gx2,fullH); ctx.stroke();
-        ctx.restore();
-      }catch(e){}
-    }
+    
 
     (function recordExtents(){
       try{
@@ -1377,6 +1349,48 @@
   });
   if(scroller) observer.observe(scroller);
 
+  // --- label divider drag-to-resize behaviour ---
+  if(labelDivider){
+    let isLabelDragging = false;
+    let labelDragStartX = 0;
+    let labelDragStartWidth = LABEL_WIDTH;
+    // min/max label width to avoid collapsing UI
+    const MIN_LABEL_WIDTH = 120;
+    const MAX_LABEL_WIDTH = 800;
+    labelDivider.addEventListener('mousedown', (e)=>{
+      if(e.button !== 0) return;
+      isLabelDragging = true;
+      labelDragStartX = e.clientX;
+      labelDragStartWidth = LABEL_WIDTH;
+      try{ document.body.style.userSelect = 'none'; }catch(_){ }
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', (e)=>{
+      if(!isLabelDragging) return;
+      const dx = e.clientX - labelDragStartX;
+      let nw = Math.max(MIN_LABEL_WIDTH, Math.min(MAX_LABEL_WIDTH, Math.round(labelDragStartWidth + dx)));
+      if(nw === LABEL_WIDTH) return;
+      LABEL_WIDTH = nw;
+      // sync CSS var and apply immediate layout changes
+      try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
+      try{ setCanvasCSSSizes(); resizeBackings(); scheduleRender(); }catch(_){ }
+    });
+    window.addEventListener('mouseup', (e)=>{
+      if(!isLabelDragging) return;
+      isLabelDragging = false;
+      try{ document.body.style.userSelect = ''; }catch(_){ }
+      // final apply and persist preference
+      try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
+      try{ localStorage.setItem('sealion_label_width', String(LABEL_WIDTH)); }catch(_){ }
+      try{ setCanvasCSSSizes(); resizeBackings(); scheduleRender(); }catch(_){ }
+    });
+    // restore persisted width if present
+    try{
+      const saved = localStorage.getItem('sealion_label_width');
+      if(saved){ const v = parseInt(saved,10); if(Number.isFinite(v) && v > 0) { LABEL_WIDTH = v; document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); } }
+    }catch(_){ }
+  }
+
   // debug HUD setup: show if URL contains ?debug
   // debug HUD removed — rely on console.log and `logLayoutDiagnostics()` for runtime diagnostics.
 
@@ -1408,16 +1422,7 @@
     });
   }
 
-  if(copyRowBtn){
-    copyRowBtn.addEventListener('click', ()=>{
-      // copy currently visible top row
-      const vis = computeVisible();
-      const row = vis.firstRow;
-      const item = rows[row];
-      const text = (item ? item.label : '') + '\t' + ((item && item.sequence) ? item.sequence : '');
-      try{ navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : null; }catch(e){}
-    });
-  }
+  
 
   // selection helpers: compute row from clientY within labelCanvas
   function rowFromClientY(clientY){
@@ -1467,7 +1472,6 @@
   // wire up label canvas interactions: click/drag selection, shift-extend, cmd-toggle, and forward wheel to scroller
   if(labelCanvas){
   selectionMode = 'replace';
-    let selectionOrigin = null;
     labelCanvas.addEventListener('mousedown', (e)=>{
       if(e.button !== 0) return; // only left button
       const row = rowFromClientY(e.clientY);
@@ -1715,45 +1719,89 @@
         dragStartX = e.clientX; dragStartY = e.clientY;
         dragStartScrollLeft = scroller ? scroller.scrollLeft : 0;
         dragStartScrollTop = scroller ? scroller.scrollTop : 0;
-  try{ if(seqCanvas) seqCanvas.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; }catch(_){ }
+        try{ if(seqCanvas) seqCanvas.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; }catch(_){ }
         e.preventDefault();
         return;
       }
-      // start rectangular selection in seq canvas — this replaces row/column selections
-      // If Shift is held, expand/reduce from existing anchor/rect start; otherwise start a new rect
-      selectedRows.clear(); selectedCols.clear();
-      const row = rowFromClientY(e.clientY);
-      const col = colFromClientXLocal(e.clientX);
-      if(e.shiftKey){
-        // If there is an existing rectangle, prepare to expand it by union with the new area.
-        if(rectStartRow !== null && rectEndRow !== null && rectStartCol !== null && rectEndCol !== null){
-          const rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
-          const rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-          const clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-          const chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-          rectOriginal = { rlo, rhi, clo, chi };
+
+      // New behaviour:
+      // - Default click/drag on the alignment (no modifiers) selects columns.
+      // - Alt (option) + click/drag selects rows.
+      // - Alt + Cmd + click/drag selects a rectangular region (existing behaviour).
+      const alt = !!e.altKey;
+      const meta = !!e.metaKey;
+
+      if(alt && meta){
+        // Rectangle selection (Alt+Cmd): preserve existing rectangular selection behaviour
+        selectedRows.clear(); selectedCols.clear();
+        const row = rowFromClientY(e.clientY);
+        const col = colFromClientXLocal(e.clientX);
+        if(e.shiftKey){
+          if(rectStartRow !== null && rectEndRow !== null && rectStartCol !== null && rectEndCol !== null){
+            const rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
+            const rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
+            const clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
+            const chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
+            rectOriginal = { rlo, rhi, clo, chi };
+          } else {
+            rectOriginal = { rlo: row, rhi: row, clo: col, chi: col };
+          }
+          rectStartRow = rectOriginal.rlo; rectStartCol = rectOriginal.clo;
+          rectEndRow = row; rectEndCol = col;
         } else {
-          // no existing rect — treat this like a normal start with original equal to the clicked cell
-          rectOriginal = { rlo: row, rhi: row, clo: col, chi: col };
+          rectOriginal = null;
+          rectStartRow = row; rectEndRow = row; rectStartCol = col; rectEndCol = col;
         }
-        // initialize live end to the clicked point (will be expanded during move)
-        rectStartRow = rectOriginal.rlo; rectStartCol = rectOriginal.clo;
-        rectEndRow = row; rectEndCol = col;
-      } else {
-        rectOriginal = null;
-        rectStartRow = row; rectEndRow = row; rectStartCol = col; rectEndCol = col;
+        isRectSelecting = true;
+        anchorRow = rectStartRow; anchorCol = rectStartCol;
+        const rlo0 = Math.max(0, Math.min(rectStartRow, rectEndRow));
+        const rhi0 = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
+        const clo0 = Math.max(0, Math.min(rectStartCol, rectEndCol));
+        const chi0 = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
+        selectedRows.clear(); selectedCols.clear();
+        for(let r=rlo0;r<=rhi0;r++) selectedRows.add(r);
+        for(let c=clo0;c<=chi0;c++) selectedCols.add(c);
+        scheduleRender();
+        e.preventDefault();
+        return;
       }
-  isRectSelecting = true;
-  // set anchor points (anchor follows the selection corner)
-  anchorRow = rectStartRow; anchorCol = rectStartCol;
-  // initialize live selection sets for immediate feedback
-  const rlo0 = Math.max(0, Math.min(rectStartRow, rectEndRow));
-  const rhi0 = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-  const clo0 = Math.max(0, Math.min(rectStartCol, rectEndCol));
-  const chi0 = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-  selectedRows.clear(); selectedCols.clear();
-  for(let r=rlo0;r<=rhi0;r++) selectedRows.add(r);
-  for(let c=clo0;c<=chi0;c++) selectedCols.add(c);
+
+      if(alt && !meta){
+        // Alt (option) alone: select rows (behave like clicking the labels column)
+        selectedCols.clear();
+        clearRectSelection();
+        const row = rowFromClientY(e.clientY);
+        // set the shared selection origin so the global mousemove handler can extend from it
+        if(e.shiftKey && anchorRow !== null){ selectionOrigin = anchorRow; } else { selectionOrigin = row; }
+        if(e.metaKey){ selectionMode = 'add'; } else selectionMode = 'replace';
+
+        if(e.shiftKey && anchorRow !== null){
+          setSelectionToRange(anchorRow, row);
+        } else if(e.metaKey){
+          if(selectedRows.has(row)) selectedRows.delete(row); else selectedRows.add(row);
+          anchorRow = row;
+        } else {
+          selectedRows.clear();
+          selectedRows.add(row);
+          anchorRow = row;
+        }
+        isSelecting = true;
+        selectionStartRow = row;
+        scheduleRender();
+        e.preventDefault();
+        return;
+      }
+
+      // Default: select columns
+      selectedRows.clear();
+      clearRectSelection();
+      const col = colFromClientXLocal(e.clientX);
+      if(e.shiftKey && anchorCol !== null){ selectionStartCol = anchorCol; } else { selectionStartCol = col; }
+      if(e.metaKey) selectionMode = 'add'; else selectionMode = 'replace';
+      if(e.shiftKey && anchorCol !== null){ setColSelectionToRange(anchorCol, col); }
+      else if(e.metaKey){ if(selectedCols.has(col)) selectedCols.delete(col); else selectedCols.add(col); anchorCol = col; }
+      else { selectedCols.clear(); selectedCols.add(col); anchorCol = col; }
+      isColSelecting = true;
       scheduleRender();
       e.preventDefault();
     });
@@ -1851,11 +1899,7 @@
     snapToggle.addEventListener('change', ()=>{ snapEnabled = !!snapToggle.checked; });
   }
 
-  // marker toggle (visual alignment aid)
-  let markerEnabled = markerToggle ? !!markerToggle.checked : false;
-  if(markerToggle){
-    markerToggle.addEventListener('change', ()=>{ markerEnabled = !!markerToggle.checked; scheduleRender(); });
-  }
+  
 
   // Command-drag panning: hold Meta (Command on macOS) and drag to pan the alignment viewport
   let isCmdDrag = false;
@@ -1866,6 +1910,28 @@
     try{ document.body.style.userSelect = ''; }catch(e){}
     // restore grab cursor if space is still down
     updateSpaceCursor();
+  }
+  // Smooth scroll animation helper (used for Alt+Cmd page scroll)
+  let scrollAnimRequest = null;
+  function animateScrollTo(targetLeft, targetTop, duration = 300){
+    if(!scroller) return;
+    if(scrollAnimRequest){ cancelAnimationFrame(scrollAnimRequest); scrollAnimRequest = null; }
+    const startLeft = scroller.scrollLeft;
+    const startTop = scroller.scrollTop;
+    const wantLeft = (typeof targetLeft === 'number') ? Math.max(0, Math.min(targetLeft, Math.max(0, (colOffsets[maxSeqLen] || 0) - (scroller ? scroller.clientWidth : 0)))) : startLeft;
+    const wantTop = (typeof targetTop === 'number') ? Math.max(0, Math.min(targetTop, Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : 0)))) : startTop;
+    const deltaLeft = wantLeft - startLeft;
+    const deltaTop = wantTop - startTop;
+    const start = performance.now();
+    function tick(now){
+      const t = Math.min(1, (now - start) / duration);
+      const eased = easeOutQuad(t);
+      if(Math.abs(deltaLeft) > 0.5) scroller.scrollLeft = Math.round(startLeft + deltaLeft * eased);
+      if(Math.abs(deltaTop) > 0.5) scroller.scrollTop = Math.round(startTop + deltaTop * eased);
+      scheduleRender();
+      if(t < 1){ scrollAnimRequest = requestAnimationFrame(tick); } else { scrollAnimRequest = null; }
+    }
+    scrollAnimRequest = requestAnimationFrame(tick);
   }
   // Track Space key as the panning modifier (user requested Space to enable drag-scroll)
   let isSpaceDown = false;
@@ -1890,6 +1956,77 @@
         anchorCol = Math.max(0, maxSeqLen - 1);
         scheduleRender();
         return;
+      }
+      // Arrow keys: without modifier scroll by 1 row/column; with Meta (Command) perform page scroll with animation.
+      if((ke.key === 'ArrowLeft' || ke.key === 'ArrowRight' || ke.key === 'ArrowUp' || ke.key === 'ArrowDown')){
+        try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){ }
+        // only handle when focus is on body or canvases to avoid interfering with inputs
+        const ae = document.activeElement;
+        const focusOk = (ae === document.body || ae === seqCanvas || ae === labelCanvas || ae === headerCanvas || ae === consensusCanvas || ae === overviewCanvas);
+        if(!focusOk) return;
+        const vis = computeVisible();
+        const isMeta = !!ke.metaKey;
+
+        // No Meta: single-step navigation
+        if(!isMeta){
+          if(ke.key === 'ArrowLeft'){
+            const newCol = Math.max(0, vis.rawFirstCol - 1);
+            const targetLeft = colOffsets[newCol] || 0;
+            if(scroller) scroller.scrollLeft = targetLeft;
+            scheduleRender();
+            return;
+          }
+          if(ke.key === 'ArrowRight'){
+            // move one column to the right relative to the current leftmost visible column
+            const newCol = Math.min(maxSeqLen - 1, vis.rawFirstCol + 1);
+            const targetLeft = colOffsets[newCol] || 0;
+            if(scroller) scroller.scrollLeft = targetLeft;
+            scheduleRender();
+            return;
+          }
+          if(ke.key === 'ArrowUp'){
+            const targetTop = Math.max(0, (scroller ? scroller.scrollTop : 0) - ROW_HEIGHT);
+            if(scroller) scroller.scrollTop = targetTop;
+            scheduleRender();
+            return;
+          }
+          if(ke.key === 'ArrowDown'){
+            const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : window.innerHeight));
+            const targetTop = Math.min(maxTop, (scroller ? scroller.scrollTop : 0) + ROW_HEIGHT);
+            if(scroller) scroller.scrollTop = targetTop;
+            scheduleRender();
+            return;
+          }
+        }
+
+        // Meta (Command) pressed: page scroll with animation
+        if(isMeta){
+          if(ke.key === 'ArrowLeft'){
+            const target = Math.max(0, (scroller ? scroller.scrollLeft : 0) - (scroller ? scroller.clientWidth : window.innerWidth));
+            const col = colIndexFromOffset(target);
+            const targetLeft = colOffsets[col] || 0;
+            animateScrollTo(targetLeft, scroller ? scroller.scrollTop : 0, 320);
+            return;
+          }
+          if(ke.key === 'ArrowRight'){
+            const target = Math.min((colOffsets[maxSeqLen] || 0), (scroller ? scroller.scrollLeft : 0) + (scroller ? scroller.clientWidth : window.innerWidth));
+            const col = colIndexFromOffset(target);
+            const targetLeft = Math.max(0, Math.min(colOffsets[col] || 0, (colOffsets[maxSeqLen] || 0)));
+            animateScrollTo(targetLeft, scroller ? scroller.scrollTop : 0, 320);
+            return;
+          }
+          if(ke.key === 'ArrowUp'){
+            const targetTop = Math.max(0, (scroller ? scroller.scrollTop : 0) - (scroller ? scroller.clientHeight : window.innerHeight));
+            animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, 320);
+            return;
+          }
+          if(ke.key === 'ArrowDown'){
+            const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : window.innerHeight));
+            const targetTop = Math.min(maxTop, (scroller ? scroller.scrollTop : 0) + (scroller ? scroller.clientHeight : window.innerHeight));
+            animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, 320);
+            return;
+          }
+        }
       }
       // Mask edit shortcuts: Alt + '+' to set selected columns to expanded ('1'),
       // Alt + '-' to set selected columns to compressed ('0').

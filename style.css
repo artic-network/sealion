@@ -31,6 +31,22 @@ html, body { height:100%; margin:0; overflow:hidden; }
 #labels, #alignment, #header, #corner { height: 100%; }
 #left-inner, #seq-inner { height: 100%; box-sizing: border-box; }
 
+/* draggable divider at right edge of labels column to resize label width */
+#label-divider{
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 10px; /* hit target width */
+  cursor: col-resize;
+  z-index: 50;
+  /* subtle visible handle in center */
+  background: linear-gradient(90deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0) 60%);
+}
+@media (hover:hover){
+  #label-divider:hover{ background: linear-gradient(90deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.12) 50%, rgba(0,0,0,0) 65%); }
+}
+
 /* The alignment-scroll is the only scroller in the layout */
 /*
   Keep scrollbars visible and reserve gutter to avoid layout shift.
