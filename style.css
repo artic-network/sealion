@@ -1,0 +1,54 @@
+td, th {
+  padding: 1px 4px;
+}
+
+#root{
+  --label-width: 260px;
+  --header-height: 30px;
+  --overview-height: 48px;
+  --row-height: 20px;
+}
+
+html, body { height:100%; margin:0; overflow:hidden; }
+#app { height:100vh; display:flex; flex-direction:column; }
+#controls{ padding:8px; background:#f6f6f6; border-bottom:1px solid #ddd; }
+
+/* 2x2 grid: corner | header
+        labels | alignment */
+#grid{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: calc(var(--overview-height) + var(--header-height)) 1fr; flex:1; min-height:0; }
+#corner{ grid-column:1; grid-row:1; background:#f3f3f3; }
+#header{ grid-column:2; grid-row:1; background:#f3f3f3; overflow:hidden; display:flex; flex-direction:column; }
+#labels{ grid-column:1; grid-row:2; position:relative; overflow:hidden; }
+#alignment{ grid-column:2; grid-row:2; position:relative; overflow:hidden; }
+
+/* allow grid children to shrink below their content intrinsic size
+  so the grid keeps to viewport space and the inner scrollers handle overflow */
+#grid > * { min-width: 0; min-height: 0; }
+
+/* make inner containers fill their grid cells so canvases are viewport-backed
+  and scrolling happens inside the scroll containers */
+#labels, #alignment, #header, #corner { height: 100%; }
+#left-inner, #seq-inner { height: 100%; box-sizing: border-box; }
+
+/* The alignment-scroll is the only scroller in the layout */
+/*
+  Keep scrollbars visible and reserve gutter to avoid layout shift.
+  Note: macOS system preferences or browser overlay-scrollbar behavior may still hide the visual scrollbar
+  even when gutter is reserved; `scrollbar-gutter: stable` helps keep layout stable across states.
+*/
+#alignment-scroll{ width:100%; height:100%; overflow: scroll; position:relative; scrollbar-gutter: stable both-edges; -ms-overflow-style: scrollbar; }
+
+#overview-canvas{ width:100%; height: var(--overview-height); display:block; }
+#labels-header-canvas{ width: var(--label-width); height: var(--header-height); }
+#header-canvas{ width:100%; height: var(--header-height); }
+#consensus-canvas{ width:100%; height: 20px; display:block; }
+#labels-canvas{ width: var(--label-width); position:absolute; left:0; top:0; }
+#seq-canvas{ position:absolute; left:0; top:0; z-index: 3; pointer-events: auto; }
+/* seq-canvas receives pointer events for selection; script forwards wheel events to the scroller. */
+
+#seq-inner{ position:relative; }
+#seq-spacer{ display:block; }
+
+/* debug HUD removed; use console for diagnostics */
+
+#init-status{ font-family:system-ui, -apple-system, sans-serif; font-size:13px; }

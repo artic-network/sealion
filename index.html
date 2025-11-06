@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<meta charset='utf-8'>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
+    <link rel='stylesheet' href='style.css'>
+    <title>Alignment Viewer</title>
+  </head>
+  <body>
+    <div id="app">
+      <div id="controls">
+        <button id="Top">Top:Next</button>
+        <button id="copy-row">Copy row</button>
+        <label><input id="snap-toggle" type="checkbox" checked> Snap to char</label>
+        <label><input id="marker-toggle" type="checkbox"> Show marker</label>
+        
+      <label><button id="apply-constant-mask-btn" type="button">Apply constant mask</button></label>
+  <label><button id="apply-constant-ambiguous-btn" type="button">Apply constant (allow N)</button></label>
+  <label><button id="apply-constant-gapped-btn" type="button">Apply constant (allow N & -)</button></label>
+      <label><input id="ref-toggle" type="checkbox"> Colour by reference difference</label>
+      <label><button id="set-ref-btn" type="button">Set selected as reference</button></label>
+      <label><button id="diff-consensus-btn" type="button">Difference from consensus</button></label>
+        <input id="search-input" placeholder="search">
+        <button id="search-next">Next</button>
+      </div>
+      <div id="init-status" aria-live="polite" style="padding:6px 8px; background:#fff7cc; border-bottom:1px solid #e2c044; display:block;">initializing…</div>
+
+      <!-- Grid: top-left corner, top-right header, bottom-left labels, bottom-right alignment scroll -->
+      <div id="grid">
+        <div id="corner">
+          <canvas id="labels-header-canvas" class="labels-header-canvas"></canvas>
+        </div>
+        <div id="header">
+          <!-- Overview canvas: shows full-alignment overview and viewport region -->
+          <canvas id="overview-canvas" class="overview-canvas"></canvas>
+          <canvas id="header-canvas" class="header-canvas"></canvas>
+          <!-- Consensus sequence rendered under the ruler -->
+          <canvas id="consensus-canvas" class="consensus-canvas"></canvas>
+        </div>
+
+        <div id="labels">
+          <div id="left-inner">
+            <canvas id="labels-canvas" class="labels-canvas"></canvas>
+          </div>
+        </div>
+
+        <div id="alignment">
+          <!-- viewport-backed canvas sits as an overlay above the scroll container -->
+          <canvas id="seq-canvas" class="seq-canvas"></canvas>
+          <!-- scrollable alignment area; this is the authoritative scroller -->
+          <div id="alignment-scroll">
+            <div id="seq-inner">
+              <div id="seq-spacer"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+  <!-- debug HUD removed; use console for diagnostics -->
+    </div>
+
+    <script type='text/javascript' src='alignment.js'></script>
+    <script type='text/javascript' src='script.js'></script>
+  </body>
+</html>
