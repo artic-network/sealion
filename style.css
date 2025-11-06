@@ -53,6 +53,8 @@ td, th {
 .center-status-text{ color: #f3f6f8; }
 @keyframes spin{ from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
 
+/* Overview debug HUD removed; use console for diagnostics */
+
 html, body { height:100%; margin:0; overflow:hidden; }
 #app { height:100vh; display:flex; flex-direction:column; }
 #controls{ padding:8px; background:#f6f6f6; border-bottom:1px solid #ddd; }

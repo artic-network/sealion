@@ -58,6 +58,7 @@
   try{
     ensureCenterStatus();
     setStatus('Initializing...');
+    // on-screen HUD removed in production mode
   }catch(e){}
 
     // Button to set the consensus sequence as the reference and clear any selected row
@@ -803,11 +804,29 @@
 
   // measure CHAR_WIDTH from seqCanvas actual context (ensures consistent rendering)
   function measureCharWidthFromReal(){
-    const ctx = seqCanvas.getContext('2d');
-    ctx.font = FONT;
-    const m = ctx.measureText('W');
-    const w = m && m.width ? m.width : CHAR_WIDTH;
-    CHAR_WIDTH = Math.max(1, Math.ceil(w));
+    // Use an offscreen canvas context without any device-pixel transform to get
+    // a measurement in CSS pixels. The visible seqCanvas context may have a
+    // DPR transform applied which would return values in backing pixels, causing
+    // CHAR_WIDTH to be inflated by devicePixelRatio.
+    try{
+      const off = document.createElement('canvas').getContext('2d');
+      off.font = FONT;
+      const m = off.measureText('W');
+      const w = m && m.width ? m.width : CHAR_WIDTH;
+      CHAR_WIDTH = Math.max(1, Math.ceil(w));
+    }catch(e){
+      // fallback to existing approach if offscreen measurement fails
+      try{
+        const ctx = seqCanvas.getContext('2d');
+        ctx.save();
+        ctx.setTransform(1,0,0,1,0,0);
+        ctx.font = FONT;
+        const m2 = ctx.measureText('W');
+        const w2 = m2 && m2.width ? m2.width : CHAR_WIDTH;
+        CHAR_WIDTH = Math.max(1, Math.ceil(w2));
+        ctx.restore();
+      }catch(_){ /* nothing */ }
+    }
     // CHAR_WIDTH changed -> rebuild col offsets
     try{ buildColOffsets(); }catch(_){ }
   }
@@ -1123,25 +1142,29 @@
   // Draw overview canvas showing full alignment and the current viewport window
   function drawOverview(visible){
     if(!overviewCanvas) return;
-    const ctx = overviewCanvas.getContext('2d');
-    const pr = window.devicePixelRatio || 1;
-    // Use the canvas's layout (CSS) width via getBoundingClientRect so we draw into the
-    // visible area. If the backing buffer size (canvas.width/height) doesn't match the
-    // CSS size * DPR, resize the backing and reapply the device-pixel transform so drawing
-    // covers the full visible area. This avoids cases where the backing buffer is stale
-    // and the graphic appears half or partially rendered.
-    const rect = overviewCanvas.getBoundingClientRect();
-    const cssW = rect && rect.width ? rect.width : (overviewCanvas.width / pr);
-    const cssH = rect && rect.height ? rect.height : (overviewCanvas.height / pr);
-    // ensure backing matches CSS * DPR
-    const wantW = Math.max(1, Math.round(cssW * pr));
-    const wantH = Math.max(1, Math.round(cssH * pr));
-    if(overviewCanvas.width !== wantW || overviewCanvas.height !== wantH){
-      overviewCanvas.width = wantW;
-      overviewCanvas.height = wantH;
-      try{ overviewCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
-    }
-    ctx.clearRect(0,0, cssW, cssH);
+      const ctx = overviewCanvas.getContext('2d');
+      const pr = window.devicePixelRatio || 1;
+      // Use CSS-pixel layout size as the authoritative drawing space for the overview.
+      // Compute CSS width/height from getBoundingClientRect, then ensure the canvas
+      // backing matches (css * DPR). After sizing the backing we apply ctx.setTransform
+      // so drawing commands can use CSS pixels directly.
+      const rect = overviewCanvas.getBoundingClientRect();
+      let cssW = rect && rect.width ? rect.width : Math.max(1, overviewCanvas.width / pr);
+      let cssH = rect && rect.height ? rect.height : Math.max(1, overviewCanvas.height / pr);
+      // guard against zero
+      cssW = Math.max(1, cssW);
+      cssH = Math.max(1, cssH);
+      const wantW = Math.max(1, Math.round(cssW * pr));
+      const wantH = Math.max(1, Math.round(cssH * pr));
+      if(overviewCanvas.width !== wantW || overviewCanvas.height !== wantH){
+        overviewCanvas.width = wantW;
+        overviewCanvas.height = wantH;
+      }
+      // Ensure the canvas CSS width reflects the layout rect (helpful if styles changed)
+      try{ overviewCanvas.style.width = Math.round(cssW) + 'px'; overviewCanvas.style.height = Math.round(cssH) + 'px'; }catch(_){ }
+      try{ ctx.setTransform(pr,0,0,pr,0,0); }catch(e){}
+      // Clear using CSS-pixel coordinates
+      ctx.clearRect(0,0, cssW, cssH);
     // background
     ctx.fillStyle = '#f7f7f7';
     ctx.fillRect(0,0, cssW, cssH);
@@ -1152,6 +1175,29 @@
   const totalWidth = rawTotal;
     if(totalWidth <= 0) return;
     const scale = cssW / totalWidth;
+
+    // If the backing buffer's CSS width (overviewCanvas.width / DPR) doesn't match
+    // the layout width (getBoundingClientRect), update the backing so drawing uses
+    // the same coordinate space that interactions rely on. This ensures the overview
+    // graphic fills the visible canvas area even if some earlier sizing pass missed it.
+    try{
+      const rect = overviewCanvas.getBoundingClientRect();
+      const rectW = rect && rect.width ? rect.width : cssW;
+      const rectH = rect && rect.height ? rect.height : cssH;
+      if(Math.abs(cssW - rectW) > 1 || Math.abs(cssH - rectH) > 1){
+        // resize backing to match layout rect (in device pixels)
+        const wantW = Math.max(1, Math.round(rectW * pr));
+        const wantH = Math.max(1, Math.round(rectH * pr));
+        if(overviewCanvas.width !== wantW || overviewCanvas.height !== wantH){
+          overviewCanvas.width = wantW;
+          overviewCanvas.height = wantH;
+        }
+        try{ overviewCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
+        cssW = overviewCanvas.width / pr;
+        cssH = overviewCanvas.height / pr;
+      }
+      // no visual debug markers
+    }catch(e){}
 
     // draw compressed columns as darker bars and uncompressed as light
     // iterate columns and draw a 1px-high stripe for each (scaled width)
@@ -1183,6 +1229,8 @@
       ctx.strokeRect(viewX + 0.5, 2 + 0.5, viewW - 1, cssH - 4);
       ctx.restore();
     }catch(e){}
+
+    // no on-screen overview HUD in production; nothing to update
   }
 
   // Draw labels header (simple static header above the labels column)
@@ -1736,7 +1784,7 @@
   const cssW = overviewCanvas.getBoundingClientRect().width;
   const scale = cssW / Math.max(1, totalWidth);
       const target = Math.round(x / scale - (scroller ? scroller.clientWidth/2 : 0));
-      if(scroller) scroller.scrollLeft = Math.max(0, target);
+      if(scroller) animateScrollTo(Math.max(0, target), scroller ? scroller.scrollTop : 0, 320);
       scheduleRender();
       e.preventDefault();
     });
