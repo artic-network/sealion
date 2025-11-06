@@ -1,2 +1,2 @@
 # sealion
-Sequenece alignment viewer
+Sequence alignment viewer
