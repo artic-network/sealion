@@ -2,76 +2,18 @@
 // Expects `alignment` to be provided by alignment.js (loaded before this script in index.html)
 
 (function(){
-  const __statusEl = document.getElementById('init-status');
-  // Feature flag: show a centered translucent status box during initialization
-  const USE_CENTER_STATUS = true;
-  let __centerStatusEl = null;
-  let __centerStatusText = null;
-  function ensureCenterStatus(){
-    if(!USE_CENTER_STATUS) return null;
-    if(__centerStatusEl) return __centerStatusEl;
-    try{
-      __centerStatusEl = document.getElementById('center-status');
-      if(!__centerStatusEl){
-        __centerStatusEl = document.createElement('div');
-        __centerStatusEl.id = 'center-status';
-        __centerStatusEl.setAttribute('role','status');
-        __centerStatusEl.setAttribute('aria-live','polite');
-
-        const spinner = document.createElement('div');
-        spinner.className = 'center-spinner';
-        const txt = document.createElement('div');
-        txt.className = 'center-status-text';
-        txt.textContent = '';
-        __centerStatusText = txt;
-
-        __centerStatusEl.appendChild(spinner);
-        __centerStatusEl.appendChild(txt);
-        document.body.appendChild(__centerStatusEl);
-      } else {
-        __centerStatusText = __centerStatusEl.querySelector('.center-status-text') || __centerStatusText;
-      }
-    }catch(e){ __centerStatusEl = null; }
-    return __centerStatusEl;
-  }
-  function setStatus(msg){
-    try{
-      if(USE_CENTER_STATUS){
-        const el = ensureCenterStatus();
-        if(el){
-          if(msg){ if(__centerStatusText) __centerStatusText.textContent = msg; el.classList.add('visible'); }
-          else { el.classList.remove('visible'); }
-          return;
-        }
-      }
-      // fallback to inline status element if present
-      if(__statusEl) __statusEl.textContent = msg || '';
-    }catch(e){}
-  }
-
-  // expose for console/debug convenience
-  try{ window.setStatus = setStatus }catch(e){}
-
-  // Show the status box immediately on script load so users see progress while other
-  // initialization (DOM/layout/measure) proceeds. Use a generic message that will be
-  // replaced by more specific updates later.
-  try{
-    ensureCenterStatus();
-    setStatus('Initializing...');
-    // on-screen HUD removed in production mode
-  }catch(e){}
 
     // Button to set the consensus sequence as the reference and clear any selected row
     const diffConsensusBtn = document.getElementById('diff-consensus-btn');
     if(diffConsensusBtn){
-      diffConsensusBtn.addEventListener('click', ()=>{
+          diffConsensusBtn.addEventListener('click', ()=>{
         try{
           // compute or reuse consensus
           const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
           if(!cons){ console.warn('No consensus available to set as reference'); return; }
           try{ window.reference = String(cons); }catch(_){ reference = String(cons); }
           // clear any selected row (user asked to clear the previously selected row)
-          try{ selectedRows.clear(); anchorRow = null; }catch(_){ }
+          try{ if(viewer && typeof viewer.clearSelectionSets === 'function') viewer.clearSelectionSets(); }catch(_){ }
           // refresh reference state (will set refIndex if any row exactly matches consensus)
           // note: we intentionally do NOT auto-select any matching row when the reference
           // is the consensus; rows that happen to equal the consensus should be treated
@@ -86,7 +28,6 @@
         }catch(e){ console.warn('diff-consensus failed', e); }
       });
     }
-  try{
     setStatus('checking alignment data...');
     if(typeof alignment === 'undefined'){
       const msg = 'alignment not found; make sure alignment.js is loaded before script.js';
@@ -101,6 +42,30 @@
   const overviewCanvas = document.getElementById('overview-canvas');
   const labelsHeaderCanvas = document.getElementById('labels-header-canvas');
   const consensusCanvas = document.getElementById('consensus-canvas');
+  // viewer instance reference (populated later, after geometry is known)
+  let viewer = null;
+  // Helper to prefer viewer-owned properties but fall back to local value.
+  function getViewerProp(name, localVal, viewerKey){
+    try{
+      const key = viewerKey || name;
+      // Prefer explicit instance property (viewer[key]) if available
+      if(viewer && typeof viewer[key] !== 'undefined') return viewer[key];
+      // Then prefer the viewer's default constants if provided (single source of truth)
+      if(viewer && viewer.DEFAULTS && typeof viewer.DEFAULTS[name] !== 'undefined') return viewer.DEFAULTS[name];
+      // Then any global window override
+      if(window && typeof window[name] !== 'undefined') return window[name];
+      return localVal;
+    }catch(_){ return localVal; }
+  }
+
+  // Setter that writes to the viewer instance when available, otherwise to window globals.
+  function setViewerProp(name, value, viewerKey){
+    try{
+      const key = viewerKey || name;
+      if(viewer){ try{ viewer[key] = value; }catch(_){ } return; }
+      try{ window[name] = value; }catch(_){ }
+    }catch(_){ }
+  }
   // prefer the single scroll root when present — we'll override these below if needed
   let leftScroll = document.getElementById('left-scroll');
   let rightScroll = document.getElementById('right-scroll');
@@ -113,6 +78,53 @@
   if(alignScroll){ leftScroll = alignScroll; rightScroll = alignScroll; }
   // canonical scroller used everywhere from now on
   const scroller = alignScroll || rightScroll || leftScroll || null;
+  // Staged refactor: ensure a SealionViewer instance exists. sealion.js may be
+  // loaded after this script (index ordering). We define the function here but
+  // defer calling it until alignment geometry (maxSeqLen, colOffsets) is known.
+  function ensureViewer() {
+    if (viewer) return viewer;
+    if (window && window.SealionViewer) {
+        try{
+          // instantiate with the full alignment rows so the viewer can
+          // compute row counts and selection correctly.
+          // Previously we passed an object with only maxSeqLen which meant
+          // viewer.alignment.length was falsy and keyboard row navigation
+          // computed a zero-height content area. Pass the canonical `rows`
+          // array (from alignment.js) instead.
+          // Instantiate viewer attached to the main grid container. The
+          // viewer will create or reuse its internal canvases/spacers inside
+          // this container, so we only need to pass the alignment rows.
+          // Pass the viewer default settings as the initial options object so
+          // appearance-related constants are centralized in the viewer.
+          viewer = new window.SealionViewer('#sealion', (typeof rows !== 'undefined') ? rows : null, window.SealionViewer ? window.SealionViewer.DEFAULTS : {});
+        }catch(e){ console.error('SealionViewer construction failed', e); viewer = null; return null; }
+        // expose on window so legacy wrappers and external callers can find it
+        try{ window.viewer = viewer; }catch(_){ }
+        console.info('SealionViewer instantiated');
+        try{
+      // The viewer creates/reuses canvases and spacers within the '#grid'
+      // container. Only wire high-level callbacks to the viewer here; DOM
+      // references are unnecessary because the viewer holds them.
+      viewer.attachInteractionHandlers({ scroller: scroller, callbacks: {
+        setColSelectionToRange: setColSelectionToRange,
+        addRangeToColSelection: addRangeToColSelection,
+        setSelectionToRange: setSelectionToRange,
+        addRangeToSelection: addRangeToSelection,
+        clearRectSelection: clearRectSelection,
+        clearSelectionSets: function(){ try{ if(viewer && typeof viewer.clearSelectionSets === 'function') viewer.clearSelectionSets(); }catch(_){ } },
+        updateRectSelection: function(r0,r1,c0,c1,orig){ try{ if(viewer && typeof viewer.updateRectSelection === 'function'){ viewer.updateRectSelection(r0,r1,c0,c1,orig); } }catch(_){ } },
+        finalizeRectSelection: function(r0,r1,c0,c1,orig){ try{ if(viewer && typeof viewer.finalizeRectSelection === 'function'){ viewer.finalizeRectSelection(r0,r1,c0,c1,orig); } }catch(_){ } },
+        scheduleRender: scheduleRender
+      }});
+        } catch (e) {
+          console.error('Failed to attach interaction handlers to SealionViewer', e);
+        }
+        return viewer;
+    }
+    // SealionViewer not available yet — try again shortly
+    setTimeout(ensureViewer, 200);
+    return null;
+  }
   const searchInput = document.getElementById('search-input');
   const searchNextBtn = document.getElementById('search-next');
   
@@ -123,100 +135,27 @@
   const maskToggle = document.getElementById('mask-toggle');
   const refToggle = document.getElementById('ref-toggle');
 
-  let ROW_HEIGHT = 20; // px per row (may be recomputed from font metrics)
-  let LABEL_WIDTH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--label-width')) || 260;
-  let CHAR_WIDTH = 12; // px per base/column (will be measured)
-  const HEADER_HEIGHT = 30;
-  // consensus row height (CSS pixels). Make mutable so it can follow ROW_HEIGHT/font changes.
-  let CONSENSUS_HEIGHT = 20;
-  const OVERVIEW_HEIGHT = 48;
-  let FONT_SIZE = 14;
-  let FONT = FONT_SIZE + 'px monospace';
-  // fixed header font: keep ruler/header font constant regardless of FONT_SIZE
-  const HEADER_FONT = '12px sans-serif';
-  // extra vertical padding added to measured text height so rows are taller
-  const ROW_PADDING = 6; // px
-  const BUFFER_ROWS = 2; // draw 2 rows above/below viewport
-  const BUFFER_COLS = 5; // draw extra columns left/right
-
-  // nucleotide color map: map uppercase base -> CSS color
-  const BASE_COLORS = {
-    'A': '#2ca02c', // green
-    'C': '#1f77b4', // blue
-    'G': '#d62728', // red
-    'T': '#ff7f0e'  // orange
-  };
-  const REF_ACCENT = '#2b8cff'; // accent color for reference row
-  const DEFAULT_BASE_COLOR = '#666'; // grey for any other character
-  const PALE_REF_COLOR = '#e6e6e6'; // pale grey for matches against reference
+  // Visual constants (fonts, sizes, colors) are provided by the SealionViewer
+  // instance and its `DEFAULTS`. Use `getViewerProp(name, fallback)` to read
+  // values and `setViewerProp(name, value)` to publish measurements back to
+  // the viewer. Local fallbacks are intentionally removed to centralize config.
 
   const rows = alignment;
   const rowCount = rows.length;
   const maxSeqLen = Math.max(0, ...rows.map(r=>r.sequence.length));
+  // Attempt to instantiate the SealionViewer now that alignment geometry exists.
+  try{ ensureViewer(); }catch(_){ }
   // mask string (should be provided by alignment.js). If absent we initialize to all '1's
   // so compression machinery is always enabled but starts uncompressed.
   // Evaluate and normalize lazily so global `mask` can be injected/edited at runtime.
   let maskStr = null;
-  function refreshMaskStr(){
-    try{
-      if(typeof mask !== 'undefined' && mask){
-        let s = String(mask || '');
-        if(s.length < maxSeqLen){
-          console.warn('mask provided but length < maxSeqLen; padding with 1s', s.length, '<', maxSeqLen);
-          s = s + '1'.repeat(Math.max(0, maxSeqLen - s.length));
-        } else if(s.length > maxSeqLen){
-          // truncate to expected length
-          s = s.slice(0, maxSeqLen);
-        }
-        maskStr = s;
-        // persist normalized mask back to the global for external inspection
-        try{ window.mask = maskStr; }catch(_){ mask = maskStr; }
-      } else {
-        // no mask provided -> initialize to all '1's (no compression)
-        maskStr = '1'.repeat(maxSeqLen);
-        try{ window.mask = maskStr; }catch(_){ mask = maskStr; }
-      }
-    }catch(e){
-      maskStr = '1'.repeat(maxSeqLen);
-      try{ window.mask = maskStr; }catch(_){ mask = maskStr; }
-    }
-    // expose for debugging in devtools
-    try{ window.__maskStr = maskStr; }catch(_){ }
-    return maskStr;
-  }
-  // evaluate mask presence once at startup (and expose for debugging)
-  refreshMaskStr();
+  // Populate maskStr from utils (sealion/utils.js); fall back to all '1's if helper missing
+  try{ maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); }catch(_){ maskStr = '1'.repeat(maxSeqLen); }
   // reference handling: evaluate lazily and expose
   let refStr = null;
   let refIndex = null;
-  function refreshRefStr(){
-    try{
-      if(typeof reference !== 'undefined' && reference){
-        const s = String(reference);
-        if(s.length >= maxSeqLen){ refStr = s; } else { console.warn('reference provided but length < maxSeqLen', s.length, '<', maxSeqLen); refStr = null; }
-      } else { refStr = null; }
-    }catch(e){ refStr = null; }
-    // determine index of the sequence that matches the reference (if any)
-    try{
-      if(refStr){
-        const idx = rows.findIndex(r => (r && r.sequence) ? String(r.sequence) === refStr : false);
-        refIndex = (idx >= 0) ? idx : null;
-      } else {
-        refIndex = null;
-      }
-    }catch(_){ refIndex = null; }
-    // If the reference string is the consensus sequence, do not treat any real row as the "reference row".
-    // This prevents highlighting an existing sequence as the canonical reference when the reference is
-    // the computed consensus (a synthetic aggregate), per UX request.
-    try{
-      if(refStr && window && window.consensusSequence && String(refStr) === String(window.consensusSequence)){
-        refIndex = null;
-      }
-    }catch(_){ }
-    try{ window.__refStr = refStr; window.__refIndex = refIndex; }catch(_){ }
-    return refStr;
-  }
-  refreshRefStr();
+  // populate refStr/refIndex using utils (if available)
+  try{ const _r = (window && window.refreshRefStr) ? window.refreshRefStr() : { refStr: null, refIndex: null }; refStr = _r.refStr; refIndex = _r.refIndex; }catch(_){ refStr = null; refIndex = null; }
   const REDUCED_COL_WIDTH = 1; // CSS pixels for compressed columns
   // extra right-side padding (CSS pixels) added to expanded columns to avoid clipping
   const EXPANDED_RIGHT_PAD = 2;
@@ -230,125 +169,83 @@
   let refModeEnabled = refToggle ? !!refToggle.checked : false;
   // Helper: modify the global `mask` string for a set of columns and animate to the new offsets.
   function setMaskBitsForCols(colsSet, bitChar){
+    // Viewer-only API: the SealionViewer now owns mask edits. If the viewer
+    // is missing this is a fatal migration error (log and no-op).
     try{
-      if(!colsSet || typeof colsSet.size === 'undefined' || colsSet.size === 0){
-        console.info('mask edit: no columns selected');
-        return;
+      if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
+        return viewer.setMaskBitsForCols(colsSet, bitChar);
       }
-      // obtain current mask (fall back to all '1's)
-      let cur = (typeof mask !== 'undefined' && mask) ? String(mask) : null;
-      if(!cur || cur.length < maxSeqLen){
-        // pad or create a mask of all 1s so we have an editable buffer
-        cur = (cur || '') + '1'.repeat(Math.max(0, maxSeqLen - (cur ? cur.length : 0)));
-      }
-      // ensure exact length
-      if(cur.length > maxSeqLen) cur = cur.slice(0, maxSeqLen);
-      const arr = cur.split('');
-      const cols = Array.from(colsSet).filter(c=>Number.isFinite(c) && c >= 0 && c < maxSeqLen).sort((a,b)=>a-b);
-      if(cols.length === 0){ console.info('mask edit: no valid columns in selection'); return; }
-      for(const c of cols) arr[c] = bitChar;
-      const newMask = arr.join('');
-      try{ window.mask = newMask; }catch(_){ mask = newMask; }
-      console.info('mask edited', { cols, setTo: bitChar, newMaskLength: newMask.length });
-      // refresh and animate offsets to reflect the edited mask
-      refreshMaskStr();
-      // animate to the new offsets using current maskEnabled state
-      startMaskTransition(!!maskEnabled);
+      console.error('setMaskBitsForCols: SealionViewer not available — viewer required for mask edits');
     }catch(e){ console.warn('setMaskBitsForCols failed', e); }
   }
-  // column offsets prefix sum (length maxSeqLen+1) in CSS pixels
-  let colOffsets = new Array(Math.max(1, maxSeqLen + 1)).fill(0);
-  function buildColOffsetsFor(enabled){
-    const out = new Array(Math.max(1, maxSeqLen + 1)).fill(0);
-    out[0] = 0;
-    for(let i=0;i<maxSeqLen;i++){
-      const useReduced = enabled && maskStr && maskStr.charAt(i) === '0';
-  const w = useReduced ? REDUCED_COL_WIDTH : (CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-      out[i+1] = out[i] + w;
-    }
-    return out;
+  // Helper to obtain authoritative column offsets from the SealionViewer instance.
+  // The viewer owns the offsets; script-level code should consult the viewer
+  // rather than maintain a separate global copy.
+  function getViewerColOffsets(){
+    try{ return (viewer && viewer.colOffsets) ? viewer.colOffsets : []; }catch(_){ return []; }
   }
-  function buildColOffsets(){
-    const out = buildColOffsetsFor(maskEnabled);
-    // copy into the shared colOffsets array to preserve reference
-    for(let i=0;i<out.length;i++) colOffsets[i] = out[i];
-    // expose offsets for debugging
-    try{ window.colOffsets = colOffsets; }catch(e){}
+  // Ask the viewer to rebuild and publish its colOffsets when layout-affecting
+  // measurements change (CHAR_WIDTH, mask, etc.). This replaces the legacy
+  // syncColOffsetsFromViewer helper which maintained a separate copy.
+  function ensureViewerColOffsetsBuilt(){
+    try{
+      if(viewer && typeof viewer.buildColOffsetsFor === 'function'){
+        const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth');
+        const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD);
+        const _REDUCED_COL_WIDTH = getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH);
+        const out = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: _CHAR_WIDTH, EXPANDED_RIGHT_PAD: _EXPANDED_RIGHT_PAD, REDUCED_COL_WIDTH: _REDUCED_COL_WIDTH, maskStr: maskStr });
+        try{ viewer.colOffsets = out; }catch(_){ }
+      }
+    }catch(_){ }
   }
   // helper: given an absolute CSS offset, find the column index containing that x
   function colIndexFromOffset(offset){
-    // clamp
-    if(offset <= 0) return 0;
-    const last = maxSeqLen;
-    if(offset >= colOffsets[last]) return Math.max(0, last-1);
-    let low = 0, high = last; // search in [0,last)
-    while(low < high){
-      const mid = Math.floor((low + high) / 2);
-      if(colOffsets[mid] <= offset) low = mid + 1; else high = mid;
-    }
-    const idx = Math.max(0, low - 1);
-    return Math.min(idx, maxSeqLen - 1);
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.colIndexFromCssOffset === 'function') return v.colIndexFromCssOffset(offset); }catch(_){ }
+      if(offset <= 0) return 0;
+      const last = maxSeqLen;
+      const co = getViewerColOffsets();
+      if(!co || co.length === 0){
+        const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth');
+        const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD);
+        return Math.min(maxSeqLen - 1, Math.max(0, Math.floor(offset / (_CHAR_WIDTH + _EXPANDED_RIGHT_PAD))));
+      }
+      if(offset >= co[last]) return Math.max(0, last-1);
+      let low = 0, high = last; 
+      while(low < high){
+        const mid = Math.floor((low + high) / 2);
+        if(co[mid] <= offset) low = mid + 1; else high = mid;
+      }
+      const idx = Math.max(0, low - 1);
+      return Math.min(idx, maxSeqLen - 1);
   }
   // Apply custom mask button: when clicked, override current mask with `custom_mask` global
 
 
     // Compute a mask that marks constant sites (0) vs variable sites (1).
-    // Assumptions: `rows` is an array of objects with a `sequence` string property and
-    // `maxSeqLen` is the alignment length. Missing characters are treated as empty string
-    // so a column is considered constant only if every sequence has the same character
-    // (including the empty char) at that position.
+    // Delegates to SealionViewer when available, otherwise to SealionUtils/global helper.
     function computeConstantMask(){
       try{
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          let first = null;
-          let constant = true;
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = seq.charAt(c) || '';
-            if(first === null) first = ch;
-            else if(ch !== first){ constant = false; break; }
-          }
-          out[c] = constant ? '0' : '1';
-        }
-        const mask = out.join('');
-        try{ window.constantMask = String(mask); }catch(_){ }
-        console.info('constantMask computed (len=' + mask.length + ')');
-        return mask;
-      }catch(e){ console.warn('computeConstantMask failed', e); return '1'.repeat(Math.max(0, maxSeqLen)); }
+        if(viewer && typeof viewer.computeConstantMask === 'function') return viewer.computeConstantMask();
+      }catch(_){ }
+      try{
+        if(window && window.SealionUtils && typeof window.SealionUtils.computeConstantMask === 'function') return window.SealionUtils.computeConstantMask(rows, maxSeqLen);
+        if(typeof computeConstantMask === 'function' && window && window.computeConstantMask === computeConstantMask){ /* avoid recursion if global */ }
+        if(window && typeof window.computeConstantMask === 'function') return window.computeConstantMask(rows, maxSeqLen);
+      }catch(_){ }
+      return '1'.repeat(Math.max(0, maxSeqLen));
     }
 
     // Compute consensus sequence for the alignment.
-    // For each column, pick the most frequent character across rows. In ties or empties, choose 'N'.
+    // Delegates to SealionViewer when available, otherwise to SealionUtils/global helper.
     function computeConsensusSequence(){
       try{
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          const counts = new Map();
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = (seq.charAt(c) || '').toUpperCase();
-            const prev = counts.get(ch) || 0;
-            counts.set(ch, prev + 1);
-          }
-          // find max count. Prefer A/C/G/T order in ties, else choose most frequent non-empty, else 'N'
-          let best = ''; let bestCount = -1;
-          // prefer canonical bases order
-          const preferred = ['A','C','G','T'];
-          for(const b of preferred){ const cnt = counts.get(b) || 0; if(cnt > bestCount){ best = b; bestCount = cnt; } }
-          // if no preferred base was found, look for any other highest
-          if(bestCount <= 0){
-            for(const [k,v] of counts.entries()){ if(!k) continue; if(v > bestCount){ best = k; bestCount = v; } }
-          }
-          // if still nothing, default to 'N'
-          if(!best || best === '') best = 'N';
-          out[c] = best;
-        }
-        const cons = out.join('');
-        try{ window.consensusSequence = cons; }catch(_){ }
-        console.info('consensus computed (len=' + cons.length + ')');
-        return cons;
-      }catch(e){ console.warn('computeConsensusSequence failed', e); return 'N'.repeat(Math.max(0, maxSeqLen)); }
+        if(viewer && typeof viewer.computeConsensusSequence === 'function') return viewer.computeConsensusSequence();
+      }catch(_){ }
+      try{
+        if(window && window.SealionUtils && typeof window.SealionUtils.computeConsensusSequence === 'function') return window.SealionUtils.computeConsensusSequence(rows, maxSeqLen);
+        if(window && typeof window.computeConsensusSequence === 'function') return window.computeConsensusSequence(rows, maxSeqLen);
+      }catch(_){ }
+      return 'N'.repeat(Math.max(0, maxSeqLen));
     }
 
     // Apply constant mask button
@@ -363,7 +260,7 @@
           }
         }catch(e){ console.warn('apply-constant-mask failed', e); }
         refreshMaskStr();
-        startMaskTransition(!!maskEnabled);
+        try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
       });
     }
   if(refToggle){
@@ -376,50 +273,29 @@
   }
 
   // Compute constant mask treating 'N' as an ambiguous wildcard that matches any base.
+  // Delegates to SealionViewer when available, otherwise to SealionUtils/global helper.
   function computeConstantMaskAllowN(){
     try{
-      const out = new Array(Math.max(0, maxSeqLen));
-      for(let c=0;c<maxSeqLen;c++){
-        let firstNonAmbig = null;
-        let constant = true;
-        for(let r=0;r<rows.length;r++){
-          const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-          const ch = (seq.charAt(c) || '').toUpperCase();
-          if(ch === 'N' || ch === '') continue; // treat N and empty as ambiguous here
-          if(firstNonAmbig === null) firstNonAmbig = ch;
-          else if(ch !== firstNonAmbig){ constant = false; break; }
-        }
-        // if we saw no non-ambiguous base (all N/empty), treat as constant
-        out[c] = constant ? '0' : '1';
-      }
-      const mask = out.join('');
-      try{ window.constantAmbiguousMask = String(mask); }catch(_){ }
-      console.info('constantAmbiguousMask computed (len=' + mask.length + ')');
-      return mask;
-    }catch(e){ console.warn('computeConstantMaskAllowN failed', e); return '1'.repeat(Math.max(0, maxSeqLen)); }
+      if(viewer && typeof viewer.computeConstantMaskAllowN === 'function') return viewer.computeConstantMaskAllowN();
+    }catch(_){ }
+    try{
+      if(window && window.SealionUtils && typeof window.SealionUtils.computeConstantMaskAllowN === 'function') return window.SealionUtils.computeConstantMaskAllowN(rows, maxSeqLen);
+      if(window && typeof window.computeConstantMaskAllowN === 'function') return window.computeConstantMaskAllowN(rows, maxSeqLen);
+    }catch(_){ }
+    return '1'.repeat(Math.max(0, maxSeqLen));
   }
 
   // Compute constant mask treating both 'N' and gap '-' as ambiguous/wildcards.
+  // Delegates to SealionViewer when available, otherwise to SealionUtils/global helper.
   function computeConstantMaskAllowNAndGaps(){
     try{
-      const out = new Array(Math.max(0, maxSeqLen));
-      for(let c=0;c<maxSeqLen;c++){
-        let firstNonAmbig = null;
-        let constant = true;
-        for(let r=0;r<rows.length;r++){
-          const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-          const ch = (seq.charAt(c) || '').toUpperCase();
-          if(ch === 'N' || ch === '-' || ch === '') continue; // treat N, gaps and empty as ambiguous here
-          if(firstNonAmbig === null) firstNonAmbig = ch;
-          else if(ch !== firstNonAmbig){ constant = false; break; }
-        }
-        out[c] = constant ? '0' : '1';
-      }
-      const mask = out.join('');
-      try{ window.constantGappedMask = String(mask); }catch(_){ }
-      console.info('constantGappedMask computed (len=' + mask.length + ')');
-      return mask;
-    }catch(e){ console.warn('computeConstantMaskAllowNAndGaps failed', e); return '1'.repeat(Math.max(0, maxSeqLen)); }
+      if(viewer && typeof viewer.computeConstantMaskAllowNAndGaps === 'function') return viewer.computeConstantMaskAllowNAndGaps();
+    }catch(_){ }
+    try{
+      if(window && window.SealionUtils && typeof window.SealionUtils.computeConstantMaskAllowNAndGaps === 'function') return window.SealionUtils.computeConstantMaskAllowNAndGaps(rows, maxSeqLen);
+      if(window && typeof window.computeConstantMaskAllowNAndGaps === 'function') return window.computeConstantMaskAllowNAndGaps(rows, maxSeqLen);
+    }catch(_){ }
+    return '1'.repeat(Math.max(0, maxSeqLen));
   }
 
   // Wire up the new apply buttons
@@ -431,7 +307,7 @@
         if(cm){ try{ window.mask = String(cm); }catch(_){ mask = String(cm); } console.info('apply-constant-ambiguous: applied (length=' + cm.length + ')'); }
       }catch(e){ console.warn('apply-constant-ambiguous failed', e); }
       refreshMaskStr();
-      startMaskTransition(!!maskEnabled);
+      try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
     });
   }
 
@@ -443,7 +319,7 @@
         if(cm){ try{ window.mask = String(cm); }catch(_){ mask = String(cm); } console.info('apply-constant-gapped: applied (length=' + cm.length + ')'); }
       }catch(e){ console.warn('apply-constant-gapped failed', e); }
       refreshMaskStr();
-      startMaskTransition(!!maskEnabled);
+      try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
     });
   }
 
@@ -452,11 +328,10 @@
     if(setRefBtn){
       setRefBtn.addEventListener('click', ()=>{
         try{
-          // prefer anchorRow if available, else first selected row, else top visible row (0)
+          // prefer viewer.anchorRow if available, else first selected row, else top visible row (0)
           let idx = null;
-          if(typeof anchorRow === 'number' && anchorRow !== null) idx = anchorRow;
-          else if(selectedRows && selectedRows.size > 0) idx = Array.from(selectedRows)[0];
-          else idx = 0;
+          try{ if(viewer && typeof viewer.anchorRow !== 'undefined' && viewer.anchorRow !== null) idx = viewer.anchorRow; }catch(_){ }
+          if(idx === null){ const s = getSelectedRows(); if(s && s.size > 0) idx = Array.from(s)[0]; else idx = 0; }
           idx = Math.max(0, Math.min(rowCount - 1, idx));
           const seq = (rows[idx] && rows[idx].sequence) ? rows[idx].sequence : null;
           if(!seq){ console.warn('No sequence available at selected row to use as reference'); return; }
@@ -478,87 +353,65 @@
     const fontIncreaseBtn = document.getElementById('font-increase-btn');
     const fontDecreaseBtn = document.getElementById('font-decrease-btn');
     function updateFontSize(delta){
-      try{
-        FONT_SIZE = Math.max(8, Math.min(32, FONT_SIZE + delta));
-        FONT = FONT_SIZE + 'px monospace';
-        // re-measure and resize canvases to apply new font
-        measureCharWidthFromReal();
-        measureRowHeightFromFonts();
-  // make consensus row equal to a sequence ROW_HEIGHT
-  CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
-  try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-  setCanvasCSSSizes();
-        measureTextVerticalOffset();
-        resizeBackings();
-        scheduleRender();
-        console.info('FONT_SIZE set to', FONT_SIZE);
-      }catch(e){ console.warn('updateFontSize failed', e); }
-    }
-    if(fontIncreaseBtn) fontIncreaseBtn.addEventListener('click', ()=> updateFontSize(1));
-    if(fontDecreaseBtn) fontDecreaseBtn.addEventListener('click', ()=> updateFontSize(-1));
+        try{
+          FONT_SIZE = Math.max(8, Math.min(32, FONT_SIZE + delta));
+          FONT = FONT_SIZE + 'px monospace';
+          // re-measure and resize canvases to apply new font
+          measureCharWidthFromReal();
+          measureRowHeightFromFonts();
+    // make consensus row equal to a sequence ROW_HEIGHT
+    CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
+    try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
+    setCanvasCSSSizes();
+          measureTextVerticalOffset();
+          resizeBackings();
+          scheduleRender();
+          console.info('FONT_SIZE set to', FONT_SIZE);
+        }catch(e){ console.warn('updateFontSize failed', e); }
+      }
+      if(fontIncreaseBtn) fontIncreaseBtn.addEventListener('click', ()=> updateFontSize(1));
+      if(fontDecreaseBtn) fontDecreaseBtn.addEventListener('click', ()=> updateFontSize(-1));
 
-  // Animation helpers for mask toggle
-  let maskAnimRequest = null;
-  const MASK_ANIM_MS = 220;
-  function easeOutQuad(t){ return 1 - (1 - t) * (1 - t); }
-  function startMaskTransition(toEnabled){
-    // cancel any running animation
-    if(maskAnimRequest){ cancelAnimationFrame(maskAnimRequest); maskAnimRequest = null; }
-  // re-evaluate mask availability right before building target offsets
-  refreshMaskStr();
-    // instrumentation: indicate animation is active
-    try{ window.__maskAnimating = true; window.__maskAnimStart = Date.now(); }catch(_){ }
-    console.info('mask animation start', { toEnabled: !!toEnabled, hasMask: !!maskStr });
-  const from = colOffsets.slice();
-  const to = buildColOffsetsFor(toEnabled);
-    const start = performance.now();
-    function tick(now){
-      const dt = Math.min(1, (now - start) / MASK_ANIM_MS);
-      const eased = easeOutQuad(dt);
-      for(let i=0;i<=maxSeqLen;i++){
-        const f = (from[i] || 0);
-        const t = (to[i] || 0);
-        colOffsets[i] = f + (t - f) * eased;
-      }
-      // set spacer width to match interpolated total
-      try{ if(seqSpacer) seqSpacer.style.width = Math.max(1, Math.round(colOffsets[maxSeqLen])) + 'px'; }catch(_){ }
-      scheduleRender();
-      if(dt < 1){
-        maskAnimRequest = requestAnimationFrame(tick);
-      } else {
-        maskAnimRequest = null;
-        // finalize state
-        maskEnabled = toEnabled;
-        // rebuild definitive integer offsets and resize backings
-        buildColOffsets();
-        setCanvasCSSSizes();
-        resizeBackings();
-        scheduleRender();
-        // instrumentation: mark animation end
-        try{ window.__maskAnimating = false; window.__maskAnimEnd = Date.now(); }catch(_){ }
-        console.info('mask animation end', { toEnabled: !!toEnabled, durationMs: (Date.now() - window.__maskAnimStart) });
-      }
-    }
-    maskAnimRequest = requestAnimationFrame(tick);
+    // Animation helpers for mask toggle
+    let maskAnimRequest = null;
+    const MASK_ANIM_MS = 220;
+  // mask transition is handled directly by the SealionViewer; no fallback here.
+
+  // Selection is owned by the SealionViewer instance. After migration the
+  // viewer is authoritative; these helpers call the viewer API directly and
+  // fall back to sensible no-ops (empty sets) if the viewer isn't available.
+  function getSelectedRows(){
+    try{ return (viewer && typeof viewer.getSelectedRows === 'function') ? viewer.getSelectedRows() : new Set(); }catch(_){ return new Set(); }
+  }
+  function getSelectedCols(){
+    try{ return (viewer && typeof viewer.getSelectedCols === 'function') ? viewer.getSelectedCols() : new Set(); }catch(_){ return new Set(); }
   }
 
-  // selection state: set of selected row indices
-  const selectedRows = new Set();
-  let anchorRow = null; // for shift-extend
-  let isSelecting = false;
-  let selectionStartRow = null;
-  let selectionOrigin = null;
-  let selectionMode = 'replace';
-  // rectangular selection state
-  let isRectSelecting = false;
-  let rectStartRow = null, rectStartCol = null;
-  let rectEndRow = null, rectEndCol = null;
-  // store original rect when doing shift-expand (union)
-  let rectOriginal = null;
+  // Selection setters now directly call the viewer. If the viewer is not yet
+  // present we intentionally no-op — the app should instantiate the viewer
+  // early in the migration so these methods are available.
+  function setSelectionToRange(a,b){
+    const lo = Math.max(0, Math.min(a,b));
+    const hi = Math.min(rowCount-1, Math.max(a,b));
+    const rows = [];
+    for(let r=lo;r<=hi;r++) rows.push(r);
+    try{ if(viewer && typeof viewer.setSelectedRows === 'function'){ viewer.setSelectedRows(rows); if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); } }catch(_){ }
+  }
+
+  function addRangeToSelection(a,b){
+    const lo = Math.max(0, Math.min(a,b));
+    const hi = Math.min(rowCount-1, Math.max(a,b));
+    try{
+      if(viewer && typeof viewer.setSelectedRows === 'function' && typeof viewer.getSelectedRows === 'function'){
+        const cur = new Set(viewer.getSelectedRows());
+        for(let r=lo;r<=hi;r++) cur.add(r);
+        viewer.setSelectedRows(Array.from(cur)); if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+      }
+    }catch(_){ }
+  }
 
   function clearRectSelection(){
-    isRectSelecting = false;
-    rectStartRow = rectStartCol = rectEndRow = rectEndCol = null;
+    try{ if(viewer && typeof viewer.clearRectSelection === 'function') viewer.clearRectSelection(); }catch(_){ }
   }
 
   // leave canvas placement to DOM (they live in `left-inner` / `seq-inner` in index.html)
@@ -566,8 +419,11 @@
 
   // We'll use large CSS-sized canvases for scrollbars, but render only the visible region.
   function setCanvasCSSSizes(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.setCanvasCSSSizes === 'function'){ v.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT }); return; } }catch(_){ }
     // set outer CSS size so scrollbars reflect full content
-    labelCanvas.style.width = LABEL_WIDTH + 'px';
+    const LABEL_W = getViewerProp('LABEL_WIDTH', LABEL_WIDTH);
+    const ROW_H = getViewerProp('ROW_HEIGHT', ROW_HEIGHT);
+    labelCanvas.style.width = LABEL_W + 'px';
     // ensure label canvas is positioned at the top of its container
     try{ labelCanvas.style.position = labelCanvas.style.position || 'absolute'; labelCanvas.style.left = '0px'; labelCanvas.style.top = '0px'; labelCanvas.style.zIndex = '1'; }catch(_){ }
   // left spacer defines the full vertical scroll height; label canvas stays viewport-sized
@@ -575,18 +431,19 @@
   // use clientWidth/clientHeight (integers) to avoid fractional-pixel drift from getBoundingClientRect
   const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
   const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
-  const totalHeight = rowCount * ROW_HEIGHT;
+  const totalHeight = rowCount * ROW_H;
   // canvases should always match the viewport height (they are viewport-backed); spacers define full scrollable content
   labelCanvas.style.height = viewportHeight + 'px';
 
   // Instead of setting a huge CSS width on the sequence canvas, use a spacer element to define scroll width
-  // Build column offsets if needed and compute actual total width
-  buildColOffsets();
+  // Ensure column offsets are synced from the viewer and compute actual total width
+  try{ ensureViewerColOffsetsBuilt(); }catch(_){ }
   // colOffsets may be in backing pixels when transformations were applied; compute a
   // CSS-pixel total width by dividing by devicePixelRatio when appropriate so the
   // overview scale matches the visible CSS width.
   const pr_local = window.devicePixelRatio || 1;
-  const rawTotal = colOffsets[maxSeqLen] || (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+  const _co = getViewerColOffsets();
+  const rawTotal = (_co && _co.length > 0) ? (_co[maxSeqLen] || (_co[_co.length - 1] || 0)) : (maxSeqLen * (getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth') + getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD)));
   // colOffsets are maintained in CSS pixels; use rawTotal directly for spacer width
   const totalWidth = rawTotal;
   if(seqSpacer){
@@ -615,50 +472,43 @@
   seqCanvas.style.width = viewportWidth + 'px';
 
   if(headerCanvas){ headerCanvas.style.width = viewportWidth + 'px'; headerCanvas.style.height = Math.round(HEADER_HEIGHT) + 'px'; }
-    if(overviewCanvas){
-      // prefer the header container width so the overview exactly matches the alignment panel
-      // subtract the vertical scrollbar width of the alignment scroller so the overview's
-      // right edge lines up with the content area (not the scrollbar).
-      const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth;
-      const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0;
-      const hdrW = Math.max(1, parentW - scrollbarWidth);
-      overviewCanvas.style.width = hdrW + 'px';
-      overviewCanvas.style.height = Math.round(OVERVIEW_HEIGHT) + 'px';
-    }
-    if(consensusCanvas){
-      const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth;
-      const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0;
-      const cssWc = Math.max(1, parentWc - scrollbarWidthc);
-      consensusCanvas.style.width = cssWc + 'px';
-      consensusCanvas.style.height = CONSENSUS_HEIGHT + 'px';
-    }
-    if(labelsHeaderCanvas){
-      labelsHeaderCanvas.style.width = LABEL_WIDTH + 'px';
-      labelsHeaderCanvas.style.height = Math.round(HEADER_HEIGHT) + 'px';
-    }
+  if(overviewCanvas){
+    // prefer the header container width so the overview exactly matches the alignment panel
+    // subtract the vertical scrollbar width of the alignment scroller so the overview's
+    // right edge lines up with the content area (not the scrollbar).
+    const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth;
+    const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0;
+    const hdrW = Math.max(1, parentW - scrollbarWidth);
+    overviewCanvas.style.width = hdrW + 'px';
+    overviewCanvas.style.height = Math.round(OVERVIEW_HEIGHT) + 'px';
   }
 
   // measure character width using the chosen font and set CHAR_WIDTH accordingly
   function measureCharWidth(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.measureCharWidth === 'function'){ const val = v.measureCharWidth(getViewerProp('FONT', ''), { apply: true, maskEnabled: !!maskEnabled }); setViewerProp('CHAR_WIDTH', val, 'charWidth'); try{ if(v && typeof v.charWidth !== 'undefined') v.charWidth = val; }catch(_){ } return; } }catch(_){ }
     const ctx = document.createElement('canvas').getContext('2d');
-    ctx.font = FONT;
+    ctx.font = getViewerProp('FONT', '14px monospace');
     const metrics = ctx.measureText('W');
     // fallback if measurement fails
-    const w = metrics && metrics.width ? metrics.width : CHAR_WIDTH;
+    const w = metrics && metrics.width ? metrics.width : (getViewerProp('CHAR_WIDTH', 12));
     // round up to integer CSS pixels to avoid underestimation
-    CHAR_WIDTH = Math.max(1, Math.ceil(w));
+    const newCharWidth = Math.max(1, Math.ceil(w));
+    // Rebuild offsets (CHAR_WIDTH changed) and sync to viewer if present
+  try{ setViewerProp('CHAR_WIDTH', newCharWidth, 'charWidth'); ensureViewerColOffsetsBuilt(); }catch(_){ }
+    try{ const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null; if(v && typeof v.charWidth !== 'undefined'){ try{ v.charWidth = newCharWidth; }catch(_){ } } }catch(_){ }
   }
 
   // Backing store pixel scaling for crisp text
   function resizeBackings(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.resizeBackings === 'function'){ v.resizeBackings(); return; } }catch(_){ }
     const pr = window.devicePixelRatio || 1;
 
     // determine right-side viewport size first (use clientHeight/clientWidth as canonical viewport size)
-  const totalHeight = rowCount * ROW_HEIGHT;
+  const totalHeight = rowCount * getViewerProp('ROW_HEIGHT', ROW_HEIGHT);
   const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
   const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
     // labels: backing equals viewport height (keep label and sequence canvases identical vertically)
-    labelCanvas.width = Math.max(1, Math.round(LABEL_WIDTH * pr));
+    labelCanvas.width = Math.max(1, Math.round(getViewerProp('LABEL_WIDTH', LABEL_WIDTH) * pr));
     labelCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
     // label canvas: position absolute inside left-inner so it doesn't add layout height
     labelCanvas.style.left = '0px';
@@ -701,23 +551,25 @@
     try{ consensusCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
   }
     if(labelsHeaderCanvas){
-      labelsHeaderCanvas.width = Math.max(1, Math.round(LABEL_WIDTH * pr));
+        labelsHeaderCanvas.width = Math.max(1, Math.round(getViewerProp('LABEL_WIDTH', LABEL_WIDTH) * pr));
       labelsHeaderCanvas.height = Math.max(1, Math.round(HEADER_HEIGHT * pr));
       labelsHeaderCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0);
     }
     // final enforcement to ensure integer pixel equality for CSS and backing sizes
+  try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.enforceIntegerGeometry === 'function'){ v.enforceIntegerGeometry(); return; } }catch(_){ }
     enforceIntegerGeometry();
-    // diagnostic log to help debug canvas/container mismatches when requested
-    logLayoutDiagnostics('resizeBackings');
+  // diagnostic log removed
   }
 
   // Enforce exact integer CSS dimensions and backing pixel dimensions for all canvases.
   // This is an assertion/pass that corrects any tiny rounding drift after layout changes.
   function enforceIntegerGeometry(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.enforceIntegerGeometry === 'function'){ v.enforceIntegerGeometry(); return; } }catch(_){ }
     const pr = window.devicePixelRatio || 1;
   const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
   const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
-  const totalHeight = rowCount * ROW_HEIGHT;
+  const ROW_H = getViewerProp('ROW_HEIGHT', ROW_HEIGHT);
+  const totalHeight = rowCount * ROW_H;
 
   // CSS pixels (integers) - canvases are viewport-backed so keep them viewport-sized
   // force top-alignment for label and sequence canvases so drawing lines up with spacer at the top
@@ -732,7 +584,7 @@
   if(leftSpacer) leftSpacer.style.height = totalHeight + 'px';
 
     // backing/device pixels (integers)
-  labelCanvas.width = Math.max(1, Math.round(LABEL_WIDTH * pr));
+  labelCanvas.width = Math.max(1, Math.round(getViewerProp('LABEL_WIDTH', LABEL_WIDTH) * pr));
   labelCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
   seqCanvas.width = Math.max(1, Math.round(viewportWidth * pr));
   seqCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
@@ -755,41 +607,12 @@
     try{ seqCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
     try{ headerCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
     if(labelsHeaderCanvas){ try{ labelsHeaderCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){} }
-    logLayoutDiagnostics('enforceIntegerGeometry');
+  // layout diagnostics helper removed
     // ensure scrollTop doesn't exceed new content height
     clampScrollPositions();
   }
 
-  // Layout debugging helper: logs size info to console and HUD (if debug enabled)
-  function logLayoutDiagnostics(ctxLabel){
-    try{
-      const pr = window.devicePixelRatio || 1;
-  const rs = scroller ? scroller.getBoundingClientRect() : { width:0, height:0 };
-      const si = seqInner ? seqInner.getBoundingClientRect() : { width:0, height:0 };
-      const sp = seqSpacer ? seqSpacer.getBoundingClientRect() : { width:0, height:0 };
-      const sc = seqCanvas ? seqCanvas.getBoundingClientRect() : { width:0, height:0 };
-      const lc = labelCanvas ? labelCanvas.getBoundingClientRect() : { width:0, height:0 };
-      const info = {
-        ctx: ctxLabel,
-  rightScrollClient: scroller ? { w: scroller.clientWidth, h: scroller.clientHeight } : null,
-  rightScrollScroll: scroller ? { top: scroller.scrollTop, height: scroller.scrollHeight } : null,
-        rightScrollRect: { w: Math.round(rs.width), h: Math.round(rs.height) },
-        seqInnerRect: { w: Math.round(si.width), h: Math.round(si.height) },
-        seqSpacerRect: { w: Math.round(sp.width), h: Math.round(sp.height) },
-        seqCanvasCss: { w: Math.round(sc.width), h: Math.round(sc.height) },
-        seqCanvasBacking: seqCanvas ? { w: seqCanvas.width, h: seqCanvas.height } : null,
-        labelCanvasCss: { w: Math.round(lc.width), h: Math.round(lc.height) },
-        labelCanvasBacking: labelCanvas ? { w: labelCanvas.width, h: labelCanvas.height } : null,
-        leftScrollScroll: leftScroll ? { top: leftScroll.scrollTop, height: leftScroll.scrollHeight } : null,
-        pr: pr,
-        ROW_HEIGHT: ROW_HEIGHT,
-        HEADER_HEIGHT: HEADER_HEIGHT,
-        CHAR_WIDTH: CHAR_WIDTH
-      };
-      // primary diagnostics are logged to console; consumers can inspect `info` there.
-      console.info('LAYOUT-DIAG', info);
-    }catch(e){ console.warn('layout diag failed', e); }
-  }
+  // `logLayoutDiagnostics` removed.
 
   // If the scroll position is past the maximum allowed by content height, clamp it.
   function clampScrollPositions(){
@@ -797,8 +620,17 @@
     const viewportHeight = Math.max(1, scroller ? scroller.clientHeight : window.innerHeight);
       const totalHeight = rowCount * ROW_HEIGHT;
       const maxScroll = Math.max(0, totalHeight - viewportHeight);
-      if(scroller && scroller.scrollTop > maxScroll){ scroller.scrollTop = maxScroll; }
-      try{ if(leftScroll && leftScroll !== scroller && leftScroll.scrollTop > maxScroll){ leftScroll.scrollTop = maxScroll; } }catch(e){}
+      // Prefer viewer-managed programmatic scroll to keep scrolling/snap logic centralized.
+      try{
+        if(viewer && typeof viewer.setScrollTopImmediate === 'function'){
+          if(scroller && scroller.scrollTop > maxScroll) viewer.setScrollTopImmediate(maxScroll);
+          try{ if(leftScroll && leftScroll !== scroller && leftScroll.scrollTop > maxScroll) viewer.setScrollTopImmediate(maxScroll); }catch(_){ }
+        } else {
+          // Fallback (rare): do not perform direct DOM writes here. Warn so the issue
+          // can be diagnosed and the viewer required for programmatic scrolling.
+          console.warn('clampScrollPositions: SealionViewer not available; cannot clamp without direct DOM write (viewer required)');
+        }
+      }catch(e){ /* tolerate clamp errors */ }
     }catch(e){}
   }
 
@@ -808,9 +640,10 @@
     // a measurement in CSS pixels. The visible seqCanvas context may have a
     // DPR transform applied which would return values in backing pixels, causing
     // CHAR_WIDTH to be inflated by devicePixelRatio.
+  try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.measureCharWidthFromReal === 'function'){ const val = v.measureCharWidthFromReal(FONT); CHAR_WIDTH = val; try{ if(v && typeof v.charWidth !== 'undefined') v.charWidth = CHAR_WIDTH; }catch(_){ } try{ ensureViewerColOffsetsBuilt(); }catch(_){ } return; } }catch(_){ }
     try{
       const off = document.createElement('canvas').getContext('2d');
-      off.font = FONT;
+      off.font = getViewerProp('FONT', FONT);
       const m = off.measureText('W');
       const w = m && m.width ? m.width : CHAR_WIDTH;
       CHAR_WIDTH = Math.max(1, Math.ceil(w));
@@ -820,15 +653,17 @@
         const ctx = seqCanvas.getContext('2d');
         ctx.save();
         ctx.setTransform(1,0,0,1,0,0);
-        ctx.font = FONT;
+        ctx.font = getViewerProp('FONT', FONT);
         const m2 = ctx.measureText('W');
         const w2 = m2 && m2.width ? m2.width : CHAR_WIDTH;
         CHAR_WIDTH = Math.max(1, Math.ceil(w2));
         ctx.restore();
       }catch(_){ /* nothing */ }
     }
-    // CHAR_WIDTH changed -> rebuild col offsets
-    try{ buildColOffsets(); }catch(_){ }
+  // CHAR_WIDTH changed -> ask viewer to rebuild col offsets
+  try{ ensureViewerColOffsetsBuilt(); }catch(_){ }
+    // ensure viewer sees updated char width as well
+    try{ const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null; if(v && typeof v.charWidth !== 'undefined'){ try{ v.charWidth = CHAR_WIDTH; }catch(_){ } } }catch(_){ }
   }
 
 
@@ -837,10 +672,11 @@
   let labelTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
   let seqTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
   function measureTextVerticalOffset(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.measureTextVerticalOffset === 'function'){ const res = v.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT }); if(res){ seqTextVertOffset = res.seqTextVertOffset; labelTextVertOffset = res.labelTextVertOffset; } return; } }catch(_){ }
     // sequence font metrics
     try{
       const ctx = seqCanvas.getContext('2d');
-      ctx.font = FONT;
+      ctx.font = getViewerProp('FONT', FONT);
       const metrics = ctx.measureText('Mg'); // two-letter sample that usually spans ascent/descent
       if(metrics && typeof metrics.actualBoundingBoxAscent === 'number'){
         const ascent = metrics.actualBoundingBoxAscent;
@@ -854,7 +690,7 @@
     // label font metrics (labels may use a different font in future)
     try{
       const ctx2 = labelCanvas.getContext('2d');
-      ctx2.font = FONT;
+      ctx2.font = getViewerProp('FONT', FONT);
       const metrics2 = ctx2.measureText('Mg');
       if(metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number'){
         const ascent2 = metrics2.actualBoundingBoxAscent;
@@ -868,549 +704,167 @@
 
   // Measure font pixel heights for label and sequence and set ROW_HEIGHT to the minimum
   function measureRowHeightFromFonts(){
+    try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.measureRowHeightFromFonts === 'function'){ const newRow = v.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true }); ROW_HEIGHT = newRow; try{ document.documentElement.style.setProperty('--row-height', ROW_HEIGHT + 'px'); }catch(_){ } return; } }catch(_){ }
     const ctx = seqCanvas.getContext('2d');
     // sequence font
-    ctx.font = FONT;
+    ctx.font = getViewerProp('FONT', FONT);
     const seqMetrics = ctx.measureText('Mg');
     let seqHeight = 0;
-    if(seqMetrics && typeof seqMetrics.actualBoundingBoxAscent === 'number'){
-      seqHeight = Math.ceil((seqMetrics.actualBoundingBoxAscent || 0) + (seqMetrics.actualBoundingBoxDescent || 0));
-    } else {
-      // fallback: parse font px size
-      const m = FONT.match(/(\d+)px/);
-      const px = m ? parseInt(m[1],10) : 14;
-      seqHeight = Math.round(px * 1.2);
-    }
-
-    // label font (we currently use the same FONT for labels; measure similarly in case of future divergence)
-    const ctx2 = labelCanvas.getContext('2d');
-    ctx2.font = FONT;
-    const labMetrics = ctx2.measureText('Mg');
-    let labHeight = 0;
-    if(labMetrics && typeof labMetrics.actualBoundingBoxAscent === 'number'){
-      labHeight = Math.ceil((labMetrics.actualBoundingBoxAscent || 0) + (labMetrics.actualBoundingBoxDescent || 0));
-    } else {
-      const m2 = FONT.match(/(\d+)px/);
-      const px2 = m2 ? parseInt(m2[1],10) : 14;
-      labHeight = Math.round(px2 * 1.2);
-    }
-
-  // set ROW_HEIGHT to the maximum of the two measured text heights plus padding
-  // so both panels have enough room while keeping the same font size
-  const newRow = Math.max(8, Math.ceil(Math.max(seqHeight, labHeight) + ROW_PADDING));
-    ROW_HEIGHT = newRow;
-    // sync CSS variable so layout that uses --row-height matches
+    // mask helper moved to `sealion/utils.js` (refreshMaskStr). Call global helper.
     document.documentElement.style.setProperty('--row-height', ROW_HEIGHT + 'px');
+    // Populate local maskStr from utils
+    try{ maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); }catch(_){ maskStr = '1'.repeat(maxSeqLen); }
+
   }
 
   // compute visible rows/cols given current scroll positions
   function computeVisible(){
+    try{
+      const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null;
+      if(v && typeof v.computeVisible === 'function'){
+        return v.computeVisible(scroller, { ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), BUFFER_ROWS: getViewerProp('BUFFER_ROWS', BUFFER_ROWS), BUFFER_COLS: getViewerProp('BUFFER_COLS', BUFFER_COLS), CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), maxSeqLen: maxSeqLen, rowCount: rowCount, maskEnabled: !!maskEnabled });
+      }
+    }catch(_){ }
+
     const scrollTop = scroller ? scroller.scrollTop : 0;
     const scrollLeft = scroller ? scroller.scrollLeft : 0;
     const viewH = scroller ? scroller.clientHeight : window.innerHeight;
     const viewW = scroller ? scroller.clientWidth : window.innerWidth;
 
-  // canonical (unbuffered) first/last rows that correspond exactly to the scrollTop/viewH
-  const firstRowNoBuffer = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT));
-  const lastRowNoBuffer = Math.min(rowCount - 1, Math.floor((scrollTop + viewH) / ROW_HEIGHT));
+    // prefer viewer-provided constants for fallback layout arithmetic
+    const ROW_H = getViewerProp('ROW_HEIGHT', ROW_HEIGHT);
+    const BUF_ROWS = getViewerProp('BUFFER_ROWS', BUFFER_ROWS);
+    const BUF_COLS = getViewerProp('BUFFER_COLS', BUFFER_COLS);
+    // canonical (unbuffered) first/last rows that correspond exactly to the scrollTop/viewH
+    const firstRowNoBuffer = Math.max(0, Math.floor(scrollTop / ROW_H));
+    const lastRowNoBuffer = Math.min(rowCount - 1, Math.floor((scrollTop + viewH) / ROW_H));
 
-  // buffered range for drawing to avoid pop-in
-  let firstRow = firstRowNoBuffer - BUFFER_ROWS;
-  let lastRow = Math.min(rowCount - 1, lastRowNoBuffer + BUFFER_ROWS);
-  firstRow = Math.max(0, firstRow);
+    // buffered range for drawing to avoid pop-in
+    let firstRow = firstRowNoBuffer - BUF_ROWS;
+    let lastRow = Math.min(rowCount - 1, lastRowNoBuffer + BUF_ROWS);
+    firstRow = Math.max(0, firstRow);
 
-      // compute CHAR_WIDTH as before (measured single-col width) but visible columns are computed from colOffsets
-      let cssCharWidth = CHAR_WIDTH;
-      try{
-        const spacerRect = seqSpacer.getBoundingClientRect();
-        if(spacerRect && spacerRect.width > 0 && maxSeqLen > 0 && !maskEnabled){
-          // when mask disabled we can infer char width from spacer
-          cssCharWidth = spacerRect.width / maxSeqLen;
-        }
-      }catch(e){ }
-      // fallback to canvas-measured width when needed
-      try{ const seqCtx = seqCanvas.getContext('2d'); seqCtx.font = FONT; const m = seqCtx.measureText('W'); const cw = (m && m.width) ? m.width : CHAR_WIDTH; cssCharWidth = Math.max(cssCharWidth, cw); }catch(_){ }
-      CHAR_WIDTH = Math.max(1, Math.ceil(cssCharWidth));
-      // ensure offsets are rebuilt with latest CHAR_WIDTH
-      try{ buildColOffsets(); }catch(_){ }
+    // compute column range: prefer viewer offsets when available, otherwise approximate via char width
+    let rawFirstCol = 0, rawLastCol = Math.max(0, Math.min(maxSeqLen - 1, Math.floor(viewW / Math.max(1, getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth')))));
+    try{
+      const co = getViewerColOffsets();
+      if(co && co.length > 0){
+        // binary-search like approach via colIndexFromOffset helper
+        rawFirstCol = colIndexFromOffset(scrollLeft);
+        rawLastCol = colIndexFromOffset(scrollLeft + viewW - 1);
+      } else {
+        const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth');
+        const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD);
+        const approxColW = (_CHAR_WIDTH + _EXPANDED_RIGHT_PAD) || 1;
+        rawFirstCol = Math.max(0, Math.floor(scrollLeft / approxColW));
+        rawLastCol = Math.min(maxSeqLen - 1, Math.floor((scrollLeft + viewW - 1) / approxColW));
+      }
+    }catch(_){ /* tolerate */ }
 
-      // raw visible columns (no buffer) — use binary search on colOffsets
-      const rawFirstCol = colIndexFromOffset(scrollLeft);
-      const rawLastCol = colIndexFromOffset(scrollLeft + viewW - 1);
+    const leftBuffer = (rawFirstCol >= BUF_COLS) ? BUF_COLS : 0;
+    const rightBuffer = BUF_COLS;
+    const firstCol = Math.max(0, rawFirstCol - leftBuffer);
+    const lastCol = Math.min(maxSeqLen - 1, rawLastCol + rightBuffer);
 
-  // buffered range for drawing to avoid pop-in
-  // Use an asymmetric buffer: only buffer to the left when there's enough room.
-  // This avoids drawing many columns to the left of the viewport when near the left edge
-  // which can result in negative draw coordinates that look like misalignment.
-  const leftBuffer = (rawFirstCol >= BUFFER_COLS) ? BUFFER_COLS : 0;
-  const rightBuffer = BUFFER_COLS;
-  let firstCol = Math.max(0, rawFirstCol - leftBuffer);
-  let lastCol = Math.min(maxSeqLen - 1, rawLastCol + rightBuffer);
+    // reference helper moved to `sealion/utils.js` (refreshRefStr). Call global helper.
+    try{ const _r = (window && window.refreshRefStr) ? window.refreshRefStr() : { refStr: null, refIndex: null }; refStr = _r.refStr; refIndex = _r.refIndex; }catch(_){ refStr = null; refIndex = null; }
 
     return { firstRow, lastRow, firstCol, lastCol, rawFirstCol, rawLastCol, viewW, viewH, scrollLeft, scrollTop, firstRowNoBuffer, lastRowNoBuffer };
   }
+  // Populate local maskStr from utils
+  try{ maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); }catch(_){ maskStr = '1'.repeat(maxSeqLen); }
+  // `drawLabels` moved into `SealionViewer.drawLabels` during staged migration.
+  // The viewer implementation is authoritative; local legacy implementation removed.
 
-  // Draw visible labels into the label canvas backing (which we sized to full height) but only clear/draw visible region for speed
-  function drawLabels(visible){
-    const ctx = labelCanvas.getContext('2d');
-    ctx.font = FONT;
-    ctx.textBaseline = 'alphabetic';
-    ctx.fillStyle = '#111';
+  
 
-    const pr = window.devicePixelRatio || 1;
-    const cssW = labelCanvas.width / pr;
-    const cssH = labelCanvas.height / pr;
-    // clear viewport backing
-    ctx.clearRect(0, 0, cssW, cssH);
+  // consensus drawing moved into `SealionViewer.drawConsensus` during staged migration
+    // overview drawing moved into `SealionViewer.drawOverview` during staged migration
 
-    for(let i=visible.firstRow;i<=visible.lastRow;i++){
-      // quantize row Y and height to device pixels for crisp alignment with sequence canvas
-      // compute absolute row position relative to viewport top using scrollTop so both canvases match
-      const rawRowY = (i * ROW_HEIGHT) - visible.scrollTop;
-      const rowY = Math.round(rawRowY * pr) / pr;
-      const rowH = Math.round(ROW_HEIGHT * pr) / pr;
-      const label = rows[i].label || '';
-      // selection highlight (takes precedence) or alternating row stripe
-      if(selectedRows.has(i)){
-        ctx.fillStyle = '#cfe8ff'; // light selection blue
-      } else if(i % 2 === 0){
-        ctx.fillStyle = '#fff';
-      } else {
-        ctx.fillStyle = '#fbfbfb';
-      }
-      ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
-      // draw a subtle left accent for the reference sequence row
-      if(typeof refIndex === 'number' && i === refIndex){
-        try{ ctx.fillStyle = REF_ACCENT; ctx.fillRect(0, rowY, 4, rowH); }catch(_){ }
-      }
-      ctx.fillStyle = '#111';
-  const y = Math.round((rawRowY + labelTextVertOffset) * pr) / pr;
-      ctx.fillText(label, 6, y);
-    }
-  }
+  
 
-  // Draw header digits (we render only the portion visible in the header backing)
-  function drawHeader(visible){
-    if(!headerCanvas) return;
-    const ctx = headerCanvas.getContext('2d');
-    const pr = window.devicePixelRatio || 1;
-    const cssW = headerCanvas.width / pr;
-    // clear header area
-    ctx.clearRect(0,0, cssW, HEADER_HEIGHT);
-  // header uses a fixed font size independent of the main FONT
-  ctx.font = HEADER_FONT;
-    ctx.textBaseline = 'alphabetic';
-
-  // background
-  ctx.fillStyle = '#f3f3f3';
-  ctx.fillRect(0,0, cssW, HEADER_HEIGHT);
-  // draw column selection overlay under ticks
-  if(selectedCols.size > 0){ drawHeaderColumnOverlay(visible); }
-
-  // Determine visible column range (use rawFirst/rawLast for precise tick placement)
-  const start = Math.max(0, visible.rawFirstCol - 1);
-  const end = Math.min(maxSeqLen - 1, visible.rawLastCol + 1);
-
-    // Adaptive tick step: choose a base-step so labels are at least MIN_TICK_PX apart
-    const MIN_TICK_PX = 48; // desired minimum px between major ticks
-    // estimate average visual width per base using total offsets
-  const totalVisualWidth = colOffsets[maxSeqLen] || (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-    const avgBasePx = (maxSeqLen > 0) ? (totalVisualWidth / maxSeqLen) : CHAR_WIDTH;
-    // choose a 'nice' tick step (1,2,5 * 10^n) so avgBasePx * step >= MIN_TICK_PX
-    function chooseTickStep(avgPx){
-      if(avgPx <= 0) return 10;
-      const candidates = [1,2,5];
-      // compute target multiplier
-      const raw = MIN_TICK_PX / avgPx;
-      const pow = Math.max(0, Math.floor(Math.log10(raw)) - 1);
-      // expand search over a few powers to find suitable
-      for(let p = pow; p <= pow + 5; p++){
-        for(const c of candidates){
-          const step = c * Math.pow(10, p);
-          if(step * avgPx >= MIN_TICK_PX) return step;
-        }
-      }
-      // fallback
-      return Math.max(10, Math.ceil(raw));
-    }
-    const step = chooseTickStep(avgBasePx);
-    const smallTickH = Math.max(2, Math.round(HEADER_HEIGHT * 0.28));
-    const largeTickH = Math.max(3, Math.round(HEADER_HEIGHT * 0.6));
-    const bottom = HEADER_HEIGHT;
-    ctx.strokeStyle = '#666';
-    ctx.lineWidth = 1;
-    ctx.fillStyle = '#333';
-
-    // Draw ticks in canvas-local coordinates using colOffsets to handle variable widths
-    for(let c = start; c <= end; c++){
-      const colLeft = colOffsets[c] || 0;
-  const colRight = colOffsets[c+1] || (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-      const centerLocal = ((colLeft + colRight) / 2) - visible.scrollLeft;
-      const x = Math.round(centerLocal) + 0.5;
-      const posIndex = c + 1;
-      const isMajor = (posIndex % step) === 0;
-      const isMinor = !isMajor && (step >= 2) && ((posIndex % (step/2)) === 0);
-      const tickH = isMajor ? largeTickH : (isMinor ? Math.max(2, Math.round(HEADER_HEIGHT * 0.4)) : smallTickH);
-      ctx.beginPath();
-      ctx.moveTo(x, bottom - tickH);
-      ctx.lineTo(x, bottom - 1);
-      ctx.stroke();
-      if(isMajor){
-        const label = String(posIndex);
-        const labelX = Math.round(centerLocal) + 3; // left padding from centered tick
-        // Position the label baseline so the bottom of the digits is flush with the top of the tick mark.
-        // Use actualBoundingBoxDescent when available for precise placement; otherwise fall back
-        // to a reasonable estimate so labels don't overlap ticks.
-        let labelY;
-        try{
-          const metrics = ctx.measureText(label);
-          const descent = (metrics && typeof metrics.actualBoundingBoxDescent === 'number') ? metrics.actualBoundingBoxDescent : Math.max(2, Math.round(HEADER_HEIGHT * 0.18));
-          // place baseline so (baseline + descent) == (top of tick) - padding
-          const padding = 2;
-          labelY = Math.round((bottom - tickH) - padding - descent);
-        }catch(e){
-          // fallback to previous centered placement if measurement fails
-          labelY = Math.round(HEADER_HEIGHT/2 + (seqTextVertOffset - ROW_HEIGHT/2));
-        }
-        ctx.fillText(label, labelX, labelY);
-      }
-    }
-
-    
-  }
-
-  // Draw consensus row underneath the header (single-raster representing per-column consensus)
-  function drawConsensus(visible){
-    if(!consensusCanvas) return;
-    const ctx = consensusCanvas.getContext('2d');
-    const pr = window.devicePixelRatio || 1;
-    const cssW = consensusCanvas.width / pr;
-    const cssH = consensusCanvas.height / pr;
-    // clear
-    ctx.clearRect(0,0, cssW, cssH);
-    // background (match header background)
-    ctx.fillStyle = '#fafafa';
-    ctx.fillRect(0,0, cssW, cssH);
-  // draw a bottom separator line so the divider appears below the consensus sequence
-  ctx.strokeStyle = '#e0e0e0';
-  ctx.lineWidth = 1;
-  const sepY = Math.max(0.5, cssH - 0.5);
-  ctx.beginPath(); ctx.moveTo(0, sepY); ctx.lineTo(cssW, sepY); ctx.stroke();
-
-    ctx.font = FONT;
-    ctx.textBaseline = 'alphabetic';
-
-    // compute vertical metrics inside the inner box (cssH minus top+bottom pads)
-    const innerH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
-    let ascent = 0, descent = 0;
-    try{
-      const m = ctx.measureText('Mg');
-      if(m && typeof m.actualBoundingBoxAscent === 'number'){
-        ascent = m.actualBoundingBoxAscent || 0;
-        descent = m.actualBoundingBoxDescent || 0;
-      }
-    }catch(e){}
-    const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
-
-    // ensure we have a consensus string
-    const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
-    if(!cons || cons.length === 0) return;
-
-    const start = Math.max(0, visible.rawFirstCol - 1);
-    const end = Math.min(maxSeqLen - 1, visible.rawLastCol + 1);
-    for(let c = start; c <= end; c++){
-      const left = colOffsets[c] || 0;
-      const right = colOffsets[c+1] || (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-      const x = left - visible.scrollLeft;
-      const w = Math.max(1, right - left);
-      const ch = (cons.charAt(c) || 'N');
-      const base = ch ? ch.charAt(0).toUpperCase() : '';
-      const color = BASE_COLORS[base] || DEFAULT_BASE_COLOR;
-      if(maskEnabled && maskStr && maskStr.charAt(c) === '0'){
-        // compressed: draw a block inset by the top/bottom pads so the bg shows above/below
-        ctx.fillStyle = color;
-        const blockTop = CONSENSUS_TOP_PAD;
-        const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
-        ctx.fillRect(x, blockTop, w, blockH);
-      } else {
-        ctx.fillStyle = color;
-        ctx.fillText(ch, x + 3, baselineY);
-      }
-    }
-  }
-
-  // Draw overview canvas showing full alignment and the current viewport window
-  function drawOverview(visible){
-    if(!overviewCanvas) return;
-      const ctx = overviewCanvas.getContext('2d');
-      const pr = window.devicePixelRatio || 1;
-      // Use CSS-pixel layout size as the authoritative drawing space for the overview.
-      // Compute CSS width/height from getBoundingClientRect, then ensure the canvas
-      // backing matches (css * DPR). After sizing the backing we apply ctx.setTransform
-      // so drawing commands can use CSS pixels directly.
-      const rect = overviewCanvas.getBoundingClientRect();
-      let cssW = rect && rect.width ? rect.width : Math.max(1, overviewCanvas.width / pr);
-      let cssH = rect && rect.height ? rect.height : Math.max(1, overviewCanvas.height / pr);
-      // guard against zero
-      cssW = Math.max(1, cssW);
-      cssH = Math.max(1, cssH);
-      const wantW = Math.max(1, Math.round(cssW * pr));
-      const wantH = Math.max(1, Math.round(cssH * pr));
-      if(overviewCanvas.width !== wantW || overviewCanvas.height !== wantH){
-        overviewCanvas.width = wantW;
-        overviewCanvas.height = wantH;
-      }
-      // Ensure the canvas CSS width reflects the layout rect (helpful if styles changed)
-      try{ overviewCanvas.style.width = Math.round(cssW) + 'px'; overviewCanvas.style.height = Math.round(cssH) + 'px'; }catch(_){ }
-      try{ ctx.setTransform(pr,0,0,pr,0,0); }catch(e){}
-      // Clear using CSS-pixel coordinates
-      ctx.clearRect(0,0, cssW, cssH);
-    // background
-    ctx.fillStyle = '#f7f7f7';
-    ctx.fillRect(0,0, cssW, cssH);
-
-  // colOffsets may be in backing/device pixels; convert to CSS pixels so scale matches cssW
-  const rawTotal = colOffsets[maxSeqLen] || (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-  // colOffsets are in CSS pixels; total width is rawTotal in CSS pixels
-  const totalWidth = rawTotal;
-    if(totalWidth <= 0) return;
-    const scale = cssW / totalWidth;
-
-    // If the backing buffer's CSS width (overviewCanvas.width / DPR) doesn't match
-    // the layout width (getBoundingClientRect), update the backing so drawing uses
-    // the same coordinate space that interactions rely on. This ensures the overview
-    // graphic fills the visible canvas area even if some earlier sizing pass missed it.
-    try{
-      const rect = overviewCanvas.getBoundingClientRect();
-      const rectW = rect && rect.width ? rect.width : cssW;
-      const rectH = rect && rect.height ? rect.height : cssH;
-      if(Math.abs(cssW - rectW) > 1 || Math.abs(cssH - rectH) > 1){
-        // resize backing to match layout rect (in device pixels)
-        const wantW = Math.max(1, Math.round(rectW * pr));
-        const wantH = Math.max(1, Math.round(rectH * pr));
-        if(overviewCanvas.width !== wantW || overviewCanvas.height !== wantH){
-          overviewCanvas.width = wantW;
-          overviewCanvas.height = wantH;
-        }
-        try{ overviewCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(e){}
-        cssW = overviewCanvas.width / pr;
-        cssH = overviewCanvas.height / pr;
-      }
-      // no visual debug markers
-    }catch(e){}
-
-    // draw compressed columns as darker bars and uncompressed as light
-    // iterate columns and draw a 1px-high stripe for each (scaled width)
-    const barH = Math.max(4, Math.floor(cssH * 0.35));
-    const barY = Math.round((cssH - barH) / 2);
-    // To avoid cumulative rounding errors (which can make the drawn bars add up to less
-    // than the full width), compute rounded positions for the left and right edges and
-    // derive width as their difference. This guarantees the bars tile across the full
-    // visible width without leaving gaps or appearing 'half-size'.
-    for(let c=0;c<maxSeqLen;c++){
-      const left = colOffsets[c] || 0;
-      const right = colOffsets[c+1] || (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-      const x = Math.round(left * scale);
-      const nextX = Math.round(right * scale);
-      const w = Math.max(1, nextX - x);
-      const isCompressed = maskStr && maskStr.charAt(c) === '0';
-      ctx.fillStyle = isCompressed ? '#999' : '#ddd';
-      ctx.fillRect(x, barY, w, barH);
-    }
-
-    // draw viewport rectangle
-    try{
-      const viewX = Math.round(visible.scrollLeft * scale);
-      const viewW = Math.max(2, Math.round(visible.viewW * scale));
-      ctx.save();
-      ctx.strokeStyle = 'rgba(0,120,200,0.9)';
-      ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.6;
-      ctx.strokeRect(viewX + 0.5, 2 + 0.5, viewW - 1, cssH - 4);
-      ctx.restore();
-    }catch(e){}
-
-    // no on-screen overview HUD in production; nothing to update
-  }
-
-  // Draw labels header (simple static header above the labels column)
-  function drawLabelsHeader(){
-    if(!labelsHeaderCanvas) return;
-    const ctx = labelsHeaderCanvas.getContext('2d');
-    const pr = window.devicePixelRatio || 1;
-    const w = labelsHeaderCanvas.width / pr;
-    ctx.clearRect(0,0,w,HEADER_HEIGHT);
-  // labels header (the little "Labels" title) uses the fixed header font
-  ctx.font = HEADER_FONT;
-    ctx.textBaseline = 'alphabetic';
-    // background
-    ctx.fillStyle = '#f3f3f3';
-    ctx.fillRect(0,0,w,HEADER_HEIGHT);
-    ctx.fillStyle = '#333';
-  // draw the label title centered vertically
-  const title = 'Labels';
-  const y = Math.round(HEADER_HEIGHT/2 + (labelTextVertOffset - ROW_HEIGHT/2));
-  ctx.fillText(title, 6, y);
-  }
-
-  // Draw sequences viewport into seqCanvas (backing is viewport-sized)
-  function drawSequences(visible){
-    const ctx = seqCanvas.getContext('2d');
-  const pr = window.devicePixelRatio || 1;
-  ctx.clearRect(0,0, seqCanvas.width / pr, seqCanvas.height / pr);
-  // draw columns at absolute sequence coordinates minus the scroll offset so the viewport shows the correct slice
-  // variable-width columns use colOffsets to compute positions
-  ctx.font = FONT;
-  ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = '#000';
-
-  const rowsToDraw = visible.lastRow - visible.firstRow + 1;
-  const colsToDraw = visible.lastCol - visible.firstCol + 1;
-
-  // compute local offset (for sub-character scrolling) - still useful for grid alignment
-  // (reuse localOffset declared above)
-
-  // First pass: draw row backgrounds (including row selection highlight)
-  for(let r=visible.firstRow; r<=visible.lastRow; r++){
-    if(selectedRows.has(r)){
-      ctx.fillStyle = '#cfe8ff'; // match label selection color
-    } else if((r % 2) === 0){
-      ctx.fillStyle = '#fff';
-    } else {
-      ctx.fillStyle = '#fafafa';
-    }
-    const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
-    const rowY = Math.round(rawRowY * pr) / pr;
-    const rowH = Math.round(ROW_HEIGHT * pr) / pr;
-    ctx.fillRect(0, rowY, visible.viewW, rowH);
-    // draw a thin left accent in the sequence viewport for the reference row
-    if(typeof refIndex === 'number' && r === refIndex){
-      try{ ctx.save(); ctx.fillStyle = REF_ACCENT; ctx.globalAlpha = 0.9; ctx.fillRect(0, rowY, 4, rowH); ctx.restore(); }catch(_){ }
-    }
-  }
-
-  // column selection overlay (drawn over row backgrounds, before glyphs)
-  if(selectedCols.size > 0){ drawColumnSelectionOverlay(visible); }
-
-  // Second pass: draw sequence characters
-  for(let r=visible.firstRow; r<=visible.lastRow; r++){
-    const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
-    const y = Math.round((rawRowY + seqTextVertOffset) * pr) / pr; // local to backing
-    const seq = rows[r].sequence || '';
-    ctx.fillStyle = '#000';
-    for(let c=visible.firstCol; c<=visible.lastCol; c++){
-      const rawCh = seq[c] || ' ';
-      const ch = String(rawCh);
-      const colLeft = colOffsets[c] || 0;
-  const colRight = colOffsets[c+1] || (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-      const x = colLeft - visible.scrollLeft;
-      const w = Math.max(1, colRight - colLeft);
-      // color bases A/C/G/T specially (case-insensitive), but if reference-mode is enabled
-      // and the character equals the reference at this column, render pale grey instead.
-      const base = ch ? ch.charAt(0).toUpperCase() : '';
-      const refChar = (refStr && refStr.charAt(c)) ? refStr.charAt(c).toUpperCase() : null;
-      const isSameRef = refModeEnabled && refStr && refChar === base;
-      const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-      // Reference row should always keep nucleotide colours; other rows may be de-emphasized when matching reference
-      const color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
-      if(maskEnabled && maskStr && maskStr.charAt(c) === '0'){
-        // compressed cell: draw a slightly shorter colored block so the row background is visible
-        ctx.fillStyle = color;
-        // compute vertical inset so the block is centered within the row
-        const topCss = rawRowY + COMPRESSED_CELL_VPAD;
-        const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
-        const topQ = Math.round(topCss * pr) / pr;
-        const hQ = Math.round(blockH * pr) / pr;
-        ctx.fillRect(x, topQ, w, hQ);
-      } else {
-        ctx.fillStyle = color;
-        // draw at local canvas coordinate relative to visible scroll
-        ctx.fillText(ch, x + 3, y);
-      }
-    }
-  }
-
-  // draw rectangular selection border (if any) on top of glyphs
-  if(isRectSelecting || (rectStartRow !== null && rectEndRow !== null && rectStartCol !== null && rectEndCol !== null)){
-    try{
-      const rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
-      const rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-      const clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-      const chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-      // only draw if intersects visible region
-      if(rhi >= visible.firstRow && rlo <= visible.lastRow && chi >= visible.rawFirstCol && clo <= visible.rawLastCol){
-        const topY = (rlo - visible.firstRow) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
-        const bottomY = (rhi - visible.firstRow + 1) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
-        const leftX = (colOffsets[clo] || 0) - visible.scrollLeft;
-  const rightX = (colOffsets[chi+1] || (colOffsets[chi] + CHAR_WIDTH + EXPANDED_RIGHT_PAD)) - visible.scrollLeft;
-        // quantize to device pixels
-        const dpr = window.devicePixelRatio || 1;
-        const t = Math.round(topY * dpr) / dpr;
-        const b = Math.round(bottomY * dpr) / dpr;
-        const l = Math.round(leftX * dpr) / dpr;
-        const r = Math.round(rightX * dpr) / dpr;
-        ctx.save();
-        ctx.strokeStyle = 'rgba(0,120,200,0.9)';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4,2]);
-        ctx.strokeRect(l + 0.5, t + 0.5, Math.max(1, r - l - 1), Math.max(1, b - t - 1));
-        ctx.restore();
-      }
-    }catch(e){}
-  }
-
-    // debug grid overlay (draw column boundaries)
-    if(window.__showGrid){
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,0,0,0.6)';
-      ctx.lineWidth = 1;
-      // full height in CSS pixels
-      const fullH = seqCanvas.height / (window.devicePixelRatio || 1);
-      const startC = Math.max(0, visible.rawFirstCol - 1);
-      const endC = Math.min(maxSeqLen-1, visible.rawLastCol + 1);
-      for(let c=startC; c<=endC+1; c++){
-        const gx = (colOffsets[c] || 0) - visible.scrollLeft + 0.5; // half-px for crisp line
-        ctx.beginPath();
-        ctx.moveTo(gx, 0);
-        ctx.lineTo(gx, fullH);
-        ctx.stroke();
-      }
-      // highlight rawFirstCol boundary
-      ctx.strokeStyle = 'rgba(0,0,255,0.8)';
-      const fx = (colOffsets[visible.rawFirstCol] || 0) - visible.scrollLeft + 0.5;
-      ctx.beginPath(); ctx.moveTo(fx,0); ctx.lineTo(fx, fullH); ctx.stroke();
-      ctx.restore();
-    }
-    // record draw extents for HUD
-    
-
-    (function recordExtents(){
-      try{
-        const startX = (colOffsets[visible.firstCol] || 0) - visible.scrollLeft + 3;
-        const endX = (colOffsets[visible.lastCol] || 0) - visible.scrollLeft + 3;
-        window.__lastDrawExtents = { minX: Math.round(startX), maxX: Math.round(endX) };
-      }catch(e){
-        window.__lastDrawExtents = { minX:0, maxX:0 };
-      }
-    })();
-  }
+  // `drawSequences` moved into `SealionViewer.drawSequences` during staged migration.
+  // The viewer implementation is authoritative; local legacy implementation removed.
 
   // main render loop throttled with rAF
   let scheduled = false;
+  // flag to emit a lightweight one-time runtime assertion on first draw
+  let firstDrawLogged = false;
   function scheduleRender(){
     if(scheduled) return;
     scheduled = true;
     requestAnimationFrame(()=>{
       scheduled = false;
+      // Ensure the SealionViewer instance has the canonical geometry/state
+      // before any draw call. During the staged migration the viewer may be
+      // constructed early or slightly later; sync authoritative values so
+      // draw* methods never observe missing offsets or charWidth.
+      try{
+        const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null;
+        if(v){
+          try{ v.alignment = rows; }catch(_){ }
+          try{ /* viewer owns colOffsets */ }catch(_){ }
+          try{ v.charWidth = CHAR_WIDTH; }catch(_){ }
+        }
+      }catch(_){ }
+      // One-time runtime assertions / lightweight diagnostics to aid debugging
+      try{
+        if(!firstDrawLogged){
+          const pr = window.devicePixelRatio || 1;
+          const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null;
+          const seqCssW = seqCanvas ? (seqCanvas.getBoundingClientRect().width || (seqCanvas.width / pr)) : 0;
+          const seqCssH = seqCanvas ? (seqCanvas.getBoundingClientRect().height || (seqCanvas.height / pr)) : 0;
+          const seqBacking = seqCanvas ? { w: seqCanvas.width, h: seqCanvas.height } : null;
+          const info = {
+            when: Date.now(),
+            viewerPresent: !!v,
+            colOffsetsLength: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets.length : 0,
+            totalWidth: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets[maxSeqLen] : 0,
+            CHAR_WIDTH: CHAR_WIDTH,
+            viewerCharWidth: v && typeof v.charWidth !== 'undefined' ? v.charWidth : null,
+            rowCount: rowCount,
+            ROW_HEIGHT: ROW_HEIGHT,
+            seqCanvasCss: { w: Math.round(seqCssW), h: Math.round(seqCssH) },
+            seqCanvasBacking: seqBacking,
+            scrollerClient: scroller ? { w: scroller.clientWidth, h: scroller.clientHeight, scrollLeft: scroller.scrollLeft, scrollTop: scroller.scrollTop } : null
+          };
+          try{ window.__sealionFirstDrawInfo = info; }catch(_){ }
+          console.info('SealionViewer: first draw', info);
+          // simple sanity checks
+          if(!v) console.warn('SealionViewer instance missing on first draw');
+          if(!(v && v.colOffsets && v.colOffsets.length >= (maxSeqLen + 1))) console.warn('colOffsets length shorter than expected', { colOffsetsLength: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets.length : 0, expected: maxSeqLen + 1 });
+          if(!seqCanvas) console.warn('seqCanvas not present');
+          if(seqBacking && seqBacking.w <= 0) console.warn('seqCanvas backing width is zero or missing', seqBacking);
+          firstDrawLogged = true;
+        }
+      }catch(e){ /* don't let diagnostics break rendering */ }
   const vis = computeVisible();
   // draw independent headers first (they don't scroll vertically)
-  drawLabelsHeader();
-  drawOverview(vis);
-  drawHeader(vis);
-    drawConsensus(vis);
-  drawLabels(vis);
-  drawSequences(vis);
-  // diagnostics are available in console via logLayoutDiagnostics; remove on-screen HUD.
+  // (debug logs removed)
+  try{
+  viewer.drawLabelsHeader(labelsHeaderCanvas, vis, { HEADER_FONT: getViewerProp('HEADER_FONT', HEADER_FONT), HEADER_HEIGHT: getViewerProp('HEADER_HEIGHT', HEADER_HEIGHT), labelTextVertOffset: labelTextVertOffset, ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT) });
+  }catch(e){ console.error('viewer.drawLabelsHeader failed', e); }
+
+  try{
+  viewer.drawOverview(overviewCanvas, vis, { colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), maskStr: maskStr, maskEnabled: !!maskEnabled });
+  }catch(e){ console.error('viewer.drawOverview failed', e); }
+
+    try{
+  viewer.drawHeader(headerCanvas, vis, { colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), HEADER_FONT: getViewerProp('HEADER_FONT', HEADER_FONT), HEADER_HEIGHT: getViewerProp('HEADER_HEIGHT', HEADER_HEIGHT), selectedCols: getSelectedCols() });
+  }catch(e){ console.error('viewer.drawHeader failed', e); }
+
+  try{
+  viewer.drawConsensus(consensusCanvas, vis, { FONT: getViewerProp('FONT', FONT), CONSENSUS_TOP_PAD: getViewerProp('CONSENSUS_TOP_PAD', CONSENSUS_TOP_PAD), CONSENSUS_BOTTOM_PAD: getViewerProp('CONSENSUS_BOTTOM_PAD', CONSENSUS_BOTTOM_PAD), colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), maskStr: maskStr, maskEnabled: !!maskEnabled, BASE_COLORS: getViewerProp('BASE_COLORS', BASE_COLORS), DEFAULT_BASE_COLOR: getViewerProp('DEFAULT_BASE_COLOR', DEFAULT_BASE_COLOR) });
+  }catch(e){ console.error('viewer.drawConsensus failed', e); }
+
+    try{
+  viewer.drawLabels(labelCanvas, vis, { FONT: getViewerProp('FONT', FONT), ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), LABEL_WIDTH: getViewerProp('LABEL_WIDTH', LABEL_WIDTH), labelTextVertOffset: labelTextVertOffset, selectedRows: getSelectedRows(), rows: rows, refIndex: refIndex, REF_ACCENT: getViewerProp('REF_ACCENT', REF_ACCENT) });
+  }catch(e){ console.error('viewer.drawLabels failed', e); }
+
+  try{
+  viewer.drawSequences(seqCanvas, vis, { FONT: getViewerProp('FONT', FONT), ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), rows: rows, selectedRows: getSelectedRows(), selectedCols: getSelectedCols(), refStr: refStr, refModeEnabled: refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!maskEnabled, BASE_COLORS: getViewerProp('BASE_COLORS', BASE_COLORS), DEFAULT_BASE_COLOR: getViewerProp('DEFAULT_BASE_COLOR', DEFAULT_BASE_COLOR), PALE_REF_COLOR: getViewerProp('PALE_REF_COLOR', PALE_REF_COLOR), COMPRESSED_CELL_VPAD: getViewerProp('COMPRESSED_CELL_VPAD', COMPRESSED_CELL_VPAD), seqTextVertOffset: seqTextVertOffset, rowCount: rowCount, maxSeqLen: maxSeqLen, colOffsets: getViewerColOffsets(), isRectSelecting: (viewer && typeof viewer.isRectSelecting === 'boolean') ? viewer.isRectSelecting : false, rectStartRow: (viewer && typeof viewer.rectStartRow === 'number') ? viewer.rectStartRow : null, rectEndRow: (viewer && typeof viewer.rectEndRow === 'number') ? viewer.rectEndRow : null, rectStartCol: (viewer && typeof viewer.rectStartCol === 'number') ? viewer.rectStartCol : null, rectEndCol: (viewer && typeof viewer.rectEndCol === 'number') ? viewer.rectEndCol : null });
+  }catch(e){ console.error('viewer.drawSequences failed', e); }
+  // diagnostics are available in the console.
     });
   }
 
@@ -1496,527 +950,105 @@
     }catch(_){ }
   }
 
-  // debug HUD setup: show if URL contains ?debug
-  // debug HUD removed — rely on console.log and `logLayoutDiagnostics()` for runtime diagnostics.
-
-  // search and copy helpers
-  let lastSearchIdx = -1;
-  function findMatches(q){
-    if(!q) return [];
-    q = q.toLowerCase();
-    const matches = [];
-    for(let i=0;i<rows.length;i++){
-      if((rows[i].label && rows[i].label.toLowerCase().includes(q)) || (rows[i].sequence && rows[i].sequence.toLowerCase().includes(q))){
-        matches.push(i);
-      }
-    }
-    return matches;
-  }
-  if(searchNextBtn && searchInput){
-    searchNextBtn.addEventListener('click', ()=>{
-      const q = searchInput.value.trim();
-      if(!q) return;
-      const matches = findMatches(q);
-      if(matches.length===0) return;
-      lastSearchIdx = (lastSearchIdx + 1) % matches.length;
-      const row = matches[lastSearchIdx];
-      // scroll to row
-      if(scroller) scroller.scrollTop = row * ROW_HEIGHT;
-      try{ if(leftScroll && leftScroll !== scroller) leftScroll.scrollTop = scroller.scrollTop; }catch(e){}
-      scheduleRender();
-    });
-  }
-
-  
 
   // selection helpers: compute row from clientY within labelCanvas
   function rowFromClientY(clientY){
-    if(!labelCanvas) return 0;
-    const rect = labelCanvas.getBoundingClientRect();
-    const y = clientY - rect.top; // css pixels within canvas
-    const scrollTop = scroller ? scroller.scrollTop : 0;
-    const absY = scrollTop + y;
-    let row = Math.floor(absY / ROW_HEIGHT);
-    if(row < 0) row = 0;
-    if(row >= rowCount) row = rowCount - 1;
-    return row;
-  }
-
-  // helper: compute column under clientX within seq/header
-  function colFromClientXLocal(clientX){
-    // Use seqCanvas bounding box so clicks over the seq viewport map correctly
-    if(!seqCanvas) return colFromClientX(clientX);
-    const rect = seqCanvas.getBoundingClientRect();
-    const x = clientX - rect.left; // css pixels within seq canvas
-    const scrollLeft = scroller ? scroller.scrollLeft : 0;
-    const absX = scrollLeft + x;
-    return colIndexFromOffset(absX);
-  }
-
-  function setSelectionToRange(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(rowCount-1, Math.max(a,b));
-    selectedRows.clear();
-    for(let r=lo;r<=hi;r++) selectedRows.add(r);
-  }
-
-  function addRangeToSelection(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(rowCount-1, Math.max(a,b));
-    for(let r=lo;r<=hi;r++) selectedRows.add(r);
-  }
-
-  function toggleRangeInSelection(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(rowCount-1, Math.max(a,b));
-    for(let r=lo;r<=hi;r++){
-      if(selectedRows.has(r)) selectedRows.delete(r); else selectedRows.add(r);
+    // Viewer is authoritative for hit-testing
+    try{
+      return viewer.rowFromClientY(clientY, { labelCanvas: labelCanvas, scroller: scroller, ROW_HEIGHT: ROW_HEIGHT, rowCount: rowCount });
+    }catch(e){
+      console.error('viewer.rowFromClientY failed', e);
+      throw e;
     }
   }
 
-  // wire up label canvas interactions: click/drag selection, shift-extend, cmd-toggle, and forward wheel to scroller
-  if(labelCanvas){
-  selectionMode = 'replace';
-    labelCanvas.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return; // only left button
-      const row = rowFromClientY(e.clientY);
-      // determine origin (shift -> anchorRow if present)
-        // clear any column or rectangle selection when starting a row selection
-        selectedCols.clear();
-        clearRectSelection();
-        if(e.shiftKey && anchorRow !== null){ selectionOrigin = anchorRow; } else { selectionOrigin = row; }
-        if(e.metaKey){ selectionMode = 'add'; }
-        else selectionMode = 'replace';
+  // helper: compute column under clientX within seq/header
+  // helper: compute column under clientX within seq/header — use viewer.hit-testing when needed
+  // label interactions (click/drag/wheel) are handled by SealionViewer.attachInteractionHandlers
+  // (selection state now lives in the viewer; these helpers delegate to the viewer when available)
 
-        if(e.shiftKey && anchorRow !== null){
-          setSelectionToRange(anchorRow, row);
-        } else if(e.metaKey){
-          // toggle clicked row
-          if(selectedRows.has(row)) selectedRows.delete(row); else selectedRows.add(row);
-          anchorRow = row;
-        } else {
-          // normal click: start new selection
-          selectedRows.clear();
-          selectedRows.add(row);
-          anchorRow = row;
-        }
-      isSelecting = true;
-      selectionStartRow = row;
-      scheduleRender();
-      e.preventDefault();
-    });
-
-    window.addEventListener('mousemove', (e)=>{
-      if(!isSelecting) return;
-      const row = rowFromClientY(e.clientY);
-      if(selectionMode === 'replace'){
-        setSelectionToRange(selectionOrigin, row);
-      } else if(selectionMode === 'add'){
-        addRangeToSelection(selectionOrigin, row);
-      }
-      scheduleRender();
-    });
-
-    window.addEventListener('mouseup', (e)=>{
-      if(!isSelecting) return;
-      isSelecting = false;
-      // update anchor to last selected row (use last selectionStartRow if available)
-      const row = rowFromClientY(e.clientY);
-      anchorRow = row;
-      scheduleRender();
-    });
-
-    // forward wheel events from labels to canonical scroller so wheel on labels scrolls viewport
-    labelCanvas.addEventListener('wheel', (e)=>{
-      if(!scroller) return;
-      scroller.scrollTop += e.deltaY;
-      scroller.scrollLeft += e.deltaX;
-      scheduleRender();
-      e.preventDefault();
-    }, { passive: false });
-  }
-
-  // --- Column selection state and helpers ---
-  const selectedCols = new Set();
-  let anchorCol = null;
-  let isColSelecting = false;
-  let selectionStartCol = null;
-
-  function colFromClientX(clientX){
-    if(!headerCanvas) return 0;
-    const rect = headerCanvas.getBoundingClientRect();
-    const x = clientX - rect.left; // css pixels within header
-    const scrollLeft = scroller ? scroller.scrollLeft : 0;
-    const absX = scrollLeft + x;
-    // map absolute offset to column index using colOffsets
-    const col = colIndexFromOffset(absX);
-    return col;
-  }
+  // colFromClientX removed during migration — use viewer.colIndexFromCssOffset(absX) instead
 
   function setColSelectionToRange(a,b){
     const lo = Math.max(0, Math.min(a,b));
     const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    selectedCols.clear();
-    for(let c=lo;c<=hi;c++) selectedCols.add(c);
+    try{
+      if(viewer && typeof viewer.setSelectedCols === 'function'){
+        const cols = [];
+        for(let c=lo;c<=hi;c++) cols.push(c);
+        viewer.setSelectedCols(cols);
+      }
+    }catch(_){ }
   }
 
   function addRangeToColSelection(a,b){
     const lo = Math.max(0, Math.min(a,b));
     const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    for(let c=lo;c<=hi;c++) selectedCols.add(c);
+    try{
+      if(viewer && typeof viewer.setSelectedCols === 'function' && typeof viewer.getSelectedCols === 'function'){
+        const cur = new Set(viewer.getSelectedCols());
+        for(let c=lo;c<=hi;c++) cur.add(c);
+        viewer.setSelectedCols(Array.from(cur));
+      }
+    }catch(_){ }
   }
 
   function toggleRangeInColSelection(a,b){
     const lo = Math.max(0, Math.min(a,b));
     const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    for(let c=lo;c<=hi;c++){
-      if(selectedCols.has(c)) selectedCols.delete(c); else selectedCols.add(c);
-    }
+    try{
+      if(viewer && typeof viewer.setSelectedCols === 'function' && typeof viewer.getSelectedCols === 'function'){
+        const cur = new Set(viewer.getSelectedCols());
+        for(let c=lo;c<=hi;c++){ if(cur.has(c)) cur.delete(c); else cur.add(c); }
+        viewer.setSelectedCols(Array.from(cur));
+      }
+    }catch(_){ }
   }
 
   // render selected columns as a pale overlay in header and sequence area
   function drawColumnSelectionOverlay(visible){
     try{
-      const pr = window.devicePixelRatio || 1;
-      const seqCtx = seqCanvas.getContext('2d');
-      const cssH = seqCanvas.height / pr;
-      seqCtx.save();
-      seqCtx.globalAlpha = 0.14;
-      seqCtx.fillStyle = '#ffd54d'; // pale amber highlight for columns
-      for(const c of selectedCols){
-        // skip columns outside visible range
-        if(c < visible.rawFirstCol - 1 || c > visible.rawLastCol + 1) continue;
-        const x = (colOffsets[c] || 0) - visible.scrollLeft;
-  const w = (colOffsets[c+1] || (colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD)) - (colOffsets[c] || 0);
-        seqCtx.fillRect(x, 0, w, cssH);
-      }
-      seqCtx.restore();
-    }catch(e){ }
+      const sel = getSelectedCols();
+      viewer.drawColumnSelectionOverlay(seqCanvas, visible, { CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), selectedCols: sel, colOffsets: getViewerColOffsets() });
+    }catch(e){ console.error('viewer.drawColumnSelectionOverlay failed', e); }
   }
 
-  function drawHeaderColumnOverlay(visible){
-    try{
-      if(!headerCanvas) return;
-      const headerCtx = headerCanvas.getContext('2d');
-      headerCtx.save();
-      headerCtx.globalAlpha = 0.14;
-      headerCtx.fillStyle = '#ffd54d';
-      const headerH = HEADER_HEIGHT;
-      for(const c of selectedCols){
-        if(c < visible.rawFirstCol - 1 || c > visible.rawLastCol + 1) continue;
-        const x = (colOffsets[c] || 0) - visible.scrollLeft;
-  const w = (colOffsets[c+1] || (colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD)) - (colOffsets[c] || 0);
-        headerCtx.fillRect(x, 0, w, headerH);
-      }
-      headerCtx.restore();
-    }catch(e){ }
-  }
+  
 
-  // header interaction: click/drag to select columns (clears row selection)
-  if(headerCanvas){
-    headerCanvas.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return;
-      // start column selection: clear row selection and any rectangular selection
-      selectedRows.clear();
-      clearRectSelection();
-      const col = colFromClientX(e.clientX);
-      if(e.shiftKey && anchorCol !== null){ selectionStartCol = anchorCol; } else { selectionStartCol = col; }
-      if(e.metaKey) selectionMode = 'add'; else selectionMode = 'replace';
-      if(e.shiftKey && anchorCol !== null){ setColSelectionToRange(anchorCol, col); }
-      else if(e.metaKey){ if(selectedCols.has(col)) selectedCols.delete(col); else selectedCols.add(col); anchorCol = col; }
-      else { selectedCols.clear(); selectedCols.add(col); anchorCol = col; }
-      isColSelecting = true;
-      scheduleRender();
-      e.preventDefault();
-    });
+  // header interactions (column click/drag) are handled by SealionViewer.attachInteractionHandlers
 
-    window.addEventListener('mousemove', (e)=>{
-      if(!isColSelecting) return;
-      const col = colFromClientX(e.clientX);
-      if(e.metaKey){ addRangeToColSelection(selectionStartCol, col); }
-      else setColSelectionToRange(selectionStartCol, col);
-      scheduleRender();
-    });
+  // consensus canvas column interactions are handled by SealionViewer.attachInteractionHandlers
 
-    window.addEventListener('mouseup', (e)=>{
-      if(!isColSelecting) return;
-      isColSelecting = false;
-      const col = colFromClientX(e.clientX);
-      anchorCol = col;
-      scheduleRender();
-    });
-  }
+  // overview interactions (click/drag) are handled by SealionViewer.attachInteractionHandlers
 
-  // Allow selecting columns by dragging on the consensus canvas as well (behaves like header)
-  if(consensusCanvas){
-    consensusCanvas.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return;
-      // clear row selection and any rectangular selection
-      selectedRows.clear();
-      clearRectSelection();
-      const col = colFromClientX(e.clientX);
-      if(e.shiftKey && anchorCol !== null){ selectionStartCol = anchorCol; } else { selectionStartCol = col; }
-      if(e.metaKey) selectionMode = 'add'; else selectionMode = 'replace';
-      if(e.shiftKey && anchorCol !== null){ setColSelectionToRange(anchorCol, col); }
-      else if(e.metaKey){ if(selectedCols.has(col)) selectedCols.delete(col); else selectedCols.add(col); anchorCol = col; }
-      else { selectedCols.clear(); selectedCols.add(col); anchorCol = col; }
-      isColSelecting = true;
-      scheduleRender();
-      e.preventDefault();
-    });
-  }
+  // Sequence canvas interactions (wheel, selection, panning) are handled by SealionViewer.attachInteractionHandlers
 
-  // Overview canvas interactions: click to jump the viewport, drag to pan
-  if(overviewCanvas){
-    let isOverviewDragging = false;
-    let overviewDragStartX = 0;
-    overviewCanvas.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return;
-      isOverviewDragging = true;
-      overviewDragStartX = e.clientX;
-      // jump viewport to center on clicked point
-      const rect = overviewCanvas.getBoundingClientRect();
-      const x = e.clientX - rect.left; // css pixels
-  const pr = window.devicePixelRatio || 1;
-  const rawTotal = colOffsets[maxSeqLen] || (maxSeqLen * CHAR_WIDTH);
-  // colOffsets are CSS pixels; interactions should map client/CSS coords to CSS total width
-  const totalWidth = rawTotal;
-  const cssW = overviewCanvas.getBoundingClientRect().width;
-  const scale = cssW / Math.max(1, totalWidth);
-      const target = Math.round(x / scale - (scroller ? scroller.clientWidth/2 : 0));
-      if(scroller) animateScrollTo(Math.max(0, target), scroller ? scroller.scrollTop : 0, 320);
-      scheduleRender();
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e)=>{
-      if(!isOverviewDragging) return;
-      const rect = overviewCanvas.getBoundingClientRect();
-      const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-  const pr = window.devicePixelRatio || 1;
-  const rawTotal = colOffsets[maxSeqLen] || (maxSeqLen * CHAR_WIDTH);
-  // colOffsets are CSS pixels; interactions should map client/CSS coords to CSS total width
-  const totalWidth = rawTotal;
-  const cssW = overviewCanvas.getBoundingClientRect().width;
-  const scale = cssW / Math.max(1, totalWidth);
-      const target = Math.round(x / scale - (scroller ? scroller.clientWidth/2 : 0));
-      if(scroller) scroller.scrollLeft = Math.max(0, target);
-      scheduleRender();
-    });
-    window.addEventListener('mouseup', ()=>{ isOverviewDragging = false; });
-  }
-
-  // --- Sequence canvas interactions: rectangular selection and wheel forwarding ---
-  if(seqCanvas){
-    // forward wheel/touchpad events to scroller so scrolling works when pointer is over seqCanvas
-    seqCanvas.addEventListener('wheel', (e)=>{
-      if(!scroller) return;
-      scroller.scrollTop += e.deltaY;
-      scroller.scrollLeft += e.deltaX;
-      scheduleRender();
-      e.preventDefault();
-    }, { passive: false });
-
-    seqCanvas.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return;
-      // Command-drag panning begins here as well
-      if(isSpaceDown){
-        isCmdDrag = true;
-        dragStartX = e.clientX; dragStartY = e.clientY;
-        dragStartScrollLeft = scroller ? scroller.scrollLeft : 0;
-        dragStartScrollTop = scroller ? scroller.scrollTop : 0;
-        try{ if(seqCanvas) seqCanvas.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; }catch(_){ }
-        e.preventDefault();
-        return;
-      }
-
-      // New behaviour:
-      // - Default click/drag on the alignment (no modifiers) selects columns.
-      // - Alt (option) + click/drag selects rows.
-      // - Alt + Cmd + click/drag selects a rectangular region (existing behaviour).
-      const alt = !!e.altKey;
-      const meta = !!e.metaKey;
-
-      if(alt && meta){
-        // Rectangle selection (Alt+Cmd): preserve existing rectangular selection behaviour
-        selectedRows.clear(); selectedCols.clear();
-        const row = rowFromClientY(e.clientY);
-        const col = colFromClientXLocal(e.clientX);
-        if(e.shiftKey){
-          if(rectStartRow !== null && rectEndRow !== null && rectStartCol !== null && rectEndCol !== null){
-            const rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
-            const rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-            const clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-            const chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-            rectOriginal = { rlo, rhi, clo, chi };
-          } else {
-            rectOriginal = { rlo: row, rhi: row, clo: col, chi: col };
-          }
-          rectStartRow = rectOriginal.rlo; rectStartCol = rectOriginal.clo;
-          rectEndRow = row; rectEndCol = col;
-        } else {
-          rectOriginal = null;
-          rectStartRow = row; rectEndRow = row; rectStartCol = col; rectEndCol = col;
-        }
-        isRectSelecting = true;
-        anchorRow = rectStartRow; anchorCol = rectStartCol;
-        const rlo0 = Math.max(0, Math.min(rectStartRow, rectEndRow));
-        const rhi0 = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-        const clo0 = Math.max(0, Math.min(rectStartCol, rectEndCol));
-        const chi0 = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-        selectedRows.clear(); selectedCols.clear();
-        for(let r=rlo0;r<=rhi0;r++) selectedRows.add(r);
-        for(let c=clo0;c<=chi0;c++) selectedCols.add(c);
-        scheduleRender();
-        e.preventDefault();
-        return;
-      }
-
-      if(alt && !meta){
-        // Alt (option) alone: select rows (behave like clicking the labels column)
-        selectedCols.clear();
-        clearRectSelection();
-        const row = rowFromClientY(e.clientY);
-        // set the shared selection origin so the global mousemove handler can extend from it
-        if(e.shiftKey && anchorRow !== null){ selectionOrigin = anchorRow; } else { selectionOrigin = row; }
-        if(e.metaKey){ selectionMode = 'add'; } else selectionMode = 'replace';
-
-        if(e.shiftKey && anchorRow !== null){
-          setSelectionToRange(anchorRow, row);
-        } else if(e.metaKey){
-          if(selectedRows.has(row)) selectedRows.delete(row); else selectedRows.add(row);
-          anchorRow = row;
-        } else {
-          selectedRows.clear();
-          selectedRows.add(row);
-          anchorRow = row;
-        }
-        isSelecting = true;
-        selectionStartRow = row;
-        scheduleRender();
-        e.preventDefault();
-        return;
-      }
-
-      // Default: select columns
-      selectedRows.clear();
-      clearRectSelection();
-      const col = colFromClientXLocal(e.clientX);
-      if(e.shiftKey && anchorCol !== null){ selectionStartCol = anchorCol; } else { selectionStartCol = col; }
-      if(e.metaKey) selectionMode = 'add'; else selectionMode = 'replace';
-      if(e.shiftKey && anchorCol !== null){ setColSelectionToRange(anchorCol, col); }
-      else if(e.metaKey){ if(selectedCols.has(col)) selectedCols.delete(col); else selectedCols.add(col); anchorCol = col; }
-      else { selectedCols.clear(); selectedCols.add(col); anchorCol = col; }
-      isColSelecting = true;
-      scheduleRender();
-      e.preventDefault();
-    });
-
-    window.addEventListener('mousemove', (e)=>{
-      if(isCmdDrag){
-        // panning in progress
-        if(!e.buttons || !isSpaceDown){ endCmdDrag(); return; }
-        const dx = e.clientX - dragStartX;
-        const dy = e.clientY - dragStartY;
-        const targetLeft = Math.max(0, Math.round(dragStartScrollLeft - dx));
-        const targetTop = Math.max(0, Math.round(dragStartScrollTop - dy));
-        if(scroller){ scroller.scrollLeft = targetLeft; scroller.scrollTop = targetTop; }
-        scheduleRender();
-        return;
-      }
-      if(!isRectSelecting) return;
-      rectEndRow = rowFromClientY(e.clientY);
-      rectEndCol = colFromClientXLocal(e.clientX);
-      // update live selection sets for rows and columns (single contiguous region)
-      let rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
-      let rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-      let clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-      let chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-      // if we have an original rect (shift-expand), take the union of original and current drag box
-      if(rectOriginal){
-        rlo = Math.min(rlo, rectOriginal.rlo);
-        rhi = Math.max(rhi, rectOriginal.rhi);
-        clo = Math.min(clo, rectOriginal.clo);
-        chi = Math.max(chi, rectOriginal.chi);
-      }
-      selectedRows.clear(); selectedCols.clear();
-      for(let r=rlo;r<=rhi;r++) selectedRows.add(r);
-      for(let c=clo;c<=chi;c++) selectedCols.add(c);
-      scheduleRender();
-    });
-
-    window.addEventListener('mouseup', (e)=>{
-      if(isCmdDrag){ endCmdDrag(); return; }
-      if(!isRectSelecting) return;
-      isRectSelecting = false;
-      rectEndRow = rowFromClientY(e.clientY);
-      rectEndCol = colFromClientXLocal(e.clientX);
-      // finalize selection and set anchors (apply union if rectOriginal present)
-      let rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
-      let rhi = Math.min(rowCount-1, Math.max(rectStartRow, rectEndRow));
-      let clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-      let chi = Math.min(maxSeqLen-1, Math.max(rectStartCol, rectEndCol));
-      if(rectOriginal){
-        rlo = Math.min(rlo, rectOriginal.rlo);
-        rhi = Math.max(rhi, rectOriginal.rhi);
-        clo = Math.min(clo, rectOriginal.clo);
-        chi = Math.max(chi, rectOriginal.chi);
-      }
-      selectedRows.clear(); selectedCols.clear();
-      for(let r=rlo;r<=rhi;r++) selectedRows.add(r);
-      for(let c=clo;c<=chi;c++) selectedCols.add(c);
-      anchorRow = rhi; anchorCol = chi;
-      rectOriginal = null;
-      scheduleRender();
-    });
-  }
-
-  // sync vertical scrolling: when right scrolls, update left; when left scrolls, update right
-  let scrollingProgrammatic = false;
-  // Attach scroll handler to the canonical alignment scroller (scroller).
-  if(scroller){
-    scroller.addEventListener('scroll', ()=>{
-      if(!scrollingProgrammatic){
-        scrollingProgrammatic = true;
-        // mirror vertical scroll to left if it's a different element (keeps legacy logic working)
-        try{ if(leftScroll && leftScroll !== scroller){ leftScroll.scrollTop = scroller.scrollTop; } }catch(e){}
-        // header horizontal move is handled in drawHeader via transform
-        scheduleRender();
-        // ensure canvas CSS sizes stay in sync with the current viewport height
-        try{
-          const vh = scroller.clientHeight || window.innerHeight;
-          if(seqCanvas) seqCanvas.style.height = vh + 'px';
-          if(labelCanvas) labelCanvas.style.height = vh + 'px';
-        }catch(e){}
-        // small timeout to release flag
-        setTimeout(()=>{ scrollingProgrammatic = false; }, 0);
-        // ensure scroll positions are within bounds
-        clampScrollPositions();
-      }
-    });
-  }
+  // Vertical scrolling is handled by the SealionViewer instance's scroll handler.
+  // The viewer was passed the canonical `scroller` in ensureViewer() and will
+  // mirror left/right scrolls and schedule renders. We keep the legacy helpers
+  // below so callers can still programmatically set scroll positions; those
+  // helpers prefer to call into `viewer` when available.
 
   // helpers to set scroll positions programmatically while suppressing the scroll handler actions
   function setScrollLeftImmediate(x){
+    // Delegate to viewer-provided programmatic scroll method. If the viewer
+    // is not present treat this as a no-op and warn — we removed legacy
+    // direct DOM fallbacks to keep the viewer authoritative.
     try{
-      // cancel any pending snap timeout so it doesn't override our programmatic move
-      try{ if(snapTimeout){ clearTimeout(snapTimeout); snapTimeout = null; } }catch(_){ }
-      scrollingProgrammatic = true;
-      if(scroller) scroller.scrollLeft = x;
-      // record start position so any subsequent snap logic (if triggered) has correct base
-      try{ scrollStartLeft = scroller ? scroller.scrollLeft : 0; }catch(_){ }
-      scheduleRender();
-      setTimeout(()=>{ scrollingProgrammatic = false; }, 60);
-    }catch(_){ scrollingProgrammatic = false; }
+      if(viewer && typeof viewer.setScrollLeftImmediate === 'function'){
+        return viewer.setScrollLeftImmediate(x);
+      }
+    }catch(_){ }
+    console.warn('setScrollLeftImmediate: SealionViewer not available; no-op');
   }
+
   function setScrollTopImmediate(y){
     try{
-      // cancel pending horizontal snap as a precaution
-      try{ if(snapTimeout){ clearTimeout(snapTimeout); snapTimeout = null; } }catch(_){ }
-      scrollingProgrammatic = true;
-      if(scroller) scroller.scrollTop = y;
-      scheduleRender();
-      setTimeout(()=>{ scrollingProgrammatic = false; }, 60);
-    }catch(_){ scrollingProgrammatic = false; }
+      if(viewer && typeof viewer.setScrollTopImmediate === 'function'){
+        return viewer.setScrollTopImmediate(y);
+      }
+    }catch(_){ }
+    console.warn('setScrollTopImmediate: SealionViewer not available; no-op');
   }
 
   // when the right horizontally scrolls we only need to redraw header and sequences
@@ -2040,28 +1072,7 @@
     // restore grab cursor if space is still down
     updateSpaceCursor();
   }
-  // Smooth scroll animation helper (used for Alt+Cmd page scroll)
-  let scrollAnimRequest = null;
-  function animateScrollTo(targetLeft, targetTop, duration = 300){
-    if(!scroller) return;
-    if(scrollAnimRequest){ cancelAnimationFrame(scrollAnimRequest); scrollAnimRequest = null; }
-    const startLeft = scroller.scrollLeft;
-    const startTop = scroller.scrollTop;
-    const wantLeft = (typeof targetLeft === 'number') ? Math.max(0, Math.min(targetLeft, Math.max(0, (colOffsets[maxSeqLen] || 0) - (scroller ? scroller.clientWidth : 0)))) : startLeft;
-    const wantTop = (typeof targetTop === 'number') ? Math.max(0, Math.min(targetTop, Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : 0)))) : startTop;
-    const deltaLeft = wantLeft - startLeft;
-    const deltaTop = wantTop - startTop;
-    const start = performance.now();
-    function tick(now){
-      const t = Math.min(1, (now - start) / duration);
-      const eased = easeOutQuad(t);
-      if(Math.abs(deltaLeft) > 0.5) scroller.scrollLeft = Math.round(startLeft + deltaLeft * eased);
-      if(Math.abs(deltaTop) > 0.5) scroller.scrollTop = Math.round(startTop + deltaTop * eased);
-      scheduleRender();
-      if(t < 1){ scrollAnimRequest = requestAnimationFrame(tick); } else { scrollAnimRequest = null; }
-    }
-    scrollAnimRequest = requestAnimationFrame(tick);
-  }
+  // Smooth scroll animation helper moved into SealionViewer (viewer.animateScrollTo).
   // Track Space key as the panning modifier (user requested Space to enable drag-scroll)
   let isSpaceDown = false;
   // helper: when space is held, show 'grab' cursor on relevant elements; when released, clear it
@@ -2072,208 +1083,11 @@
       if(seqCanvas) seqCanvas.style.cursor = cur;
     }catch(e){ }
   }
-  window.addEventListener('keydown', (ke)=>{
-    try{
-      // Command-A: select all columns in the alignment (Cmd+A on macOS). Prevents browser select-all.
-      if(ke.metaKey && (ke.key === 'a' || ke.code === 'KeyA')){
-        try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){ }
-        // clear row/rect selection and select all columns
-        selectedRows.clear();
-        clearRectSelection();
-        selectedCols.clear();
-        for(let c=0;c<maxSeqLen;c++) selectedCols.add(c);
-        anchorCol = Math.max(0, maxSeqLen - 1);
-        scheduleRender();
-        return;
-      }
-      // Arrow keys: without modifier scroll by 1 row/column; with Meta (Command) perform page scroll with animation.
-      if((ke.key === 'ArrowLeft' || ke.key === 'ArrowRight' || ke.key === 'ArrowUp' || ke.key === 'ArrowDown')){
-        try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){ }
-        // only handle when focus is on body or canvases to avoid interfering with inputs
-        const ae = document.activeElement;
-        const focusOk = (ae === document.body || ae === seqCanvas || ae === labelCanvas || ae === headerCanvas || ae === consensusCanvas || ae === overviewCanvas);
-        if(!focusOk) return;
-        const vis = computeVisible();
-        const isMeta = !!ke.metaKey;
+  
 
-        // No Meta: single-step navigation
-        if(!isMeta){
-          if(ke.key === 'ArrowLeft'){
-            const newCol = Math.max(0, vis.rawFirstCol - 1);
-            const targetLeft = colOffsets[newCol] || 0;
-            setScrollLeftImmediate(targetLeft);
-            return;
-          }
-          if(ke.key === 'ArrowRight'){
-            // move one column to the right: align the next column AFTER the current rightmost visible column
-            // to the RIGHT edge of the viewport so movement is guaranteed when there is any hidden content to the right.
-            const viewportW = (scroller ? scroller.clientWidth : window.innerWidth);
-            const newCol = Math.min(maxSeqLen - 1, vis.rawLastCol + 1);
-            // right boundary of the column is colOffsets[newCol+1]
-            const rightBoundary = (typeof colOffsets[newCol+1] !== 'undefined') ? colOffsets[newCol+1] : colOffsets[maxSeqLen] || 0;
-            const totalWidth = colOffsets[maxSeqLen] || 0;
-            let targetLeft = Math.round(rightBoundary - viewportW);
-            // clamp to valid scroll range
-            targetLeft = Math.max(0, Math.min(totalWidth - viewportW, targetLeft));
-            setScrollLeftImmediate(targetLeft);
-            return;
-          }
-          if(ke.key === 'ArrowUp'){
-            const targetTop = Math.max(0, (scroller ? scroller.scrollTop : 0) - ROW_HEIGHT);
-            setScrollTopImmediate(targetTop);
-            return;
-          }
-          if(ke.key === 'ArrowDown'){
-            const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : window.innerHeight));
-            const targetTop = Math.min(maxTop, (scroller ? scroller.scrollTop : 0) + ROW_HEIGHT);
-            setScrollTopImmediate(targetTop);
-            return;
-          }
-        }
+  // snapScrollToChar legacy removed; inline fallback used where needed
 
-        // Meta (Command) pressed: page scroll with animation
-        if(isMeta){
-          if(ke.key === 'ArrowLeft'){
-            const target = Math.max(0, (scroller ? scroller.scrollLeft : 0) - (scroller ? scroller.clientWidth : window.innerWidth));
-            const col = colIndexFromOffset(target);
-            const targetLeft = colOffsets[col] || 0;
-            animateScrollTo(targetLeft, scroller ? scroller.scrollTop : 0, 320);
-            return;
-          }
-          if(ke.key === 'ArrowRight'){
-            const target = Math.min((colOffsets[maxSeqLen] || 0), (scroller ? scroller.scrollLeft : 0) + (scroller ? scroller.clientWidth : window.innerWidth));
-            const col = colIndexFromOffset(target);
-            const targetLeft = Math.max(0, Math.min(colOffsets[col] || 0, (colOffsets[maxSeqLen] || 0)));
-            animateScrollTo(targetLeft, scroller ? scroller.scrollTop : 0, 320);
-            return;
-          }
-          if(ke.key === 'ArrowUp'){
-            const targetTop = Math.max(0, (scroller ? scroller.scrollTop : 0) - (scroller ? scroller.clientHeight : window.innerHeight));
-            animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, 320);
-            return;
-          }
-          if(ke.key === 'ArrowDown'){
-            const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (scroller ? scroller.clientHeight : window.innerHeight));
-            const targetTop = Math.min(maxTop, (scroller ? scroller.scrollTop : 0) + (scroller ? scroller.clientHeight : window.innerHeight));
-            animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, 320);
-            return;
-          }
-        }
-      }
-      // Mask edit shortcuts: Alt + '+' to set selected columns to expanded ('1'),
-      // Alt + '-' to set selected columns to compressed ('0').
-  // Use Command (meta) as the modifier for mask edits (Cmd + '=' / Cmd + '-') per user request.
-  // Note: some browsers may still reserve Cmd+Plus/Minus for zoom; we call preventDefault() to try to stop it.
-  const mod = ke.metaKey;
-  // Accept several possible key reports for '+' to be robust across layouts and OSes.
-  const isPlus = (ke.key === '+') || (ke.key === '=') || (ke.code === 'Equal') || ke.code === 'NumpadAdd';
-      const isMinus = (ke.key === '-') || ke.code === 'Minus' || ke.code === 'NumpadSubtract';
-      if(mod && isPlus){
-        // try to prevent default browser zoom (may still be honored by some browsers), and stop propagation
-        try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){ }
-        setMaskBitsForCols(selectedCols, '1');
-        return;
-      }
-      if(mod && isMinus){
-        try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){ }
-        setMaskBitsForCols(selectedCols, '0');
-        return;
-      }
-      if(ke.code === 'Space' || ke.key === ' '){
-        const ae = document.activeElement;
-        // prevent default page scroll when space is used as modifier and focus is on relevant elements
-        if(ae === document.body || ae === seqCanvas || ae === labelCanvas || ae === headerCanvas){
-          ke.preventDefault();
-        }
-        isSpaceDown = true;
-        updateSpaceCursor();
-      }
-    }catch(_){ }
-  });
-  window.addEventListener('keyup', (ke)=>{ if(ke.code === 'Space' || ke.key === ' '){ isSpaceDown = false; updateSpaceCursor(); } });
-  window.addEventListener('blur', ()=>{ isSpaceDown = false; updateSpaceCursor(); });
-  if(scroller){
-    scroller.addEventListener('mousedown', (e)=>{
-      // Only start panning if Space key is held during mousedown
-      if(!isSpaceDown) return;
-      isCmdDrag = true;
-      dragStartX = e.clientX;
-      dragStartY = e.clientY;
-      dragStartScrollLeft = scroller.scrollLeft;
-      dragStartScrollTop = scroller.scrollTop;
-  try{ if(seqCanvas) seqCanvas.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; }catch(_){ }
-      e.preventDefault();
-    });
-
-    window.addEventListener('mousemove', (e)=>{
-      if(!isCmdDrag) return;
-      // if mouse button released or space key released, end drag
-      if(!e.buttons || !isSpaceDown){ endCmdDrag(); return; }
-      const dx = e.clientX - dragStartX;
-      const dy = e.clientY - dragStartY;
-      // invert drag to pan content (drag right -> scroll left)
-      const targetLeft = Math.max(0, Math.round(dragStartScrollLeft - dx));
-      const targetTop = Math.max(0, Math.round(dragStartScrollTop - dy));
-      if(scroller){ scroller.scrollLeft = targetLeft; scroller.scrollTop = targetTop; }
-      scheduleRender();
-    });
-
-    window.addEventListener('mouseup', ()=>{ endCmdDrag(); });
-    // also cancel on blur (e.g., switching apps)
-    window.addEventListener('blur', ()=>{ endCmdDrag(); });
-  }
-
-  function snapScrollToChar(startLeft){
-    const cur = scroller ? scroller.scrollLeft : 0;
-    if(!colOffsets || colOffsets.length < 2){
-      // fallback to old behaviour
-      let target;
-      if(cur > startLeft) target = Math.ceil(cur / CHAR_WIDTH) * CHAR_WIDTH;
-      else if(cur < startLeft) target = Math.floor(cur / CHAR_WIDTH) * CHAR_WIDTH;
-      else target = Math.round(cur / CHAR_WIDTH) * CHAR_WIDTH;
-      if(target !== cur){ scrollingProgrammatic = true; if(scroller) scroller.scrollLeft = target; scheduleRender(); setTimeout(()=>{ scrollingProgrammatic = false; }, 20); }
-      return;
-    }
-    // determine snap direction and pick column boundary accordingly
-    let target = cur;
-    if(cur > startLeft){
-      const idx = colIndexFromOffset(cur);
-      target = colOffsets[Math.min(maxSeqLen, idx + 1)];
-    } else if(cur < startLeft){
-      const idx = colIndexFromOffset(cur);
-      target = colOffsets[idx];
-    } else {
-      const idx = colIndexFromOffset(cur);
-      const leftB = colOffsets[idx];
-      const rightB = colOffsets[idx+1] || leftB + CHAR_WIDTH;
-      target = (cur - leftB) < (rightB - cur) ? leftB : rightB;
-    }
-    if(target !== cur){
-      scrollingProgrammatic = true;
-      if(scroller) scroller.scrollLeft = target;
-      scheduleRender();
-      setTimeout(()=>{ scrollingProgrammatic = false; }, 20);
-    }
-  }
-
-  if(scroller){
-    scroller.addEventListener('scroll', ()=>{
-      // schedule render immediately so header follows
-      scheduleRender();
-      // throttle diagnostic logging while user scrolls
-      if(window.__diagScrollTimeout) clearTimeout(window.__diagScrollTimeout);
-      window.__diagScrollTimeout = setTimeout(()=>{ logLayoutDiagnostics('scroll'); }, 50);
-      // if snapping disabled, do nothing else
-      if(!snapEnabled) return;
-      // record scroll start position when a new scroll sequence begins
-      if(snapTimeout === null){
-        scrollStartLeft = scroller.scrollLeft;
-      }
-      // debounce snapping until user stops scrolling
-      if(snapTimeout) clearTimeout(snapTimeout);
-      snapTimeout = setTimeout(()=>{ snapScrollToChar(scrollStartLeft); snapTimeout = null; }, 60);
-    });
-  }
+  // Snapping and scroll handling are delegated to the SealionViewer instance.
 
   // on window resize recompute backings
   window.addEventListener('resize', ()=>{
@@ -2289,11 +1103,7 @@
   try{ const cons = computeConsensusSequence(); window.consensusSequence = cons; }catch(_){ }
   // all initialization completed
   setStatus('initialized');
-  }catch(e){
-    console.error('Initialization error', e);
-    try{ setStatus('INIT ERROR: ' + (e && e.message ? e.message : String(e))); }catch(_){}
-    // rethrow so errors appear in console as well
-    throw e;
-  }
+
+}
 
 })();

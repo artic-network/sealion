@@ -25,45 +25,16 @@
         <input id="search-input" placeholder="search">
         <button id="search-next">Next</button>
       </div>
-  <!-- initialization status is shown in a centered overlay (#center-status) managed by script.js -->
+  <!-- initialization status is shown in a centered overlay (#center-status) managed by the main script -->
 
-      <!-- Grid: top-left corner, top-right header, bottom-left labels, bottom-right alignment scroll -->
-      <div id="grid">
-        <div id="corner">
-          <canvas id="labels-header-canvas" class="labels-header-canvas"></canvas>
-        </div>
-        <div id="header">
-          <!-- Overview canvas: shows full-alignment overview and viewport region -->
-          <canvas id="overview-canvas" class="overview-canvas"></canvas>
-          <canvas id="header-canvas" class="header-canvas"></canvas>
-          <!-- Consensus sequence rendered under the ruler -->
-          <canvas id="consensus-canvas" class="consensus-canvas"></canvas>
-        </div>
-
-        <div id="labels">
-          <div id="left-inner">
-            <canvas id="labels-canvas" class="labels-canvas"></canvas>
-          </div>
-          <!-- draggable divider to resize the labels panel -->
-          <div id="label-divider" title="Drag to resize labels" aria-hidden="true"></div>
-        </div>
-
-        <div id="alignment">
-          <!-- viewport-backed canvas sits as an overlay above the scroll container -->
-          <canvas id="seq-canvas" class="seq-canvas"></canvas>
-          <!-- scrollable alignment area; this is the authoritative scroller -->
-          <div id="alignment-scroll">
-            <div id="seq-inner">
-              <div id="seq-spacer"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div id="sealion"></div>
 
   <!-- debug HUD removed; use console for diagnostics -->
     </div>
 
     <script type='text/javascript' src='alignment.js'></script>
+    <script type='text/javascript' src='sealion.js'></script>
+    <script type='text/javascript' src='sealion/utils.js'></script>
     <script type='text/javascript' src='script.js'></script>
   </body>
 </html>
