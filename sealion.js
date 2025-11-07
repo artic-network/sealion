@@ -146,6 +146,26 @@
         this.DEFAULT_BASE_COLOR = cfg.DEFAULT_BASE_COLOR;
         this.PALE_REF_COLOR = cfg.PALE_REF_COLOR;
         this.REF_ACCENT = cfg.REF_ACCENT;
+        // canvas colors
+        this.OVERVIEW_BG = cfg.OVERVIEW_BG;
+        this.OVERVIEW_EXPANDED_COL = cfg.OVERVIEW_EXPANDED_COL;
+        this.OVERVIEW_COLLAPSED_COL = cfg.OVERVIEW_COLLAPSED_COL;
+        this.OVERVIEW_VIEWPORT = cfg.OVERVIEW_VIEWPORT;
+        this.HEADER_BG = cfg.HEADER_BG;
+        this.HEADER_TEXT = cfg.HEADER_TEXT;
+        this.HEADER_STROKE = cfg.HEADER_STROKE;
+        this.HEADER_SELECTION = cfg.HEADER_SELECTION;
+        this.CONSENSUS_BG = cfg.CONSENSUS_BG;
+        this.CONSENSUS_SEPARATOR = cfg.CONSENSUS_SEPARATOR;
+        this.LABELS_BG = cfg.LABELS_BG;
+        this.LABELS_TEXT = cfg.LABELS_TEXT;
+        this.LABELS_HEADER_TEXT = cfg.LABELS_HEADER_TEXT;
+        this.SEQ_SELECTED_ROW = cfg.SEQ_SELECTED_ROW;
+        this.SEQ_EVEN_ROW = cfg.SEQ_EVEN_ROW;
+        this.SEQ_ODD_ROW = cfg.SEQ_ODD_ROW;
+        this.SEQ_COL_SELECTION = cfg.SEQ_COL_SELECTION;
+        this.SEQ_RECT_SELECTION_START = cfg.SEQ_RECT_SELECTION_START;
+        this.SEQ_RECT_SELECTION_END = cfg.SEQ_RECT_SELECTION_END;
         // initial mask preference
         this.maskEnabled = (typeof cfg.maskEnabled === 'boolean') ? cfg.maskEnabled : this.maskEnabled;
         // snap-to-character scrolling preference
@@ -1081,16 +1101,17 @@
 
       // clear and background
       ctx.clearRect(0,0, cssW, cssH);
-      ctx.fillStyle = '#f7f7f7';
+      ctx.fillStyle = this.OVERVIEW_BG;
       ctx.fillRect(0,0, cssW, cssH);
 
       const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
       const totalWidth = Math.max(1, rawTotal);
       const scale = cssW / totalWidth;
 
-      // draw compressed/uncompressed bars
-      const barH = Math.max(4, Math.floor(cssH * 0.35));
-      const barY = Math.round((cssH - barH) / 2);
+      // draw compressed/uncompressed bars - fill most of the canvas vertically
+      const barMargin = 4; // small margin at top and bottom
+      const barH = Math.max(4, cssH - (barMargin * 2));
+      const barY = barMargin;
       for(let c=0;c<maxSeqLen;c++){
         const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
         const right = (colOffsets && typeof colOffsets[c+1] !== 'undefined') ? colOffsets[c+1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
@@ -1098,16 +1119,16 @@
         const nextX = Math.round(right * scale);
         const w = Math.max(1, nextX - x);
         const isCompressed = maskEnabled && maskStr && maskStr.charAt(c) === '0';
-        ctx.fillStyle = isCompressed ? '#999' : '#ddd';
+        ctx.fillStyle = isCompressed ? this.OVERVIEW_COLLAPSED_COL : this.OVERVIEW_EXPANDED_COL;
         ctx.fillRect(x, barY, w, barH);
       }
 
-      // draw viewport rect (scaled)
+      // draw viewport rect (scaled) - extends slightly beyond the bars
       try{
         const viewX = Math.round((visible && visible.scrollLeft ? visible.scrollLeft : 0) * scale);
         const viewW = Math.max(2, Math.round((visible && visible.viewW ? visible.viewW : cssW) * scale));
         ctx.save();
-        ctx.strokeStyle = 'rgba(0,120,200,0.9)';
+        ctx.strokeStyle = this.OVERVIEW_VIEWPORT;
         ctx.lineWidth = 2;
         ctx.globalAlpha = 0.6;
         ctx.strokeRect(viewX + 0.5, 2 + 0.5, viewW - 1, cssH - 4);
@@ -1138,7 +1159,7 @@
       ctx.textBaseline = 'alphabetic';
 
       // background
-      ctx.fillStyle = '#f3f3f3';
+      ctx.fillStyle = this.HEADER_BG;
       ctx.fillRect(0,0, cssW, HEADER_HEIGHT);
 
       // draw column selection overlay under ticks if any
@@ -1171,9 +1192,9 @@
       const smallTickH = Math.max(2, Math.round(HEADER_HEIGHT * 0.28));
       const largeTickH = Math.max(3, Math.round(HEADER_HEIGHT * 0.6));
       const bottom = HEADER_HEIGHT;
-      ctx.strokeStyle = '#666';
+      ctx.strokeStyle = this.HEADER_STROKE;
       ctx.lineWidth = 1;
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = this.HEADER_TEXT;
 
       for(let c = start; c <= end; c++){
         const colLeft = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
@@ -1215,7 +1236,7 @@
         const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : new Set();
         headerCtx.save();
         headerCtx.globalAlpha = 0.14;
-        headerCtx.fillStyle = '#ffd54d';
+        headerCtx.fillStyle = this.HEADER_SELECTION;
         const headerH = HEADER_HEIGHT;
         for(const c of selectedCols){
           if(c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
@@ -1243,13 +1264,13 @@
       const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
 
       ctx.clearRect(0,0, cssW, HEADER_HEIGHT);
-      ctx.fillStyle = '#f3f3f3';
+      ctx.fillStyle = this.LABELS_BG;
       ctx.fillRect(0,0, cssW, HEADER_HEIGHT);
       
       // Use label font for "consensus" text
       ctx.font = LABEL_FONT;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = this.LABELS_HEADER_TEXT;
       
       const title = 'consensus';
       
@@ -1283,13 +1304,13 @@
       const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
 
       ctx.clearRect(0,0, cssW, cssH);
-      ctx.fillStyle = '#f3f3f3';
+      ctx.fillStyle = this.LABELS_BG;
       ctx.fillRect(0,0, cssW, cssH);
       
       // Use label font for text
       ctx.font = LABEL_FONT;
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = this.LABELS_HEADER_TEXT;
       
       const title = 'outline';
       
@@ -1316,13 +1337,13 @@
       const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
 
       ctx.clearRect(0,0, cssW, CONSENSUS_HEIGHT);
-      ctx.fillStyle = '#f3f3f3';
+      ctx.fillStyle = this.LABELS_BG;
       ctx.fillRect(0,0, cssW, CONSENSUS_HEIGHT);
       
       // Use label font for "consensus" text
       ctx.font = LABEL_FONT;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#333';
+      ctx.fillStyle = this.LABELS_HEADER_TEXT;
       
       const title = 'consensus';
       
@@ -1372,7 +1393,7 @@
       // prepare context
       ctx.font = FONT;
       ctx.textBaseline = 'alphabetic';
-      ctx.fillStyle = '#111';
+      ctx.fillStyle = this.LABELS_TEXT;
 
       // clear the viewport region
       ctx.clearRect(0, 0, cssW, cssH);
@@ -1389,11 +1410,11 @@
         const label = (rows[i] && rows[i].label) ? rows[i].label : '';
         // background: selection takes precedence
         if(selectedRows.has(i)){
-          ctx.fillStyle = '#cfe8ff';
+          ctx.fillStyle = this.SEQ_SELECTED_ROW;
         } else if(i % 2 === 0){
-          ctx.fillStyle = '#fff';
+          ctx.fillStyle = this.SEQ_EVEN_ROW;
         } else {
-          ctx.fillStyle = '#fbfbfb';
+          ctx.fillStyle = this.SEQ_ODD_ROW;
         }
         ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
         // reference accent
@@ -1401,7 +1422,7 @@
           try{ ctx.fillStyle = REF_ACCENT; ctx.fillRect(0, rowY, 4, rowH); }catch(_){ }
         }
         // draw label text
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = this.LABELS_TEXT;
         const y = Math.round((rawRowY + labelTextVertOffset) * pr) / pr;
         ctx.fillText(label, 6, y);
       }
@@ -1463,11 +1484,11 @@
       // First pass: draw row backgrounds
       for(let r = visible.firstRow; r <= visible.lastRow; r++){
         if(selectedRows.has(r)){
-          ctx.fillStyle = '#cfe8ff';
+          ctx.fillStyle = this.SEQ_SELECTED_ROW;
         } else if((r % 2) === 0){
-          ctx.fillStyle = '#fff';
+          ctx.fillStyle = this.SEQ_EVEN_ROW;
         } else {
-          ctx.fillStyle = '#fafafa';
+          ctx.fillStyle = this.SEQ_ODD_ROW;
         }
         const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
         const rowY = Math.round(rawRowY * pr) / pr;
@@ -1538,7 +1559,7 @@
             const l = Math.round(leftX * dpr) / dpr;
             const r = Math.round(rightX * dpr) / dpr;
             ctx.save();
-            ctx.strokeStyle = 'rgba(0,120,200,0.9)';
+            ctx.strokeStyle = this.SEQ_COL_SELECTION;
             ctx.lineWidth = 2;
             ctx.setLineDash([4,2]);
             ctx.strokeRect(l + 0.5, t + 0.5, Math.max(1, r - l - 1), Math.max(1, b - t - 1));
@@ -1551,7 +1572,7 @@
       if(window.__showGrid){
         try{
           ctx.save();
-          ctx.strokeStyle = 'rgba(255,0,0,0.6)';
+          ctx.strokeStyle = this.SEQ_RECT_SELECTION_START;
           ctx.lineWidth = 1;
           const fullH = cssH;
           const startC = Math.max(0, visible.rawFirstCol - 1);
@@ -1560,7 +1581,7 @@
             const gx = (colOffsets[c] || 0) - visible.scrollLeft + 0.5;
             ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, fullH); ctx.stroke();
           }
-          ctx.strokeStyle = 'rgba(0,0,255,0.8)';
+          ctx.strokeStyle = this.SEQ_RECT_SELECTION_END;
           const fx = (colOffsets[visible.rawFirstCol] || 0) - visible.scrollLeft + 0.5;
           ctx.beginPath(); ctx.moveTo(fx,0); ctx.lineTo(fx, fullH); ctx.stroke();
           ctx.restore();
@@ -1589,10 +1610,10 @@
       // clear
       ctx.clearRect(0,0, cssW, cssH);
       // background
-      ctx.fillStyle = '#fafafa';
+      ctx.fillStyle = this.CONSENSUS_BG;
       ctx.fillRect(0,0, cssW, cssH);
       // separator line at bottom
-      ctx.strokeStyle = '#e0e0e0';
+      ctx.strokeStyle = this.CONSENSUS_SEPARATOR;
       ctx.lineWidth = 1;
       const sepY = Math.max(0.5, cssH - 0.5);
       ctx.beginPath(); ctx.moveTo(0, sepY); ctx.lineTo(cssW, sepY); ctx.stroke();
@@ -1673,7 +1694,7 @@
         const cssH = (ctx.canvas && ctx.canvas.getBoundingClientRect) ? ctx.canvas.getBoundingClientRect().height : (ctx.canvas ? ctx.canvas.height / pr : 0);
         ctx.save();
         ctx.globalAlpha = 0.14;
-        ctx.fillStyle = '#ffd54d';
+        ctx.fillStyle = this.SEQ_COL_SELECTION;
         for(const c of selectedCols){
           if(c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
           const leftOff = (typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
@@ -2151,6 +2172,26 @@
       DEFAULT_BASE_COLOR: '#666',
       PALE_REF_COLOR: '#e6e6e6',
       REF_ACCENT: '#2b8cff',
+      // Canvas background colors
+      OVERVIEW_BG: '#f7f7f7',
+      OVERVIEW_EXPANDED_COL: '#ddd',
+      OVERVIEW_COLLAPSED_COL: '#999',
+      OVERVIEW_VIEWPORT: 'rgba(0,120,200,0.9)',
+      HEADER_BG: '#f3f3f3',
+      HEADER_TEXT: '#333',
+      HEADER_STROKE: '#666',
+      HEADER_SELECTION: '#ffd54d',
+      CONSENSUS_BG: '#fafafa',
+      CONSENSUS_SEPARATOR: '#e0e0e0',
+      LABELS_BG: '#f3f3f3',
+      LABELS_TEXT: '#111',
+      LABELS_HEADER_TEXT: '#333',
+      SEQ_SELECTED_ROW: '#cfe8ff',
+      SEQ_EVEN_ROW: '#fff',
+      SEQ_ODD_ROW: '#fafafa',
+      SEQ_COL_SELECTION: 'rgba(0,120,200,0.9)',
+      SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
+      SEQ_RECT_SELECTION_END: 'rgba(0,0,255,0.8)',
       maskEnabled: true,
       snapEnabled: true
     };
