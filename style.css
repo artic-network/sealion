@@ -63,6 +63,19 @@ html, body { height:100%; margin:0; overflow:hidden; }
   background-color: rgba(0,0,0,0.05);
 }
 
+/* Search input to match small button height */
+#search-input {
+  height: calc(1.5em + 0.5rem + 2px); /* matches btn-sm height */
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+#search-next {
+  height: calc(1.5em + 0.5rem + 2px); /* matches btn-sm height */
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
 /* Viewer-specific layout and canvas styles are in sealion.css */
 
 #init-status{ font-family:system-ui, -apple-system, sans-serif; font-size:13px; }

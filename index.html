@@ -84,34 +84,36 @@
                 </div>
               </div>
               
-              <!-- Reference Controls -->
-              <div class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="refDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  <i class="bi bi-palette"></i> Colour
-                </a>
-                <ul class="dropdown-menu" aria-labelledby="refDropdown">
-                  <li>
-                    <button class="dropdown-item" id="colour-all-btn" type="button">
-                      <i class="bi bi-palette-fill"></i> Colour all sites
-                    </button>
-                  </li>
-                  <li>
-                    <button class="dropdown-item" id="colour-diff-btn" type="button">
-                      <i class="bi bi-palette"></i> Colour differences only
-                    </button>
-                  </li>
-                  <li><hr class="dropdown-divider"></li>
-                  <li>
-                    <button class="dropdown-item" id="set-ref-btn" type="button">
-                      <i class="bi bi-pin-angle"></i> Set selected as reference
-                    </button>
-                  </li>
-                  <li>
-                    <button class="dropdown-item" id="diff-consensus-btn" type="button">
-                      <i class="bi bi-calculator"></i> Set consensus as reference
-                    </button>
-                  </li>
-                </ul>
+              <!-- Colour Controls -->
+              <div class="nav-item ms-2">
+                <div class="btn-group" role="group">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-palette"></i> Colour
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <button class="dropdown-item" id="colour-all-btn" type="button">
+                        <i class="bi bi-palette-fill"></i> Colour all sites
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item" id="colour-diff-btn" type="button">
+                        <i class="bi bi-palette"></i> Colour differences only
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <button class="dropdown-item" id="set-ref-btn" type="button">
+                        <i class="bi bi-pin-angle"></i> Set selected as reference
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item" id="diff-consensus-btn" type="button">
+                        <i class="bi bi-calculator"></i> Set consensus as reference
+                      </button>
+                    </li>
+                  </ul>
+                </div>
               </div>
             </div>
             
@@ -119,7 +121,7 @@
             <form class="d-flex" role="search" onsubmit="return false;">
               <input class="form-control me-2" type="search" id="search-input" placeholder="Search sequences" aria-label="Search">
               <button class="btn btn-outline-primary" id="search-next" type="button">
-                <i class="bi bi-search"></i> Next
+                <i class="bi bi-search"></i>
               </button>
             </form>
           </div>
