@@ -183,6 +183,8 @@
   const realSeqSpacer = document.getElementById('seq-spacer') || (viewer && viewer.seqSpacer) || seqSpacer || null;
   const realLeftSpacer = document.getElementById('left-spacer') || (viewer && viewer.leftSpacer) || leftSpacer || null;
   const realLeftScroll = document.getElementById('left-scroll') || (viewer && viewer.leftScroll) || leftScroll || null;
+  const realLabelDivider = document.getElementById('label-divider') || (viewer && viewer.labelDivider) || null;
+  console.log('script.js: realLabelDivider', realLabelDivider, 'from getElementById:', document.getElementById('label-divider'), 'from viewer:', viewer && viewer.labelDivider);
 
   viewer.attachInteractionHandlers({
     headerCanvas: realHeaderCanvas,
@@ -191,6 +193,7 @@
     consensusCanvas: realConsensusCanvas,
     overviewCanvas: realOverviewCanvas,
     labelsHeaderCanvas: realLabelsHeaderCanvas,
+    labelDivider: realLabelDivider,
     scroller: scroller,
     seqSpacer: realSeqSpacer,
     leftSpacer: realLeftSpacer,
@@ -945,8 +948,9 @@
       try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
       setCanvasCSSSizes();
     measureTextVerticalOffset();
-    resizeBackings();
-    try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+    try{
+      if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings();
+  }catch(_){ try{ resizeBackings(); }catch(_){} }
     }catch(e){
       console.error('Initialization rAF handler failed', e);
     }finally{
@@ -963,53 +967,16 @@
   measureCharWidthFromReal();
   setCanvasCSSSizes();
   measureTextVerticalOffset();
-  resizeBackings();
-  try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+  try{
+    if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings();
+  }catch(_){ try{ resizeBackings(); }catch(_){} }
+  
     }, 50);
   });
   if(scroller) observer.observe(scroller);
 
-  // --- label divider drag-to-resize behaviour ---
-  if(labelDivider){
-    let isLabelDragging = false;
-    let labelDragStartX = 0;
-    let labelDragStartWidth = LABEL_WIDTH;
-    // min/max label width to avoid collapsing UI
-    const MIN_LABEL_WIDTH = 120;
-    const MAX_LABEL_WIDTH = 800;
-    labelDivider.addEventListener('mousedown', (e)=>{
-      if(e.button !== 0) return;
-      isLabelDragging = true;
-      labelDragStartX = e.clientX;
-      labelDragStartWidth = LABEL_WIDTH;
-      try{ document.body.style.userSelect = 'none'; }catch(_){ }
-      e.preventDefault();
-    });
-    window.addEventListener('mousemove', (e)=>{
-      if(!isLabelDragging) return;
-      const dx = e.clientX - labelDragStartX;
-      let nw = Math.max(MIN_LABEL_WIDTH, Math.min(MAX_LABEL_WIDTH, Math.round(labelDragStartWidth + dx)));
-      if(nw === LABEL_WIDTH) return;
-      LABEL_WIDTH = nw;
-      // sync CSS var and apply immediate layout changes
-      try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
-  try{ setCanvasCSSSizes(); resizeBackings(); try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ } }catch(_){ }
-    });
-    window.addEventListener('mouseup', (e)=>{
-      if(!isLabelDragging) return;
-      isLabelDragging = false;
-      try{ document.body.style.userSelect = ''; }catch(_){ }
-      // final apply and persist preference
-      try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
-      try{ localStorage.setItem('sealion_label_width', String(LABEL_WIDTH)); }catch(_){ }
-  try{ setCanvasCSSSizes(); resizeBackings(); try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ } }catch(_){ }
-    });
-    // restore persisted width if present
-    try{
-      const saved = localStorage.getItem('sealion_label_width');
-      if(saved){ const v = parseInt(saved,10); if(Number.isFinite(v) && v > 0) { LABEL_WIDTH = v; document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); } }
-    }catch(_){ }
-  }
+  // Label divider drag-to-resize is handled by SealionViewer.attachInteractionHandlers
+  // to avoid duplicate listeners and centralize behavior inside the viewer instance.
 
 
   // selection helpers: compute row from clientY within labelCanvas
@@ -1153,8 +1120,8 @@
   // on window resize recompute backings
   window.addEventListener('resize', ()=>{
     setCanvasCSSSizes();
-    resizeBackings();
-    try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+    try{ if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings(); }catch(_){ try{ resizeBackings(); }catch(_){} }
+    
   });
 
   // compute and expose constantMask at initialization
