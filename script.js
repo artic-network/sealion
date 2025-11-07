@@ -242,6 +242,8 @@
           try{ if(typeof viewer.resizeBackings === 'function') viewer.resizeBackings(); }catch(_){ }
           try{ const _font = getViewerProp('FONT', '14px monospace'); const _rowH = getViewerProp('ROW_HEIGHT', 20); if(typeof viewer.measureTextVerticalOffset === 'function') viewer.measureTextVerticalOffset({ FONT: _font, ROW_HEIGHT: _rowH }); }catch(_){ }
           try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); else safeScheduleRender(); }catch(_){ }
+          // Hide any initialization overlay now that the viewer was created
+          try{ setStatus(null); }catch(_){ }
         }catch(e){ console.warn('ensureViewer: initial build/render failed', e); }
         return viewer;
     }
