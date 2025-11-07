@@ -212,11 +212,6 @@
   try{ this.leftSpacer = (opts && opts.leftSpacer) ? opts.leftSpacer : null; }catch(_){ }
   try{ this.leftScroll = (opts && opts.leftScroll) ? opts.leftScroll : null; }catch(_){ }
 
-  // Light-weight instrumentation: report which handlers were attached
-  console.log('SealionViewer: attachInteractionHandlers opts:', opts);
-  console.log('SealionViewer: opts.labelDivider:', opts && opts.labelDivider);
-  try{ console.info('SealionViewer: attachInteractionHandlers', { headerCanvas: !!headerCanvas, seqCanvas: !!seqCanvas, labelCanvas: !!labelCanvas, consensusCanvas: !!consensusCanvas, overviewCanvas: !!overviewCanvas, scroller: !!scroller, labelDivider: !!(opts && opts.labelDivider) }); }catch(_){ }
-
   // Label divider drag-to-resize: allow the application to pass a labelDivider
   // element via opts.labelDivider; otherwise use any divider the viewer
   // created during construction (`this.labelDivider`). Resizing updates the
@@ -224,16 +219,13 @@
   // pass (CSS sizes + backing resize) followed by a scheduled render.
   try{
     const labelDividerEl = (opts && opts.labelDivider) ? opts.labelDivider : (this.labelDivider || (document.getElementById ? document.getElementById('label-divider') : null));
-    console.log('SealionViewer: labelDivider element', labelDividerEl, 'from opts:', opts && opts.labelDivider, 'from this:', this.labelDivider);
     if(labelDividerEl){
       let isLabelDragging = false;
       let labelDragStartX = 0;
       let labelDragStartWidth = (typeof this.LABEL_WIDTH === 'number') ? this.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260);
       const MIN_LABEL_WIDTH = 80;
       const MAX_LABEL_WIDTH = 1200;
-      console.log('SealionViewer: attaching drag handlers to labelDivider');
       labelDividerEl.addEventListener('mousedown', (e)=>{
-        console.log('SealionViewer: labelDivider mousedown', e);
         if(e.button !== 0) return;
         isLabelDragging = true;
         labelDragStartX = e.clientX;
@@ -373,7 +365,6 @@
         // Header: click/drag to select columns
         if(headerCanvas){
           headerCanvas.addEventListener('mousedown', (e)=>{
-            try{ console.debug('SealionViewer: header mousedown', {x: e.clientX, y: e.clientY, shift: e.shiftKey, meta: e.metaKey}); }catch(_){ }
             if(e.button !== 0) return;
             try{ this.clearRectSelection(); }catch(_){ }
             const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
@@ -406,7 +397,6 @@
         // Consensus behaves like header for column selection
         if(consensusCanvas){
           consensusCanvas.addEventListener('mousedown', (e)=>{
-            try{ console.debug('SealionViewer: consensus mousedown', {x: e.clientX, y: e.clientY, shift: e.shiftKey, meta: e.metaKey}); }catch(_){ }
             if(e.button !== 0) return;
             try{ this.clearRectSelection(); }catch(_){ }
             const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
@@ -422,7 +412,6 @@
         if(overviewCanvas){
           let isOverviewDragging = false;
           overviewCanvas.addEventListener('mousedown', (e)=>{
-            try{ console.debug('SealionViewer: overview mousedown', {x: e.clientX, y: e.clientY}); }catch(_){ }
             if(e.button !== 0) return;
             isOverviewDragging = true;
             const rect = overviewCanvas.getBoundingClientRect();
@@ -436,7 +425,6 @@
             e.preventDefault();
           });
           window.addEventListener('mousemove', (e)=>{
-            try{ if(isOverviewDragging) console.debug('SealionViewer: overview mousemove', {x: e.clientX, y: e.clientY}); }catch(_){ }
             if(!isOverviewDragging) return;
             const rect = overviewCanvas.getBoundingClientRect();
             const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
@@ -453,7 +441,6 @@
         // Sequence canvas interactions (select columns, rows, rect selection)
         if(seqCanvas){
           seqCanvas.addEventListener('wheel', (e)=>{
-            try{ console.debug('SealionViewer: seq wheel', {dx: e.deltaX, dy: e.deltaY}); }catch(_){ }
             if(!scroller) return;
             scroller.scrollTop += e.deltaY;
             scroller.scrollLeft += e.deltaX;
@@ -462,7 +449,6 @@
           }, { passive: false });
 
           seqCanvas.addEventListener('mousedown', (e)=>{
-            try{ console.debug('SealionViewer: seq mousedown', {x: e.clientX, y: e.clientY, alt: e.altKey, meta: e.metaKey, button: e.button}); }catch(_){ }
             if(e.button !== 0) return;
             // Command-drag panning begins here as well
             if(this.isSpaceDown){
@@ -572,7 +558,6 @@
         // Label canvas interactions: row selection
         if(labelCanvas){
           labelCanvas.addEventListener('mousedown', (e)=>{
-            try{ console.debug('SealionViewer: label mousedown', {x: e.clientX, y: e.clientY, shift: e.shiftKey, meta: e.metaKey}); }catch(_){ }
             if(e.button !== 0) return;
             const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
             try{ this.clearRectSelection(); }catch(_){ }
@@ -611,7 +596,6 @@
 
         // Keyboard handlers and scroller snapping/paging
         const onKeyDown = (ke)=>{
-          try{ console.debug('SealionViewer: keydown', {key: ke.key, code: ke.code, meta: ke.metaKey, target: document.activeElement && document.activeElement.id}); }catch(_){ }
           try{
             // Command-A: select all columns
             if(ke.metaKey && (ke.key === 'a' || ke.code === 'KeyA')){
@@ -652,7 +636,6 @@
                       const curTop = scroller ? scroller.scrollTop : 0;
                       const rowH = (window && window.ROW_HEIGHT) ? window.ROW_HEIGHT : 20;
                       const targetTop = Math.max(0, curTop - rowH);
-                      console.debug('SealionViewer: ArrowUp key computed', { curTop, rowH, targetTop });
                       // animate one-row scroll for visual feedback
                       this.animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, scroller, 160);
                     }catch(_){ }
@@ -666,7 +649,6 @@
                     const maxTop = Math.max(0, (this.alignment && this.alignment.length ? this.alignment.length : 0) * rowH - viewH);
                     // non-meta ArrowDown moves one row; Meta+ArrowDown handles page scroll
                     const targetTop = Math.min(maxTop, curTop + rowH);
-                    console.debug('SealionViewer: ArrowDown key computed', { curTop, viewH, rowH, maxTop, targetTop });
                     // animate one-row scroll for visual feedback
                     this.animateScrollTo(scroller ? scroller.scrollLeft : 0, targetTop, scroller, 160);
                   }catch(_){ }
@@ -741,7 +723,6 @@
         // Scroller: mirror vertical scroll if requested and handle snap debounce
         if(scroller){
           scroller.addEventListener('scroll', ()=>{
-            try{ console.debug('SealionViewer: scroller scroll', { left: scroller.scrollLeft, top: scroller.scrollTop }); }catch(_){ }
             // schedule render for header/seq
             this.scheduleRender();
             // debounce snapping

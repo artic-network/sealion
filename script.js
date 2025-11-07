@@ -184,7 +184,6 @@
   const realLeftSpacer = document.getElementById('left-spacer') || (viewer && viewer.leftSpacer) || leftSpacer || null;
   const realLeftScroll = document.getElementById('left-scroll') || (viewer && viewer.leftScroll) || leftScroll || null;
   const realLabelDivider = document.getElementById('label-divider') || (viewer && viewer.labelDivider) || null;
-  console.log('script.js: realLabelDivider', realLabelDivider, 'from getElementById:', document.getElementById('label-divider'), 'from viewer:', viewer && viewer.labelDivider);
 
   viewer.attachInteractionHandlers({
     headerCanvas: realHeaderCanvas,
