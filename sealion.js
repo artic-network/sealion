@@ -135,6 +135,8 @@
         this.REF_ACCENT = cfg.REF_ACCENT;
         // initial mask preference
         this.maskEnabled = (typeof cfg.maskEnabled === 'boolean') ? cfg.maskEnabled : this.maskEnabled;
+        // snap-to-character scrolling preference
+        this.snapEnabled = (typeof cfg.snapEnabled === 'boolean') ? cfg.snapEnabled : true;
       }catch(_){ }
 
       // Keep canvases sized when the container or scroller change size.
@@ -297,7 +299,6 @@
         // snapping state
         this._snapTimeout = null;
         this._snapStartLeft = 0;
-        this.snapEnabled = true;
 
         // helper mutation methods exposed on the instance
         this.clearSelectionSets = () => { try{ this.selectedRows.clear(); this.selectedCols.clear(); }catch(_){ } };
@@ -1924,7 +1925,10 @@
   // internal maskStr; callers who need that should call refreshMaskStr).
         console.info('SealionViewer: mask animation start', { toEnabled: !!toEnabled });
         const from = (this.colOffsets && this.colOffsets.slice) ? this.colOffsets.slice() : [];
-        const to = this.buildColOffsetsFor(toEnabled, { maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0), CHAR_WIDTH: this.charWidth });
+        const maskStr = (window && typeof window.maskStr === 'string') ? window.maskStr : (window && typeof window.mask === 'string') ? window.mask : null;
+        const REDUCED_COL_WIDTH = (window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1;
+        const EXPANDED_RIGHT_PAD = (window && typeof window.EXPANDED_RIGHT_PAD === 'number') ? window.EXPANDED_RIGHT_PAD : 2;
+        const to = this.buildColOffsetsFor(toEnabled, { maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0), CHAR_WIDTH: this.charWidth, REDUCED_COL_WIDTH: REDUCED_COL_WIDTH, EXPANDED_RIGHT_PAD: EXPANDED_RIGHT_PAD, maskStr: maskStr });
         const start = performance.now();
         const DURATION = (window && typeof window.MASK_ANIM_MS === 'number') ? window.MASK_ANIM_MS : 220;
         const that = this;
@@ -1951,7 +1955,7 @@
               that.maskEnabled = !!toEnabled;
               try{ window.maskEnabled = !!that.maskEnabled; }catch(_){ }
               // rebuild definitive integer offsets and resize backings
-              try{ const out = that.buildColOffsetsFor(!!that.maskEnabled, { maxSeqLen: (to && to.length) ? to.length - 1 : 0, CHAR_WIDTH: that.charWidth }); that.colOffsets = out; }catch(_){ }
+              try{ const out = that.buildColOffsetsFor(!!that.maskEnabled, { maxSeqLen: (to && to.length) ? to.length - 1 : 0, CHAR_WIDTH: that.charWidth, REDUCED_COL_WIDTH: REDUCED_COL_WIDTH, EXPANDED_RIGHT_PAD: EXPANDED_RIGHT_PAD, maskStr: maskStr }); that.colOffsets = out; }catch(_){ }
               try{ that.setCanvasCSSSizes(); }catch(_){ }
               try{ that.resizeBackings(); }catch(_){ }
               if(typeof that.scheduleRender === 'function') that.scheduleRender();
@@ -1998,7 +2002,8 @@
       DEFAULT_BASE_COLOR: '#666',
       PALE_REF_COLOR: '#e6e6e6',
       REF_ACCENT: '#2b8cff',
-      maskEnabled: true
+      maskEnabled: true,
+      snapEnabled: true
     };
 
     window.SealionViewer = SealionViewer;

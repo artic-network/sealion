@@ -1,41 +1,128 @@
 <!DOCTYPE html>
-<meta charset='utf-8'>
-<html>
+<html lang="en">
   <head>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sealion</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
     <script src="http://d3js.org/d3.v3.min.js" charset="utf-8"></script>
-  <link rel='stylesheet' href='style.css'>
-  <link rel='stylesheet' href='sealion.css'>
-    <title>Alignment Viewer</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="sealion.css">
   </head>
   <body>
     <div id="app">
-      <div id="controls">
-        
-        <label><input id="snap-toggle" type="checkbox" checked> Snap to char</label>
-        
-        
-      <label><button id="apply-constant-mask-btn" type="button">Apply constant mask</button></label>
-  <label><button id="apply-constant-ambiguous-btn" type="button">Apply constant (allow N)</button></label>
-  <label><button id="apply-constant-gapped-btn" type="button">Apply constant (allow N & -)</button></label>
-      <label><input id="ref-toggle" type="checkbox"> Colour by reference difference</label>
-      <label><button id="set-ref-btn" type="button">Set selected as reference</button></label>
-      <label><button id="diff-consensus-btn" type="button">Difference from consensus</button></label>
-      <label><button id="font-increase-btn" type="button">A+</button></label>
-      <label><button id="font-decrease-btn" type="button">A-</button></label>
-        <input id="search-input" placeholder="search">
-        <button id="search-next">Next</button>
-      </div>
-  <!-- initialization status is shown in a centered overlay (#center-status) managed by the main script -->
+      <!-- Bootstrap Toolbar -->
+      <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+        <div class="container-fluid">
+          <span class="navbar-brand mb-0 h1">Alignment Viewer</span>
+          
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarControls" aria-controls="navbarControls" aria-expanded="false" aria-label="Toggle controls">
+            <span class="navbar-toggler-icon"></span>
+          </button>
+          
+          <div class="collapse navbar-collapse" id="navbarControls">
+            <div class="navbar-nav me-auto">
+              <!-- View Controls -->
+              <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="viewDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="bi bi-eye"></i> View
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="viewDropdown">
+                  <li>
+                    <button class="dropdown-item" id="font-increase-btn" type="button">
+                      <i class="bi bi-zoom-in"></i> Increase font size
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item" id="font-decrease-btn" type="button">
+                      <i class="bi bi-zoom-out"></i> Decrease font size
+                    </button>
+                  </li>
+                </ul>
+              </div>
+              
+              <!-- Mask Controls -->
+              <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="maskDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="bi bi-funnel"></i> Collapse
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="maskDropdown">
+                  <li>
+                    <button class="dropdown-item" id="apply-constant-mask-btn" type="button">
+                      <i class="bi bi-filter"></i> Constant sites
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item" id="apply-constant-ambiguous-btn" type="button">
+                      <i class="bi bi-filter"></i> Constant (allow N)
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item" id="apply-constant-gapped-btn" type="button">
+                      <i class="bi bi-filter"></i> Constant (allow N & -)
+                    </button>
+                  </li>
+                </ul>
+              </div>
+              
+              <!-- Reference Controls -->
+              <div class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="refDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="bi bi-palette"></i> Colour
+                </a>
+                <ul class="dropdown-menu" aria-labelledby="refDropdown">
+                  <li>
+                    <div class="form-check px-3 py-1">
+                      <input class="form-check-input" type="checkbox" id="ref-toggle">
+                      <label class="form-check-label" for="ref-toggle">
+                        Difference to reference
+                      </label>
+                    </div>
+                  </li>
+                  <li><hr class="dropdown-divider"></li>
+                  <li>
+                    <button class="dropdown-item" id="set-ref-btn" type="button">
+                      <i class="bi bi-pin-angle"></i> Set selected as reference
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item" id="diff-consensus-btn" type="button">
+                      <i class="bi bi-calculator"></i> Set consensus as reference
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            
+            <!-- Search -->
+            <form class="d-flex" role="search" onsubmit="return false;">
+              <input class="form-control me-2" type="search" id="search-input" placeholder="Search sequences" aria-label="Search">
+              <button class="btn btn-outline-primary" id="search-next" type="button">
+                <i class="bi bi-search"></i> Next
+              </button>
+            </form>
+          </div>
+        </div>
+      </nav>
+
+      <!-- initialization status is shown in a centered overlay (#center-status) managed by the main script -->
 
       <div id="sealion"></div>
 
-  <!-- debug HUD removed; use console for diagnostics -->
+      <!-- debug HUD removed; use console for diagnostics -->
     </div>
 
-    <script type='text/javascript' src='alignment.js'></script>
-    <script type='text/javascript' src='sealion.js'></script>
-    <script type='text/javascript' src='sealion/utils.js'></script>
-    <script type='text/javascript' src='script.js'></script>
+    <!-- Bootstrap JS Bundle (includes Popper) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+    
+    <script type="text/javascript" src="alignment.js"></script>
+    <script type="text/javascript" src="sealion.js"></script>
+    <script type="text/javascript" src="sealion/utils.js"></script>
+    <script type="text/javascript" src="script.js"></script>
   </body>
 </html>

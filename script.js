@@ -249,8 +249,6 @@
   const searchInput = document.getElementById('search-input');
   const searchNextBtn = document.getElementById('search-next');
   
-  const snapToggle = document.getElementById('snap-toggle');
-  
   // divider element for resizing the labels column
   const labelDivider = document.getElementById('label-divider');
   const maskToggle = document.getElementById('mask-toggle');
@@ -478,6 +476,105 @@
       }
       if(fontIncreaseBtn) fontIncreaseBtn.addEventListener('click', ()=> updateFontSize(1));
       if(fontDecreaseBtn) fontDecreaseBtn.addEventListener('click', ()=> updateFontSize(-1));
+
+    // Search functionality
+    let searchMatches = [];
+    let currentMatchIndex = -1;
+    
+    function performSearch(){
+      try{
+        const query = searchInput ? searchInput.value.trim() : '';
+        if(!query){
+          searchMatches = [];
+          currentMatchIndex = -1;
+          return;
+        }
+        if(viewer && typeof viewer.findMatches === 'function'){
+          searchMatches = viewer.findMatches(query);
+          currentMatchIndex = searchMatches.length > 0 ? 0 : -1;
+          if(searchMatches.length > 0){
+            // Select and scroll to first match
+            const matchRow = searchMatches[0];
+            if(viewer && typeof viewer.setSelectedRows === 'function'){
+              viewer.setSelectedRows([matchRow]);
+              // Scroll to the match
+              const rowHeight = (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20;
+              const scroller = viewer.scroller || document.getElementById('alignment-scroll');
+              if(scroller){
+                const targetTop = matchRow * rowHeight;
+                const viewportHeight = scroller.clientHeight || 0;
+                scroller.scrollTop = Math.max(0, targetTop - viewportHeight / 2);
+              }
+              if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+            }
+            console.info(`Found ${searchMatches.length} match${searchMatches.length !== 1 ? 'es' : ''} for "${query}"`);
+          } else {
+            console.info(`No matches found for "${query}"`);
+          }
+        }
+      }catch(e){ console.warn('Search failed', e); }
+    }
+    
+    function nextMatch(){
+      try{
+        if(searchMatches.length === 0){
+          performSearch();
+          return;
+        }
+        currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
+        const matchRow = searchMatches[currentMatchIndex];
+        if(viewer && typeof viewer.setSelectedRows === 'function'){
+          viewer.setSelectedRows([matchRow]);
+          // Scroll to the match
+          const rowHeight = (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20;
+          const scroller = viewer.scroller || document.getElementById('alignment-scroll');
+          if(scroller){
+            const targetTop = matchRow * rowHeight;
+            const viewportHeight = scroller.clientHeight || 0;
+            scroller.scrollTop = Math.max(0, targetTop - viewportHeight / 2);
+          }
+          if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+        }
+        console.info(`Match ${currentMatchIndex + 1} of ${searchMatches.length}`);
+      }catch(e){ console.warn('Next match failed', e); }
+    }
+    
+    if(searchInput){
+      searchInput.addEventListener('keydown', (e)=>{
+        if(e.key === 'Enter'){
+          e.preventDefault();
+          if(e.shiftKey){
+            // Shift+Enter goes to previous match (implemented as reverse next)
+            if(searchMatches.length > 0){
+              currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
+              const matchRow = searchMatches[currentMatchIndex];
+              if(viewer && typeof viewer.setSelectedRows === 'function'){
+                viewer.setSelectedRows([matchRow]);
+                const rowHeight = (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20;
+                const scroller = viewer.scroller || document.getElementById('alignment-scroll');
+                if(scroller){
+                  const targetTop = matchRow * rowHeight;
+                  const viewportHeight = scroller.clientHeight || 0;
+                  scroller.scrollTop = Math.max(0, targetTop - viewportHeight / 2);
+                }
+                if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+              }
+            }
+          } else {
+            nextMatch();
+          }
+        }
+      });
+      // Re-search when input changes
+      searchInput.addEventListener('input', ()=>{
+        searchMatches = [];
+        currentMatchIndex = -1;
+      });
+    }
+    
+    if(searchNextBtn){
+      searchNextBtn.addEventListener('click', nextMatch);
+    }
 
     // Animation helpers for mask toggle
     let maskAnimRequest = null;
@@ -1080,13 +1177,7 @@
 
   // when the right horizontally scrolls we only need to redraw header and sequences
   // re-enable snapping to integer character after scrolling stops (direction-aware)
-  let snapTimeout = null;
-  let scrollStartLeft = 0;
-  let snapEnabled = snapToggle ? !!snapToggle.checked : true;
-  if(snapToggle){
-    snapToggle.addEventListener('change', ()=>{ snapEnabled = !!snapToggle.checked; });
-  }
-
+  // Snap scrolling is always enabled and managed by the SealionViewer instance
   
 
   // Command-drag panning: hold Meta (Command on macOS) and drag to pan the alignment viewport

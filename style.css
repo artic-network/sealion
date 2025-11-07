@@ -1,7 +1,3 @@
-td, th {
-  padding: 1px 4px;
-}
-
 /* Centered initialization status box shown while app is starting */
 #center-status{
   position: fixed;
@@ -45,12 +41,28 @@ td, th {
 .center-status-text{ color: #f3f6f8; }
 @keyframes spin{ from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
 
-/* Overview debug HUD removed; use console for diagnostics */
-
+/* App layout */
 html, body { height:100%; margin:0; overflow:hidden; }
 #app { height:100vh; display:flex; flex-direction:column; }
-#controls{ padding:8px; background:#f6f6f6; border-bottom:1px solid #ddd; }
 
-/* Viewer-specific layout and canvas styles were moved to `sealion.css`. */
+/* Navbar stays at top, sealion container fills remaining space */
+.navbar { flex-shrink: 0; }
+#sealion { flex: 1; min-height: 0; }
+
+/* Dropdown menu enhancements */
+.dropdown-menu {
+  box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+}
+
+/* Keep form-check items in dropdowns aligned */
+.dropdown-menu .form-check {
+  cursor: pointer;
+}
+
+.dropdown-menu .form-check:hover {
+  background-color: rgba(0,0,0,0.05);
+}
+
+/* Viewer-specific layout and canvas styles are in sealion.css */
 
 #init-status{ font-family:system-ui, -apple-system, sans-serif; font-size:13px; }
