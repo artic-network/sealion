@@ -922,86 +922,14 @@
   // `drawSequences` moved into `SealionViewer.drawSequences` during staged migration.
   // The viewer implementation is authoritative; local legacy implementation removed.
 
-  // main render loop throttled with rAF
-  let scheduled = false;
-  // flag to emit a lightweight one-time runtime assertion on first draw
-  let firstDrawLogged = false;
+  // Legacy rAF-based render loop removed — the SealionViewer instance is now
+  // authoritative for scheduling and drawing. Provide a tiny compatibility
+  // shim so external callers that still invoke `scheduleRender()` don't throw.
   function scheduleRender(){
-    if(scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(()=>{
-      scheduled = false;
-      // Ensure the SealionViewer instance has the canonical geometry/state
-      // before any draw call. During the staged migration the viewer may be
-      // constructed early or slightly later; sync authoritative values so
-      // draw* methods never observe missing offsets or charWidth.
-      try{
-        const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null;
-        if(v){
-          try{ v.alignment = rows; }catch(_){ }
-          try{ /* viewer owns colOffsets */ }catch(_){ }
-          try{ v.charWidth = CHAR_WIDTH; }catch(_){ }
-        }
-      }catch(_){ }
-      // One-time runtime assertions / lightweight diagnostics to aid debugging
-      try{
-        if(!firstDrawLogged){
-          const pr = window.devicePixelRatio || 1;
-          const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null;
-          const seqCssW = seqCanvas ? (seqCanvas.getBoundingClientRect().width || (seqCanvas.width / pr)) : 0;
-          const seqCssH = seqCanvas ? (seqCanvas.getBoundingClientRect().height || (seqCanvas.height / pr)) : 0;
-          const seqBacking = seqCanvas ? { w: seqCanvas.width, h: seqCanvas.height } : null;
-          const info = {
-            when: Date.now(),
-            viewerPresent: !!v,
-            colOffsetsLength: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets.length : 0,
-            totalWidth: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets[maxSeqLen] : 0,
-            CHAR_WIDTH: CHAR_WIDTH,
-            viewerCharWidth: v && typeof v.charWidth !== 'undefined' ? v.charWidth : null,
-            rowCount: rowCount,
-            ROW_HEIGHT: ROW_HEIGHT,
-            seqCanvasCss: { w: Math.round(seqCssW), h: Math.round(seqCssH) },
-            seqCanvasBacking: seqBacking,
-            scrollerClient: scroller ? { w: scroller.clientWidth, h: scroller.clientHeight, scrollLeft: scroller.scrollLeft, scrollTop: scroller.scrollTop } : null
-          };
-          try{ window.__sealionFirstDrawInfo = info; }catch(_){ }
-          console.info('SealionViewer: first draw', info);
-          // simple sanity checks
-          if(!v) console.warn('SealionViewer instance missing on first draw');
-          if(!(v && v.colOffsets && v.colOffsets.length >= (maxSeqLen + 1))) console.warn('colOffsets length shorter than expected', { colOffsetsLength: (v && v.colOffsets && v.colOffsets.length) ? v.colOffsets.length : 0, expected: maxSeqLen + 1 });
-          if(!seqCanvas) console.warn('seqCanvas not present');
-          if(seqBacking && seqBacking.w <= 0) console.warn('seqCanvas backing width is zero or missing', seqBacking);
-          firstDrawLogged = true;
-        }
-      }catch(e){ /* don't let diagnostics break rendering */ }
-  const vis = computeVisible();
-  // draw independent headers first (they don't scroll vertically)
-  // (debug logs removed)
-  try{
-  viewer.drawLabelsHeader(labelsHeaderCanvas, vis, { HEADER_FONT: getViewerProp('HEADER_FONT', HEADER_FONT), HEADER_HEIGHT: getViewerProp('HEADER_HEIGHT', HEADER_HEIGHT), labelTextVertOffset: labelTextVertOffset, ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT) });
-  }catch(e){ console.error('viewer.drawLabelsHeader failed', e); }
-
-  try{
-  viewer.drawOverview(overviewCanvas, vis, { colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), maskStr: maskStr, maskEnabled: !!maskEnabled });
-  }catch(e){ console.error('viewer.drawOverview failed', e); }
-
     try{
-  viewer.drawHeader(headerCanvas, vis, { colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), HEADER_FONT: getViewerProp('HEADER_FONT', HEADER_FONT), HEADER_HEIGHT: getViewerProp('HEADER_HEIGHT', HEADER_HEIGHT), selectedCols: getSelectedCols() });
-  }catch(e){ console.error('viewer.drawHeader failed', e); }
-
-  try{
-  viewer.drawConsensus(consensusCanvas, vis, { FONT: getViewerProp('FONT', FONT), CONSENSUS_TOP_PAD: getViewerProp('CONSENSUS_TOP_PAD', CONSENSUS_TOP_PAD), CONSENSUS_BOTTOM_PAD: getViewerProp('CONSENSUS_BOTTOM_PAD', CONSENSUS_BOTTOM_PAD), colOffsets: getViewerColOffsets(), maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), maskStr: maskStr, maskEnabled: !!maskEnabled, BASE_COLORS: getViewerProp('BASE_COLORS', BASE_COLORS), DEFAULT_BASE_COLOR: getViewerProp('DEFAULT_BASE_COLOR', DEFAULT_BASE_COLOR) });
-  }catch(e){ console.error('viewer.drawConsensus failed', e); }
-
-    try{
-  viewer.drawLabels(labelCanvas, vis, { FONT: getViewerProp('FONT', FONT), ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), LABEL_WIDTH: getViewerProp('LABEL_WIDTH', LABEL_WIDTH), labelTextVertOffset: labelTextVertOffset, selectedRows: getSelectedRows(), rows: rows, refIndex: refIndex, REF_ACCENT: getViewerProp('REF_ACCENT', REF_ACCENT) });
-  }catch(e){ console.error('viewer.drawLabels failed', e); }
-
-  try{
-  viewer.drawSequences(seqCanvas, vis, { FONT: getViewerProp('FONT', FONT), ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), rows: rows, selectedRows: getSelectedRows(), selectedCols: getSelectedCols(), refStr: refStr, refModeEnabled: refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!maskEnabled, BASE_COLORS: getViewerProp('BASE_COLORS', BASE_COLORS), DEFAULT_BASE_COLOR: getViewerProp('DEFAULT_BASE_COLOR', DEFAULT_BASE_COLOR), PALE_REF_COLOR: getViewerProp('PALE_REF_COLOR', PALE_REF_COLOR), COMPRESSED_CELL_VPAD: getViewerProp('COMPRESSED_CELL_VPAD', COMPRESSED_CELL_VPAD), seqTextVertOffset: seqTextVertOffset, rowCount: rowCount, maxSeqLen: maxSeqLen, colOffsets: getViewerColOffsets(), isRectSelecting: (viewer && typeof viewer.isRectSelecting === 'boolean') ? viewer.isRectSelecting : false, rectStartRow: (viewer && typeof viewer.rectStartRow === 'number') ? viewer.rectStartRow : null, rectEndRow: (viewer && typeof viewer.rectEndRow === 'number') ? viewer.rectEndRow : null, rectStartCol: (viewer && typeof viewer.rectStartCol === 'number') ? viewer.rectStartCol : null, rectEndCol: (viewer && typeof viewer.rectEndCol === 'number') ? viewer.rectEndCol : null });
-  }catch(e){ console.error('viewer.drawSequences failed', e); }
-  // diagnostics are available in the console.
-    });
+      if(viewer && typeof viewer.scheduleRender === 'function') return viewer.scheduleRender();
+    }catch(_){ }
+    // no-op when viewer is not present yet
   }
 
   // initial sizing + measure

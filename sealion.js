@@ -1672,56 +1672,8 @@
     // this with the real drawing functions ported from `script.js`.
     drawAll() {
       try{
-        // One-time diagnostic to help debug blank-canvas issues — emits
-        // viewer state and canvas geometry on the first draw.
-        try{
-          if(!this.__drawDiagLogged){
-            const canvInfo = (name, el)=>{ try{ if(!el) return { present: false }; const r = el.getBoundingClientRect(); return { present: true, cssW: Math.round(r.width), cssH: Math.round(r.height), backingW: el.width || 0, backingH: el.height || 0 }; }catch(_){ return { present: true }; } };
-            const info = {
-              when: Date.now(),
-              pr: this.pr,
-              charWidth: this.charWidth,
-              colOffsetsLength: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length : 0,
-              alignmentLength: (this.alignment && this.alignment.length) ? this.alignment.length : 0,
-              canvases: {
-                seq: canvInfo('seq', this.seqCanvas),
-                labels: canvInfo('labels', this.labelCanvas),
-                header: canvInfo('header', this.headerCanvas),
-                overview: canvInfo('overview', this.overviewCanvas),
-                consensus: canvInfo('consensus', this.consensusCanvas),
-                labelsHeader: canvInfo('labelsHeader', this.labelsHeaderCanvas)
-              },
-              selectedRows: (this.selectedRows && typeof this.selectedRows.size === 'number') ? this.selectedRows.size : 0,
-              selectedCols: (this.selectedCols && typeof this.selectedCols.size === 'number') ? this.selectedCols.size : 0
-            };
-            try{ console.info('SealionViewer: drawAll diag', info); }catch(_){ }
-            this.__drawDiagLogged = true;
-          }
-        }catch(_){ }
         // compute visible region using the viewer's scroller and instance settings
         const vis = this.computeVisible(this.scroller, { ROW_HEIGHT: this.ROW_HEIGHT, BUFFER_ROWS: this.BUFFER_ROWS, BUFFER_COLS: this.BUFFER_COLS, CHAR_WIDTH: this.charWidth, maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (this.alignment ? Math.max(0, ...this.alignment.map(r=>r.sequence.length)) : 0), rowCount: (this.alignment ? this.alignment.length : 0), maskEnabled: !!this.maskEnabled });
-
-            // One-shot runtime diagnostics that include the computed visible region
-            // and a tiny test draw on each canvas to confirm drawing works.
-            try{
-              if(!this.__drawVisLogged){
-                try{ console.info('SealionViewer: drawAll vis', vis); }catch(_){ }
-                try{ const co = this.colOffsets || []; console.info('SealionViewer: colOffsets sample', { length: co.length, first10: co.slice(0,10) }); }catch(_){ }
-                // Attempt a tiny test-draw on each canvas to verify contexts/backings
-                try{
-                  const canvases = [ ['seq', this.seqCanvas], ['labels', this.labelCanvas], ['header', this.headerCanvas], ['overview', this.overviewCanvas], ['consensus', this.consensusCanvas], ['labelsHeader', this.labelsHeaderCanvas] ];
-                  for(const [name, el] of canvases){
-                    try{
-                      if(!el) { console.warn('SealionViewer: test-draw canvas missing', name); continue; }
-                      const ctx = this.ensureCanvasBacking(el);
-                      // draw a small one-shot red square in the top-left corner
-                      ctx.save(); ctx.fillStyle = 'rgba(200,20,20,0.95)'; ctx.fillRect(2,2,8,8); ctx.restore();
-                    }catch(e){ console.warn('SealionViewer: test-draw failed for', name, e); }
-                  }
-                }catch(_){ }
-                this.__drawVisLogged = true;
-              }
-            }catch(_){ }
 
         // refresh reference string/index if helper exists
         let refStr = null, refIndex = null;
