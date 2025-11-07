@@ -139,7 +139,14 @@
 
       // Keep canvases sized when the container or scroller change size.
       try{
-        const doResize = ()=>{ try{ this.setCanvasCSSSizes(); this.resizeBackings(); if(typeof this.scheduleRender === 'function') this.scheduleRender(); }catch(_){ } };
+  const doResize = ()=>{ 
+    try{ 
+      this.setCanvasCSSSizes(); 
+      this.resizeBackings(); 
+      // Draw immediately after backing resize to avoid blank frames
+      if(typeof this.drawAll === 'function') this.drawAll();
+    }catch(e){ console.warn('doResize failed', e); } 
+  };
         if(typeof ResizeObserver !== 'undefined'){
           try{
             this._resizeObserver = new ResizeObserver(doResize);
@@ -153,6 +160,23 @@
         try{ doResize(); }catch(_){ }
       }catch(_){ }
 
+    }
+
+    // Schedule a backing resize on the next animation frame. This debounces
+    // frequent calls (e.g. during drag or window resize) so we don't repeatedly
+    // set canvas.width/height which clears the canvas and causes flicker.
+    scheduleBackingResize(){
+      if(this._backingResizeScheduled) return;
+      this._backingResizeScheduled = true;
+      const that = this;
+      requestAnimationFrame(()=>{
+        try{
+          that._backingResizeScheduled = false;
+          that.resizeBackings();
+          // Ensure a draw follows the backing resize so canvases show content
+          try{ if(typeof that.scheduleRender === 'function') that.scheduleRender(); }catch(_){ }
+        }catch(_){ that._backingResizeScheduled = false; }
+      });
     }
 
       // Attach default interaction handlers for canvases and scroller.
@@ -189,7 +213,64 @@
   try{ this.leftScroll = (opts && opts.leftScroll) ? opts.leftScroll : null; }catch(_){ }
 
   // Light-weight instrumentation: report which handlers were attached
-  try{ console.info('SealionViewer: attachInteractionHandlers', { headerCanvas: !!headerCanvas, seqCanvas: !!seqCanvas, labelCanvas: !!labelCanvas, consensusCanvas: !!consensusCanvas, overviewCanvas: !!overviewCanvas, scroller: !!scroller }); }catch(_){ }
+  console.log('SealionViewer: attachInteractionHandlers opts:', opts);
+  console.log('SealionViewer: opts.labelDivider:', opts && opts.labelDivider);
+  try{ console.info('SealionViewer: attachInteractionHandlers', { headerCanvas: !!headerCanvas, seqCanvas: !!seqCanvas, labelCanvas: !!labelCanvas, consensusCanvas: !!consensusCanvas, overviewCanvas: !!overviewCanvas, scroller: !!scroller, labelDivider: !!(opts && opts.labelDivider) }); }catch(_){ }
+
+  // Label divider drag-to-resize: allow the application to pass a labelDivider
+  // element via opts.labelDivider; otherwise use any divider the viewer
+  // created during construction (`this.labelDivider`). Resizing updates the
+  // viewer's LABEL_WIDTH, the CSS var --label-width, and triggers a sizing
+  // pass (CSS sizes + backing resize) followed by a scheduled render.
+  try{
+    const labelDividerEl = (opts && opts.labelDivider) ? opts.labelDivider : (this.labelDivider || (document.getElementById ? document.getElementById('label-divider') : null));
+    console.log('SealionViewer: labelDivider element', labelDividerEl, 'from opts:', opts && opts.labelDivider, 'from this:', this.labelDivider);
+    if(labelDividerEl){
+      let isLabelDragging = false;
+      let labelDragStartX = 0;
+      let labelDragStartWidth = (typeof this.LABEL_WIDTH === 'number') ? this.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260);
+      const MIN_LABEL_WIDTH = 80;
+      const MAX_LABEL_WIDTH = 1200;
+      console.log('SealionViewer: attaching drag handlers to labelDivider');
+      labelDividerEl.addEventListener('mousedown', (e)=>{
+        console.log('SealionViewer: labelDivider mousedown', e);
+        if(e.button !== 0) return;
+        isLabelDragging = true;
+        labelDragStartX = e.clientX;
+        labelDragStartWidth = (typeof this.LABEL_WIDTH === 'number') ? this.LABEL_WIDTH : (document.documentElement ? parseInt(getComputedStyle(document.documentElement).getPropertyValue('--label-width')||'260',10) : 260);
+        try{ document.body.style.userSelect = 'none'; }catch(_){ }
+        e.preventDefault();
+      });
+      window.addEventListener('mousemove', (e)=>{
+        if(!isLabelDragging) return;
+        const dx = e.clientX - labelDragStartX;
+        let nw = Math.max(MIN_LABEL_WIDTH, Math.min(MAX_LABEL_WIDTH, Math.round(labelDragStartWidth + dx)));
+        if(nw === this.LABEL_WIDTH) return;
+        try{ this.LABEL_WIDTH = nw; }catch(_){ }
+        try{ document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); }catch(_){ }
+        // Update CSS sizes and backing immediately during drag for responsive feedback
+        try{ this.setCanvasCSSSizes(); }catch(_){ }
+        try{ this.resizeBackings(); }catch(_){ }
+        try{ if(typeof this.scheduleRender === 'function') this.scheduleRender(); }catch(_){ }
+      });
+      window.addEventListener('mouseup', (e)=>{
+        if(!isLabelDragging) return;
+        isLabelDragging = false;
+        try{ document.body.style.userSelect = ''; }catch(_){ }
+        try{ document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); }catch(_){ }
+        try{ localStorage.setItem('sealion_label_width', String(this.LABEL_WIDTH)); }catch(_){ }
+        // Final layout pass and render
+        try{ this.setCanvasCSSSizes(); }catch(_){ }
+        try{ this.resizeBackings(); }catch(_){ }
+        try{ if(typeof this.scheduleRender === 'function') this.scheduleRender(); }catch(_){ }
+      });
+      // restore persisted width if present
+      try{
+        const saved = localStorage.getItem('sealion_label_width');
+        if(saved){ const v = parseInt(saved,10); if(Number.isFinite(v) && v > 0) { this.LABEL_WIDTH = v; document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); } }
+      }catch(_){ }
+    }
+  }catch(_){ }
 
         // If the application provided a scheduleRender callback, delegate
         // scheduling to it so app-level rendering (in script.js) runs.
@@ -782,7 +863,23 @@
         const leftSpacer = this.leftSpacer || (opts && opts.leftSpacer) || (document.getElementById ? document.getElementById('left-spacer') : null);
         const scroller = this.scroller || (opts && opts.scroller) || (document.getElementById ? document.getElementById('alignment-scroll') : null);
 
-        const LABEL_WIDTH = (typeof opts.LABEL_WIDTH === 'number') ? opts.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260);
+        // Resolve label width in this priority order:
+        // 1. opts.LABEL_WIDTH (explicit call override)
+        // 2. this.LABEL_WIDTH (viewer instance, e.g. dragged value)
+        // 3. window.LABEL_WIDTH (legacy global)
+        // 4. CSS variable --label-width (document-level stylesheet)
+        // 5. fallback default 260
+        let LABEL_WIDTH;
+        if (typeof opts.LABEL_WIDTH === 'number') LABEL_WIDTH = opts.LABEL_WIDTH;
+        else if (typeof this.LABEL_WIDTH === 'number') LABEL_WIDTH = this.LABEL_WIDTH;
+        else if (window && typeof window.LABEL_WIDTH === 'number') LABEL_WIDTH = window.LABEL_WIDTH;
+        else {
+          try{
+            const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--label-width') || '';
+            const parsed = parseInt(cssVal.replace('px','').trim(), 10);
+            LABEL_WIDTH = Number.isFinite(parsed) && parsed > 0 ? parsed : 260;
+          }catch(_){ LABEL_WIDTH = 260; }
+        }
         const ROW_HEIGHT = (typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
 
         if(labelCanvas) labelCanvas.style.width = LABEL_WIDTH + 'px';
@@ -821,7 +918,15 @@
         const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
         const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
 
-        if(labelCanvas){ labelCanvas.width = Math.max(1, Math.round(((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260) * pr)); labelCanvas.height = Math.max(1, Math.round(viewportHeight * pr)); try{ labelCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
+        // Resolve label width same as in setCanvasCSSSizes so backing follows CSS/instance value
+        let backingLabelWidth;
+        if(opts && typeof opts.LABEL_WIDTH === 'number') backingLabelWidth = opts.LABEL_WIDTH;
+        else if(typeof this.LABEL_WIDTH === 'number') backingLabelWidth = this.LABEL_WIDTH;
+        else if(window && typeof window.LABEL_WIDTH === 'number') backingLabelWidth = window.LABEL_WIDTH;
+        else {
+          try{ const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--label-width') || ''; const parsed = parseInt(cssVal.replace('px','').trim(), 10); backingLabelWidth = Number.isFinite(parsed) && parsed > 0 ? parsed : 260; }catch(_){ backingLabelWidth = 260; }
+        }
+        if(labelCanvas){ labelCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelCanvas.height = Math.max(1, Math.round(viewportHeight * pr)); try{ labelCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(seqCanvas){ seqCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); seqCanvas.height = Math.max(1, Math.round(viewportHeight * pr)); try{ seqCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(headerCanvas){ headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try{ headerCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(overviewCanvas){ const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.width = Math.max(1, Math.round(hdrCssW * pr)); overviewCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try{ overviewCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
@@ -849,7 +954,7 @@
 
         if(labelCanvas){ labelCanvas.style.position = labelCanvas.style.position || 'absolute'; labelCanvas.style.left = '0px'; labelCanvas.style.top = '0px'; }
         if(seqCanvas){ seqCanvas.style.position = seqCanvas.style.position || 'absolute'; seqCanvas.style.left = '0px'; seqCanvas.style.top = '0px'; }
-        if(labelCanvas) labelCanvas.style.height = viewportHeight + 'px';
+  if(labelCanvas) labelCanvas.style.height = viewportHeight + 'px';
         if(seqCanvas) seqCanvas.style.height = viewportHeight + 'px';
         if(seqCanvas) seqCanvas.style.width = viewportWidth + 'px';
         if(headerCanvas) headerCanvas.style.width = viewportWidth + 'px';
@@ -858,7 +963,14 @@
         if(leftSpacer) leftSpacer.style.height = ((this.alignment && this.alignment.length) ? this.alignment.length * ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20) : 0) + 'px';
 
         // backing pixels
-        if(labelCanvas) labelCanvas.width = Math.max(1, Math.round(((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260) * pr));
+        // Resolve label width for backing exactly the same way as setCanvasCSSSizes
+        let finalLabelWidth;
+        if(typeof this.LABEL_WIDTH === 'number') finalLabelWidth = this.LABEL_WIDTH;
+        else if(window && typeof window.LABEL_WIDTH === 'number') finalLabelWidth = window.LABEL_WIDTH;
+        else {
+          try{ const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--label-width') || ''; const parsed = parseInt(cssVal.replace('px','').trim(), 10); finalLabelWidth = Number.isFinite(parsed) && parsed > 0 ? parsed : 260; }catch(_){ finalLabelWidth = 260; }
+        }
+        if(labelCanvas) labelCanvas.width = Math.max(1, Math.round(finalLabelWidth * pr));
         if(labelCanvas) labelCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
         if(seqCanvas) seqCanvas.width = Math.max(1, Math.round(viewportWidth * pr));
         if(seqCanvas) seqCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
