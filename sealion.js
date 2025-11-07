@@ -792,12 +792,13 @@
         const seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
         const labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
         const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+        const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : FONT);
         const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
         try{
           if(seqCanvas){ const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const metrics = ctx.measureText('Mg'); if(metrics && typeof metrics.actualBoundingBoxAscent === 'number'){ const ascent = metrics.actualBoundingBoxAscent; const descent = metrics.actualBoundingBoxDescent || 0; this.seqTextVertOffset = Math.round((ROW_HEIGHT - (ascent + descent)) / 2 + ascent); } else { this.seqTextVertOffset = Math.round(ROW_HEIGHT/2); } }
         }catch(e){ this.seqTextVertOffset = Math.round(ROW_HEIGHT/2); }
         try{
-          if(labelCanvas){ const ctx2 = labelCanvas.getContext('2d'); ctx2.font = FONT; const metrics2 = ctx2.measureText('Mg'); if(metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number'){ const ascent2 = metrics2.actualBoundingBoxAscent; const descent2 = metrics2.actualBoundingBoxDescent || 0; this.labelTextVertOffset = Math.round((ROW_HEIGHT - (ascent2 + descent2)) / 2 + ascent2); } else { this.labelTextVertOffset = Math.round(ROW_HEIGHT/2); } }
+          if(labelCanvas){ const ctx2 = labelCanvas.getContext('2d'); ctx2.font = LABEL_FONT; const metrics2 = ctx2.measureText('Mg'); if(metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number'){ const ascent2 = metrics2.actualBoundingBoxAscent; const descent2 = metrics2.actualBoundingBoxDescent || 0; this.labelTextVertOffset = Math.round((ROW_HEIGHT - (ascent2 + descent2)) / 2 + ascent2); } else { this.labelTextVertOffset = Math.round(ROW_HEIGHT/2); } }
         }catch(e){ this.labelTextVertOffset = Math.round(ROW_HEIGHT/2); }
         try{ if(window) window.seqTextVertOffset = this.seqTextVertOffset; }catch(_){ }
         try{ if(window) window.labelTextVertOffset = this.labelTextVertOffset; }catch(_){ }
@@ -814,13 +815,22 @@
         const seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
         const labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
         const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+        const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : FONT);
         let seqHeight = 0, labHeight = 0;
         if(seqCanvas){ const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const seqMetrics = ctx.measureText('Mg'); if(seqMetrics && typeof seqMetrics.actualBoundingBoxAscent === 'number'){ seqHeight = Math.ceil((seqMetrics.actualBoundingBoxAscent || 0) + (seqMetrics.actualBoundingBoxDescent || 0)); } else { const m = FONT.match(/(\d+)px/); const px = m ? parseInt(m[1],10) : 14; seqHeight = Math.round(px * 1.2); } }
-        if(labelCanvas){ const ctx2 = labelCanvas.getContext('2d'); ctx2.font = FONT; const labMetrics = ctx2.measureText('Mg'); if(labMetrics && typeof labMetrics.actualBoundingBoxAscent === 'number'){ labHeight = Math.ceil((labMetrics.actualBoundingBoxAscent || 0) + (labMetrics.actualBoundingBoxDescent || 0)); } else { const m2 = FONT.match(/(\d+)px/); const px2 = m2 ? parseInt(m2[1],10) : 14; labHeight = Math.round(px2 * 1.2); } }
+        if(labelCanvas){ const ctx2 = labelCanvas.getContext('2d'); ctx2.font = LABEL_FONT; const labMetrics = ctx2.measureText('Mg'); if(labMetrics && typeof labMetrics.actualBoundingBoxAscent === 'number'){ labHeight = Math.ceil((labMetrics.actualBoundingBoxAscent || 0) + (labMetrics.actualBoundingBoxDescent || 0)); } else { const m2 = LABEL_FONT.match(/(\d+)px/); const px2 = m2 ? parseInt(m2[1],10) : 14; labHeight = Math.round(px2 * 1.2); } }
         const newRow = Math.max(8, Math.ceil(Math.max(seqHeight || 0, labHeight || 0) + ((opts && typeof opts.ROW_PADDING === 'number') ? opts.ROW_PADDING : (window && typeof window.ROW_PADDING === 'number' ? window.ROW_PADDING : 6))));
         this.ROW_HEIGHT = newRow;
         try{ if(window) window.ROW_HEIGHT = newRow; }catch(_){ }
         try{ document.documentElement.style.setProperty('--row-height', newRow + 'px'); }catch(_){ }
+        // Calculate consensus height based on sequence font
+        const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || 4);
+        const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || 8);
+        const newConsensusHeight = Math.max(16, Math.ceil(seqHeight + CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+        this.CONSENSUS_HEIGHT = newConsensusHeight;
+        try{ if(window) window.CONSENSUS_HEIGHT = newConsensusHeight; }catch(_){ }
+        // Update vertical text offsets for the new row height and fonts
+        try{ this.measureTextVerticalOffset({ FONT: FONT, LABEL_FONT: LABEL_FONT, ROW_HEIGHT: newRow }); }catch(_){ }
         if(opts && opts.apply){
           try{ this.setCanvasCSSSizes(opts); }catch(_){ }
           try{ this.resizeBackings(opts); }catch(_){ }
@@ -1807,7 +1817,7 @@
         try{ this.drawOverview(this.overviewCanvas, vis, commonOpts); }catch(e){ console.error('SealionViewer.drawOverview failed', e); }
         try{ this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); }catch(e){ console.error('SealionViewer.drawHeader failed', e); }
         try{ this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD })); }catch(e){ console.error('SealionViewer.drawConsensus failed', e); }
-        try{ this.drawLabels(this.labelCanvas, vis, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [] , refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); }catch(e){ console.error('SealionViewer.drawLabels failed', e); }
+        try{ this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [] , refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); }catch(e){ console.error('SealionViewer.drawLabels failed', e); }
         try{ this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); }catch(e){ console.error('SealionViewer.drawSequences failed', e); }
       }catch(e){ console.error('SealionViewer.drawAll failed', e); }
     }

@@ -27,23 +27,16 @@
           
           <div class="collapse navbar-collapse" id="navbarControls">
             <div class="navbar-nav me-auto">
-              <!-- View Controls -->
-              <div class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="viewDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                  <i class="bi bi-eye"></i> View
-                </a>
-                <ul class="dropdown-menu" aria-labelledby="viewDropdown">
-                  <li>
-                    <button class="dropdown-item" id="font-increase-btn" type="button">
-                      <i class="bi bi-zoom-in"></i> Increase font size
-                    </button>
-                  </li>
-                  <li>
-                    <button class="dropdown-item" id="font-decrease-btn" type="button">
-                      <i class="bi bi-zoom-out"></i> Decrease font size
-                    </button>
-                  </li>
-                </ul>
+              <!-- Font Size Controls -->
+              <div class="nav-item">
+                <div class="btn-group" role="group" aria-label="Font size controls">
+                  <button class="btn btn-sm btn-outline-secondary" id="font-decrease-btn" type="button" title="Decrease font size">
+                    <i class="bi bi-zoom-out"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" id="font-increase-btn" type="button" title="Increase font size">
+                    <i class="bi bi-zoom-in"></i>
+                  </button>
+                </div>
               </div>
               
               <!-- Mask Controls -->

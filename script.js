@@ -457,25 +457,110 @@
     // Font size controls: increase/decrease text (labels and nucleotides)
     const fontIncreaseBtn = document.getElementById('font-increase-btn');
     const fontDecreaseBtn = document.getElementById('font-decrease-btn');
+    console.info('Font buttons found:', { increase: !!fontIncreaseBtn, decrease: !!fontDecreaseBtn });
+    
+    // Track initial label font size (set once on first call)
+    let initialLabelFontSize = null;
+    
     function updateFontSize(delta){
         try{
-          FONT_SIZE = Math.max(8, Math.min(32, FONT_SIZE + delta));
-          FONT = FONT_SIZE + 'px monospace';
-          // re-measure and resize canvases to apply new font
-          measureCharWidthFromReal();
-          measureRowHeightFromFonts();
-    // make consensus row equal to a sequence ROW_HEIGHT
-    CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
-    try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-    setCanvasCSSSizes();
-          measureTextVerticalOffset();
-          resizeBackings();
-          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
-          console.info('FONT_SIZE set to', FONT_SIZE);
+          // Get current font sizes from viewer or window
+          let currentSeqSize = 14; // default sequence font size
+          let currentLabelSize = 14; // default label font size
+          
+          try{ 
+            currentSeqSize = viewer && viewer.fontSize ? viewer.fontSize : (window.FONT_SIZE || 14);
+            currentLabelSize = viewer && viewer.labelFontSize ? viewer.labelFontSize : currentSeqSize;
+          }catch(_){ }
+          
+          // Set initial label font size on first call
+          if(initialLabelFontSize === null){
+            initialLabelFontSize = currentLabelSize;
+          }
+          
+          const newSeqSize = Math.max(8, Math.min(32, currentSeqSize + delta));
+          let newLabelSize;
+          
+          if(delta > 0){
+            // Increasing: grow label up to initial size, then keep it capped there
+            newLabelSize = Math.min(initialLabelFontSize, currentLabelSize + delta);
+          } else {
+            // Decreasing: reduce both together, but don't go below minimum
+            newLabelSize = Math.max(8, currentLabelSize + delta);
+          }
+          
+          const newSeqFont = newSeqSize + 'px monospace';
+          const newLabelFont = newLabelSize + 'px monospace';
+          
+          // Update viewer's FONT properties
+          if(viewer){
+            viewer.FONT = newSeqFont;  // Sequence font
+            viewer.fontSize = newSeqSize;
+            viewer.labelFont = newLabelFont;  // Label font
+            viewer.labelFontSize = newLabelSize;
+            
+            // Re-measure character width with the new sequence font
+            if(typeof viewer.measureCharWidthFromReal === 'function'){
+              viewer.measureCharWidthFromReal(newSeqFont);
+            }
+            
+            // Re-measure row height based on both fonts
+            if(typeof viewer.measureRowHeightFromFonts === 'function'){
+              viewer.measureRowHeightFromFonts({
+                FONT: newSeqFont,
+                LABEL_FONT: newLabelFont,
+                apply: true  // This will call setCanvasCSSSizes, resizeBackings, and scheduleRender
+              });
+            } else {
+              // Fallback if measureRowHeightFromFonts doesn't exist
+              // Resize canvases to accommodate new dimensions
+              if(typeof viewer.setCanvasCSSSizes === 'function'){
+                viewer.setCanvasCSSSizes();
+              }
+              if(typeof viewer.resizeBackings === 'function'){
+                viewer.resizeBackings();
+              }
+              
+              // Trigger redraw
+              if(typeof viewer.scheduleRender === 'function'){
+                viewer.scheduleRender();
+              }
+            }
+            
+            // Rebuild column offsets with new character width
+            if(typeof viewer.buildColOffsetsFor === 'function' && viewer.colOffsets){
+              const maxSeqLen = viewer.colOffsets.length - 1;
+              viewer.colOffsets = viewer.buildColOffsetsFor(viewer.maskEnabled, {
+                maxSeqLen: maxSeqLen,
+                CHAR_WIDTH: viewer.charWidth,
+                EXPANDED_RIGHT_PAD: 2,
+                REDUCED_COL_WIDTH: 1,
+                maskStr: window.maskStr || window.mask
+              });
+            }
+          }
+          
+          // Update window properties for compatibility
+          try{ window.FONT_SIZE = newSeqSize; }catch(_){ }
+          try{ window.FONT = newSeqFont; }catch(_){ }
+          try{ window.LABEL_FONT_SIZE = newLabelSize; }catch(_){ }
+          try{ window.LABEL_FONT = newLabelFont; }catch(_){ }
+          
+          console.info('Font sizes set to - sequence:', newSeqSize, 'label:', newLabelSize);
         }catch(e){ console.warn('updateFontSize failed', e); }
       }
-      if(fontIncreaseBtn) fontIncreaseBtn.addEventListener('click', ()=> updateFontSize(1));
-      if(fontDecreaseBtn) fontDecreaseBtn.addEventListener('click', ()=> updateFontSize(-1));
+      if(fontIncreaseBtn) {
+        fontIncreaseBtn.addEventListener('click', ()=> {
+          console.info('Increase button clicked');
+          updateFontSize(1);
+        });
+      }
+      if(fontDecreaseBtn) {
+        fontDecreaseBtn.addEventListener('click', ()=> {
+          console.info('Decrease button clicked');
+          updateFontSize(-1);
+        });
+      }
 
     // Search functionality
     let searchMatches = [];
