@@ -137,6 +137,22 @@
         this.maskEnabled = (typeof cfg.maskEnabled === 'boolean') ? cfg.maskEnabled : this.maskEnabled;
       }catch(_){ }
 
+      // Keep canvases sized when the container or scroller change size.
+      try{
+        const doResize = ()=>{ try{ this.setCanvasCSSSizes(); this.resizeBackings(); if(typeof this.scheduleRender === 'function') this.scheduleRender(); }catch(_){ } };
+        if(typeof ResizeObserver !== 'undefined'){
+          try{
+            this._resizeObserver = new ResizeObserver(doResize);
+            this._resizeObserver.observe(this.container);
+            if(this.scroller) this._resizeObserver.observe(this.scroller);
+          }catch(_){ window.addEventListener('resize', doResize); }
+        } else {
+          window.addEventListener('resize', doResize);
+        }
+        // run once to initialize sizes immediately
+        try{ doResize(); }catch(_){ }
+      }catch(_){ }
+
     }
 
       // Attach default interaction handlers for canvases and scroller.

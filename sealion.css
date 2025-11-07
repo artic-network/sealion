@@ -7,11 +7,13 @@
   --overview-height: 48px;
   --row-height: 20px;
   --consensus-height: 20px;
+  /* default viewer height; tweak this CSS variable to tune responsive sizing */
+  --sealion-height: 60vh;
 }
 
 /* 2x2 grid: corner | header
         labels | alignment */
-#sealion{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: calc(var(--overview-height) + var(--header-height) + var(--consensus-height)) 1fr; flex:1; min-height:0; }
+#sealion{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: calc(var(--overview-height) + var(--header-height) + var(--consensus-height)) 1fr; flex:1; min-height:0; height: var(--sealion-height); }
 #corner{ grid-column:1; grid-row:1; background:#f3f3f3; }
 #header{ grid-column:2; grid-row:1; background:#f3f3f3; overflow:hidden; display:flex; flex-direction:column; }
 #labels{ grid-column:1; grid-row:2; position:relative; overflow:hidden; }

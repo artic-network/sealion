@@ -921,14 +921,8 @@
   // The viewer implementation is authoritative; local legacy implementation removed.
 
   // Legacy rAF-based render loop removed — the SealionViewer instance is now
-  // authoritative for scheduling and drawing. Provide a tiny compatibility
-  // shim so external callers that still invoke `scheduleRender()` don't throw.
-  function scheduleRender(){
-    try{
-      if(viewer && typeof viewer.scheduleRender === 'function') return viewer.scheduleRender();
-    }catch(_){ }
-    // no-op when viewer is not present yet
-  }
+  // authoritative for scheduling and drawing. External code should call
+  // `viewer.scheduleRender()` (guarded) instead of a global shim.
 
   // initial sizing + measure
   // initial measure and sizing
