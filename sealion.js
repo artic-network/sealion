@@ -35,11 +35,35 @@
       // owns its markup and callers may interact only via the class API.
       try{
         const q = (sel) => this.container.querySelector(sel);
-        // Corner / labels-header
-        let corner = q('#corner');
-        if(!corner){ corner = document.createElement('div'); corner.id = 'corner'; this.container.appendChild(corner); }
+        // Left label column with three label canvases and divider
+        let labels = q('#labels');
+        if(!labels){ labels = document.createElement('div'); labels.id = 'labels'; this.container.appendChild(labels); }
+        
+        // Label canvas for outline (overview)
+        let labelsOutlineCanvas = q('#labels-outline-canvas');
+        if(!labelsOutlineCanvas){ labelsOutlineCanvas = document.createElement('canvas'); labelsOutlineCanvas.id = 'labels-outline-canvas'; labelsOutlineCanvas.className = 'labels-outline-canvas'; labels.appendChild(labelsOutlineCanvas); }
+        
+        // Label canvas for header
         let labelsHeaderCanvas = q('#labels-header-canvas');
-        if(!labelsHeaderCanvas){ labelsHeaderCanvas = document.createElement('canvas'); labelsHeaderCanvas.id = 'labels-header-canvas'; labelsHeaderCanvas.className = 'labels-header-canvas'; corner.appendChild(labelsHeaderCanvas); }
+        if(!labelsHeaderCanvas){ labelsHeaderCanvas = document.createElement('canvas'); labelsHeaderCanvas.id = 'labels-header-canvas'; labelsHeaderCanvas.className = 'labels-header-canvas'; labels.appendChild(labelsHeaderCanvas); }
+        
+        // Label canvas for consensus
+        let labelsConsensusCanvas = q('#labels-consensus-canvas');
+        if(!labelsConsensusCanvas){ labelsConsensusCanvas = document.createElement('canvas'); labelsConsensusCanvas.id = 'labels-consensus-canvas'; labelsConsensusCanvas.className = 'labels-consensus-canvas'; labels.appendChild(labelsConsensusCanvas); }
+        
+        // Inner container for main labels canvas
+        let leftInner = q('#left-inner');
+        if(!leftInner){ leftInner = document.createElement('div'); leftInner.id = 'left-inner'; labels.appendChild(leftInner); }
+        let labelsCanvas = q('#labels-canvas');
+        if(!labelsCanvas){ labelsCanvas = document.createElement('canvas'); labelsCanvas.id = 'labels-canvas'; labelsCanvas.className = 'labels-canvas'; leftInner.appendChild(labelsCanvas); }
+        
+        // Divider for resizing labels column (now extends full height)
+        let labelDivider = q('#label-divider');
+        if(!labelDivider){ labelDivider = document.createElement('div'); labelDivider.id = 'label-divider'; labelDivider.title = 'Drag to resize labels'; labels.appendChild(labelDivider); }
+        
+        // optional left spacer to mirror right spacer height for some layouts
+        let leftSpacer = q('#left-spacer');
+        if(!leftSpacer){ leftSpacer = document.createElement('div'); leftSpacer.id = 'left-spacer'; leftSpacer.style.display = 'none'; labels.appendChild(leftSpacer); }
 
         // Header area: overview, header ruler, consensus
         let header = q('#header');
@@ -50,19 +74,6 @@
         if(!headerCanvas){ headerCanvas = document.createElement('canvas'); headerCanvas.id = 'header-canvas'; headerCanvas.className = 'header-canvas'; header.appendChild(headerCanvas); }
         let consensusCanvas = q('#consensus-canvas');
         if(!consensusCanvas){ consensusCanvas = document.createElement('canvas'); consensusCanvas.id = 'consensus-canvas'; consensusCanvas.className = 'consensus-canvas'; header.appendChild(consensusCanvas); }
-
-        // Labels column + divider
-        let labels = q('#labels');
-        if(!labels){ labels = document.createElement('div'); labels.id = 'labels'; this.container.appendChild(labels); }
-        let leftInner = q('#left-inner');
-        if(!leftInner){ leftInner = document.createElement('div'); leftInner.id = 'left-inner'; labels.appendChild(leftInner); }
-        let labelsCanvas = q('#labels-canvas');
-        if(!labelsCanvas){ labelsCanvas = document.createElement('canvas'); labelsCanvas.id = 'labels-canvas'; labelsCanvas.className = 'labels-canvas'; leftInner.appendChild(labelsCanvas); }
-        let labelDivider = q('#label-divider');
-        if(!labelDivider){ labelDivider = document.createElement('div'); labelDivider.id = 'label-divider'; labelDivider.title = 'Drag to resize labels'; labels.appendChild(labelDivider); }
-        // optional left spacer to mirror right spacer height for some layouts
-        let leftSpacer = q('#left-spacer');
-        if(!leftSpacer){ leftSpacer = document.createElement('div'); leftSpacer.id = 'left-spacer'; leftSpacer.style.display = 'none'; labels.appendChild(leftSpacer); }
 
         // Alignment viewport: seq canvas and scrollable spacer
         let alignment = q('#alignment');
@@ -77,7 +88,9 @@
         if(!seqSpacer){ seqSpacer = document.createElement('div'); seqSpacer.id = 'seq-spacer'; seqInner.appendChild(seqSpacer); }
 
         // persist references onto the instance for later helpers
+        this.labelsOutlineCanvas = labelsOutlineCanvas;
         this.labelsHeaderCanvas = labelsHeaderCanvas;
+        this.labelsConsensusCanvas = labelsConsensusCanvas;
         this.overviewCanvas = overviewCanvas;
         this.headerCanvas = headerCanvas;
         this.consensusCanvas = consensusCanvas;
@@ -872,7 +885,9 @@
         const headerCanvas = this.headerCanvas || (opts && opts.headerCanvas) || (document.getElementById ? document.getElementById('header-canvas') : null);
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
+        const labelsOutlineCanvas = this.labelsOutlineCanvas || (opts && opts.labelsOutlineCanvas) || (document.getElementById ? document.getElementById('labels-outline-canvas') : null);
         const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
+        const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
         const seqSpacer = this.seqSpacer || (opts && opts.seqSpacer) || (document.getElementById ? document.getElementById('seq-spacer') : null);
         const leftSpacer = this.leftSpacer || (opts && opts.leftSpacer) || (document.getElementById ? document.getElementById('left-spacer') : null);
         const scroller = this.scroller || (opts && opts.scroller) || (document.getElementById ? document.getElementById('alignment-scroll') : null);
@@ -912,7 +927,9 @@
         if(headerCanvas){ headerCanvas.style.width = viewportWidth + 'px'; headerCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if(overviewCanvas){ const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.style.width = hdrW + 'px'; overviewCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if(consensusCanvas){ const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const cssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.style.width = cssWc + 'px'; consensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
+        if(labelsOutlineCanvas){ labelsOutlineCanvas.style.width = LABEL_WIDTH + 'px'; labelsOutlineCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if(labelsHeaderCanvas){ labelsHeaderCanvas.style.width = LABEL_WIDTH + 'px'; labelsHeaderCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
+        if(labelsConsensusCanvas){ labelsConsensusCanvas.style.width = LABEL_WIDTH + 'px'; labelsConsensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
       }catch(e){ console.warn('SealionViewer.setCanvasCSSSizes failed', e); }
     }
 
@@ -927,7 +944,9 @@
         const headerCanvas = this.headerCanvas || (opts && opts.headerCanvas) || (document.getElementById ? document.getElementById('header-canvas') : null);
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
+        const labelsOutlineCanvas = this.labelsOutlineCanvas || (opts && opts.labelsOutlineCanvas) || (document.getElementById ? document.getElementById('labels-outline-canvas') : null);
         const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
+        const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
 
         const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
         const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
@@ -945,7 +964,9 @@
         if(headerCanvas){ headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try{ headerCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(overviewCanvas){ const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.width = Math.max(1, Math.round(hdrCssW * pr)); overviewCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try{ overviewCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(consensusCanvas){ const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.width = Math.max(1, Math.round(hdrCssWc * pr)); consensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try{ consensusCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
-        if(labelsHeaderCanvas){ labelsHeaderCanvas.width = Math.max(1, Math.round(((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260) * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try{ labelsHeaderCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
+        if(labelsOutlineCanvas){ labelsOutlineCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsOutlineCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try{ labelsOutlineCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
+        if(labelsHeaderCanvas){ labelsHeaderCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try{ labelsHeaderCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
+        if(labelsConsensusCanvas){ labelsConsensusCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsConsensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try{ labelsConsensusCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
 
         // ensure integer geometry
         this.enforceIntegerGeometry();
@@ -1207,7 +1228,7 @@
     }
 
     // Draw the small labels header (left column title) into provided canvas.
-    // opts may provide: { HEADER_FONT, HEADER_HEIGHT, labelTextVertOffset, ROW_HEIGHT }
+    // opts may provide: { HEADER_FONT, HEADER_HEIGHT, labelTextVertOffset, ROW_HEIGHT, LABEL_FONT, CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT }
     drawLabelsHeader(canvas, visible, opts){
       if(!canvas) return;
       const ctx = this.ensureCanvasBacking(canvas);
@@ -1216,18 +1237,112 @@
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
       const HEADER_FONT = (opts && opts.HEADER_FONT) ? opts.HEADER_FONT : ((window && window.HEADER_FONT) ? window.HEADER_FONT : '12px sans-serif');
       const HEADER_HEIGHT = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : ((window && typeof window.HEADER_HEIGHT !== 'undefined') ? window.HEADER_HEIGHT : 30);
-      const labelTextVertOffset = (opts && typeof opts.labelTextVertOffset === 'number') ? opts.labelTextVertOffset : ((window && typeof window.labelTextVertOffset === 'number') ? window.labelTextVertOffset : Math.round(HEADER_HEIGHT/2));
-      const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+      const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
+      const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
+      const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
 
       ctx.clearRect(0,0, cssW, HEADER_HEIGHT);
-      ctx.font = HEADER_FONT;
-      ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#f3f3f3';
       ctx.fillRect(0,0, cssW, HEADER_HEIGHT);
+      
+      // Use label font for "consensus" text
+      ctx.font = LABEL_FONT;
+      ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#333';
-      const title = 'Labels';
-      const y = Math.round(HEADER_HEIGHT/2 + (labelTextVertOffset - ROW_HEIGHT/2));
-      ctx.fillText(title, 6, y);
+      
+      const title = 'consensus';
+      
+      // Calculate vertical centering like consensus row does
+      const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+      let ascent = 0, descent = 0;
+      try{
+        const m = ctx.measureText('Mg');
+        if(m && typeof m.actualBoundingBoxAscent === 'number'){
+          ascent = m.actualBoundingBoxAscent || 0;
+          descent = m.actualBoundingBoxDescent || 0;
+        }
+      }catch(e){}
+      const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
+      
+      // Measure text width for right justification
+      const textWidth = ctx.measureText(title).width;
+      const x = cssW - textWidth - 6; // 6px padding from right edge
+      
+      ctx.fillText(title, x, baselineY);
+    }
+
+    // Draw the outline label (left column title for overview) into provided canvas.
+    drawLabelsOutline(canvas, visible, opts){
+      if(!canvas) return;
+      const ctx = this.ensureCanvasBacking(canvas);
+      const pr = this.pr || (window.devicePixelRatio || 1);
+      const rect = canvas.getBoundingClientRect();
+      const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
+      const cssH = rect && rect.height ? rect.height : Math.max(1, canvas.height / pr);
+      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+
+      ctx.clearRect(0,0, cssW, cssH);
+      ctx.fillStyle = '#f3f3f3';
+      ctx.fillRect(0,0, cssW, cssH);
+      
+      // Use label font for text
+      ctx.font = LABEL_FONT;
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#333';
+      
+      const title = 'outline';
+      
+      // Vertical center
+      const y = cssH / 2;
+      
+      // Measure text width for right justification
+      const textWidth = ctx.measureText(title).width;
+      const x = cssW - textWidth - 6; // 6px padding from right edge
+      
+      ctx.fillText(title, x, y);
+    }
+
+    // Draw the consensus label (left column title for consensus) into provided canvas.
+    drawLabelsConsensus(canvas, visible, opts){
+      if(!canvas) return;
+      const ctx = this.ensureCanvasBacking(canvas);
+      const pr = this.pr || (window.devicePixelRatio || 1);
+      const rect = canvas.getBoundingClientRect();
+      const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
+      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+      const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
+      const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
+      const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
+
+      ctx.clearRect(0,0, cssW, CONSENSUS_HEIGHT);
+      ctx.fillStyle = '#f3f3f3';
+      ctx.fillRect(0,0, cssW, CONSENSUS_HEIGHT);
+      
+      // Use label font for "consensus" text
+      ctx.font = LABEL_FONT;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#333';
+      
+      const title = 'consensus';
+      
+      // Calculate vertical centering like consensus row does
+      const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+      let ascent = 0, descent = 0;
+      try{
+        const m = ctx.measureText('Mg');
+        if(m && typeof m.actualBoundingBoxAscent === 'number'){
+          ascent = m.actualBoundingBoxAscent || 0;
+          descent = m.actualBoundingBoxDescent || 0;
+        }
+      }catch(e){}
+      const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
+      
+      // Measure text width for right justification
+      const textWidth = ctx.measureText(title).width;
+      const x = cssW - textWidth - 6; // 6px padding from right edge
+      
+      ctx.fillText(title, x, baselineY);
     }
 
     // Draw visible labels into the label canvas backing (DPR-aware).
@@ -1835,7 +1950,9 @@
         };
 
         // draw headers/overview/consensus/labels/sequences in safe guards
-        try{ this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT }); }catch(e){ console.error('SealionViewer.drawLabelsHeader failed', e); }
+        try{ this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); }catch(e){ console.error('SealionViewer.drawLabelsOutline failed', e); }
+        try{ this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); }catch(e){ console.error('SealionViewer.drawLabelsHeader failed', e); }
+        try{ this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); }catch(e){ console.error('SealionViewer.drawLabelsConsensus failed', e); }
         try{ this.drawOverview(this.overviewCanvas, vis, commonOpts); }catch(e){ console.error('SealionViewer.drawOverview failed', e); }
         try{ this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); }catch(e){ console.error('SealionViewer.drawHeader failed', e); }
         try{ this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD })); }catch(e){ console.error('SealionViewer.drawConsensus failed', e); }

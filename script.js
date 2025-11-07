@@ -84,8 +84,7 @@
           // is the consensus; rows that happen to equal the consensus should be treated
           // the same as other sequences (no special highlight).
           refreshRefStr();
-          // enable reference colouring UI so effect is visible
-          if(refToggle){ try{ refToggle.checked = true; }catch(_){ } }
+          // enable reference colouring so effect is visible
           refModeEnabled = true;
           try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
           console.info('Set reference to consensus');
@@ -252,7 +251,8 @@
   // divider element for resizing the labels column
   const labelDivider = document.getElementById('label-divider');
   const maskToggle = document.getElementById('mask-toggle');
-  const refToggle = document.getElementById('ref-toggle');
+  const colourAllBtn = document.getElementById('colour-all-btn');
+  const colourDiffBtn = document.getElementById('colour-diff-btn');
 
   // Visual constants (fonts, sizes, colors) are provided by the SealionViewer
   // instance and its `DEFAULTS`. Use `getViewerProp(name, fallback)` to read
@@ -285,7 +285,7 @@
   const CONSENSUS_BOTTOM_PAD = 8; // px
   // Mask compression is always enabled; start with a mask of all '1's (no actual compression)
   let maskEnabled = true;
-  let refModeEnabled = refToggle ? !!refToggle.checked : false;
+  let refModeEnabled = false;
   // Helper: modify the global `mask` string for a set of columns and animate to the new offsets.
   function setMaskBitsForCols(colsSet, bitChar){
     // Viewer-only API: the SealionViewer now owns mask edits. If the viewer
@@ -410,11 +410,24 @@
         }catch(e){ console.warn('apply-constant-mask failed', e); }
       });
     }
-  if(refToggle){
-    refToggle.addEventListener('change', ()=>{
-      refModeEnabled = !!refToggle.checked;
+  
+  // Colour all sites button
+  if(colourAllBtn){
+    colourAllBtn.addEventListener('click', ()=>{
+      refModeEnabled = false;
+      try{ window.__refModeEnabled = false; }catch(_){ }
+      console.info('Colour mode: all sites');
+      try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+    });
+  }
+
+  // Colour differences only button
+  if(colourDiffBtn){
+    colourDiffBtn.addEventListener('click', ()=>{
+      refModeEnabled = true;
       refreshRefStr();
-      try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
+      try{ window.__refModeEnabled = true; }catch(_){ }
+      console.info('Colour mode: differences only');
       try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     });
   }
@@ -528,6 +541,56 @@
     });
   }
 
+  // Wire up expand all button
+  const expandAllBtn = document.getElementById('expand-all-btn');
+  if(expandAllBtn){
+    expandAllBtn.addEventListener('click', ()=>{
+      try{
+        console.info('Expand all button clicked');
+        if(!viewer || typeof viewer.setMaskBitsForCols !== 'function'){
+          console.error('Viewer or setMaskBitsForCols not available');
+          return;
+        }
+        
+        // Create a set of all column indices
+        const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
+        const allCols = new Set();
+        for(let i = 0; i < seqLen; i++){
+          allCols.add(i);
+        }
+        
+        // Use setMaskBitsForCols to expand all columns
+        viewer.setMaskBitsForCols(allCols, '1');
+        console.info('expand-all: expanded all ' + seqLen + ' sites');
+      }catch(e){ console.warn('expand-all failed', e); }
+    });
+  }
+
+  // Wire up collapse all button
+  const collapseAllBtn = document.getElementById('collapse-all-btn');
+  if(collapseAllBtn){
+    collapseAllBtn.addEventListener('click', ()=>{
+      try{
+        console.info('Collapse all button clicked');
+        if(!viewer || typeof viewer.setMaskBitsForCols !== 'function'){
+          console.error('Viewer or setMaskBitsForCols not available');
+          return;
+        }
+        
+        // Create a set of all column indices
+        const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
+        const allCols = new Set();
+        for(let i = 0; i < seqLen; i++){
+          allCols.add(i);
+        }
+        
+        // Use setMaskBitsForCols to collapse all columns
+        viewer.setMaskBitsForCols(allCols, '0');
+        console.info('collapse-all: collapsed all ' + seqLen + ' sites');
+      }catch(e){ console.warn('collapse-all failed', e); }
+    });
+  }
+
     // Button to set the currently selected sequence as the reference
     const setRefBtn = document.getElementById('set-ref-btn');
     if(setRefBtn){
@@ -544,8 +607,7 @@
           refreshRefStr();
           // Ensure the chosen row is used as the reference index (avoid matching the first identical sequence elsewhere)
           try{ refIndex = idx; window.__refIndex = refIndex; }catch(_){ }
-          // enable reference colouring UI so effect is visible
-          if(refToggle){ try{ refToggle.checked = true; }catch(_){ } }
+          // enable reference colouring so effect is visible
           refModeEnabled = true;
           try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
           console.info('Set reference to row', idx);

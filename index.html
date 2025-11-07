@@ -68,6 +68,17 @@
                           <i class="bi bi-filter"></i> Constant (allow N & -)
                         </button>
                       </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <button class="dropdown-item" id="expand-all-btn" type="button">
+                          <i class="bi bi-arrows-expand"></i> Expand all
+                        </button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item" id="collapse-all-btn" type="button">
+                          <i class="bi bi-arrows-collapse"></i> Collapse all
+                        </button>
+                      </li>
                     </ul>
                   </div>
                 </div>
@@ -80,12 +91,14 @@
                 </a>
                 <ul class="dropdown-menu" aria-labelledby="refDropdown">
                   <li>
-                    <div class="form-check px-3 py-1">
-                      <input class="form-check-input" type="checkbox" id="ref-toggle">
-                      <label class="form-check-label" for="ref-toggle">
-                        Difference to reference
-                      </label>
-                    </div>
+                    <button class="dropdown-item" id="colour-all-btn" type="button">
+                      <i class="bi bi-palette-fill"></i> Colour all sites
+                    </button>
+                  </li>
+                  <li>
+                    <button class="dropdown-item" id="colour-diff-btn" type="button">
+                      <i class="bi bi-palette"></i> Colour differences only
+                    </button>
                   </li>
                   <li><hr class="dropdown-divider"></li>
                   <li>
