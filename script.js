@@ -86,7 +86,8 @@
           refreshRefStr();
           // enable reference colouring so effect is visible
           refModeEnabled = true;
-          try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
+          try{ window.refModeEnabled = true; }catch(_){ }
+          if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
           console.info('Set reference to consensus');
           try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
         }catch(e){ console.warn('diff-consensus failed', e); }
@@ -415,7 +416,8 @@
   if(colourAllBtn){
     colourAllBtn.addEventListener('click', ()=>{
       refModeEnabled = false;
-      try{ window.__refModeEnabled = false; }catch(_){ }
+      try{ window.refModeEnabled = false; }catch(_){ }
+      if(viewer){ try{ viewer.refModeEnabled = false; }catch(_){ } }
       console.info('Colour mode: all sites');
       try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     });
@@ -424,9 +426,22 @@
   // Colour differences only button
   if(colourDiffBtn){
     colourDiffBtn.addEventListener('click', ()=>{
+      // Check if a reference is set, if not, set consensus as reference
+      const hasReference = !!(window && window.reference);
+      if(!hasReference){
+        console.info('No reference set, using consensus');
+        const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
+        if(cons){
+          try{ window.reference = String(cons); }catch(_){ reference = String(cons); }
+        } else {
+          console.warn('No consensus available to set as reference');
+        }
+      }
+      
       refModeEnabled = true;
       refreshRefStr();
-      try{ window.__refModeEnabled = true; }catch(_){ }
+      try{ window.refModeEnabled = true; }catch(_){ }
+      if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
       console.info('Colour mode: differences only');
       try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     });
@@ -609,7 +624,8 @@
           try{ refIndex = idx; window.__refIndex = refIndex; }catch(_){ }
           // enable reference colouring so effect is visible
           refModeEnabled = true;
-          try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
+          try{ window.refModeEnabled = true; }catch(_){ }
+          if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
           console.info('Set reference to row', idx);
           try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
         }catch(e){ console.warn('set-ref failed', e); }
