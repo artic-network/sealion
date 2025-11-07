@@ -12,10 +12,10 @@
 }
 
 /* 2-column grid: labels | header+alignment */
-#sealion{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: 1fr; flex:1; min-height:0; height: var(--sealion-height); }
+#sealion{ display:grid; grid-template-columns: var(--label-width) 1fr; grid-template-rows: 1fr; flex:1; min-height:0; }
 #labels{ grid-column:1; grid-row:1; background:#f3f3f3; display:flex; flex-direction:column; position:relative; overflow:hidden; }
 #header{ grid-column:2; grid-row:1; background:#f3f3f3; overflow:hidden; display:flex; flex-direction:column; }
-#alignment{ grid-column:2; grid-row:1; margin-top: calc(var(--overview-height) + var(--header-height) + var(--consensus-height)); position:relative; overflow:hidden; }
+#alignment{ grid-column:2; grid-row:1; margin-top: calc(var(--overview-height) + var(--header-height) + var(--consensus-height)); position:relative; overflow:visible; height: calc(100% - var(--overview-height) - var(--header-height) - var(--consensus-height)); }
 
 /* allow grid children to shrink below their content intrinsic size
   so the grid keeps to viewport space and the inner scrollers handle overflow */
@@ -23,7 +23,7 @@
 
 /* make inner containers fill their grid cells so canvases are viewport-backed
   and scrolling happens inside the scroll containers */
-#labels, #alignment, #header { height: 100%; }
+#labels, #header { height: 100%; }
 #left-inner, #seq-inner { height: 100%; box-sizing: border-box; }
 
 /* Labels column structure with three header canvases stacked at top */
