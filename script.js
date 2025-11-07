@@ -64,15 +64,8 @@
     }catch(e){}
   }
 
-  // Safe scheduler: prefer viewer.scheduleRender if available, otherwise call
-  // the legacy scheduleRender function if it exists. Use `typeof` checks to
-  // avoid ReferenceError when `scheduleRender` is not yet defined.
-  function safeScheduleRender(){
-    try{
-      if(viewer && typeof viewer.scheduleRender === 'function') return viewer.scheduleRender();
-      if(typeof scheduleRender === 'function') return scheduleRender();
-    }catch(_){ }
-  }
+  // Note: scheduling is now handled by SealionViewer; older safeScheduleRender
+  // helper removed in favor of direct, guarded calls to `viewer.scheduleRender()`.
 
 
     // Button to set the consensus sequence as the reference and clear any selected row
@@ -96,7 +89,7 @@
           refModeEnabled = true;
           try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
           console.info('Set reference to consensus');
-          safeScheduleRender();
+          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
         }catch(e){ console.warn('diff-consensus failed', e); }
       });
     }
@@ -241,7 +234,7 @@
           try{ if(typeof viewer.setCanvasCSSSizes === 'function') viewer.setCanvasCSSSizes(); }catch(_){ }
           try{ if(typeof viewer.resizeBackings === 'function') viewer.resizeBackings(); }catch(_){ }
           try{ const _font = getViewerProp('FONT', '14px monospace'); const _rowH = getViewerProp('ROW_HEIGHT', 20); if(typeof viewer.measureTextVerticalOffset === 'function') viewer.measureTextVerticalOffset({ FONT: _font, ROW_HEIGHT: _rowH }); }catch(_){ }
-          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); else safeScheduleRender(); }catch(_){ }
+          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
           // Hide any initialization overlay now that the viewer was created
           try{ setStatus(null); }catch(_){ }
         }catch(e){ console.warn('ensureViewer: initial build/render failed', e); }
@@ -307,29 +300,15 @@
   // Helper to obtain authoritative column offsets from the SealionViewer instance.
   // The viewer owns the offsets; script-level code should consult the viewer
   // rather than maintain a separate global copy.
-  function getViewerColOffsets(){
-    try{ return (viewer && viewer.colOffsets) ? viewer.colOffsets : []; }catch(_){ return []; }
-  }
-  // Ask the viewer to rebuild and publish its colOffsets when layout-affecting
-  // measurements change (CHAR_WIDTH, mask, etc.). This replaces the legacy
-  // syncColOffsetsFromViewer helper which maintained a separate copy.
-  function ensureViewerColOffsetsBuilt(){
-    try{
-      if(viewer && typeof viewer.buildColOffsetsFor === 'function'){
-        const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth');
-        const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD);
-        const _REDUCED_COL_WIDTH = getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH);
-        const out = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: _CHAR_WIDTH, EXPANDED_RIGHT_PAD: _EXPANDED_RIGHT_PAD, REDUCED_COL_WIDTH: _REDUCED_COL_WIDTH, maskStr: maskStr });
-        try{ viewer.colOffsets = out; }catch(_){ }
-      }
-    }catch(_){ }
-  }
+  // Note: `colOffsets` are now owned by the `viewer` instance. Use
+  // `(viewer && viewer.colOffsets) ? viewer.colOffsets : []` to access them
+  // and call `viewer.buildColOffsetsFor(...)` directly when a rebuild is required.
   // helper: given an absolute CSS offset, find the column index containing that x
   function colIndexFromOffset(offset){
     try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.colIndexFromCssOffset === 'function') return v.colIndexFromCssOffset(offset); }catch(_){ }
       if(offset <= 0) return 0;
       const last = maxSeqLen;
-      const co = getViewerColOffsets();
+  const co = (viewer && viewer.colOffsets) ? viewer.colOffsets : [];
       if(!co || co.length === 0){
         const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth');
         const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD);
@@ -394,7 +373,7 @@
       refModeEnabled = !!refToggle.checked;
       refreshRefStr();
       try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
-  safeScheduleRender();
+      try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     });
   }
 
@@ -470,7 +449,7 @@
           refModeEnabled = true;
           try{ window.__refModeEnabled = !!refModeEnabled; }catch(_){ }
           console.info('Set reference to row', idx);
-          safeScheduleRender();
+          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
         }catch(e){ console.warn('set-ref failed', e); }
       });
     }
@@ -491,7 +470,7 @@
     setCanvasCSSSizes();
           measureTextVerticalOffset();
           resizeBackings();
-          safeScheduleRender();
+          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
           console.info('FONT_SIZE set to', FONT_SIZE);
         }catch(e){ console.warn('updateFontSize failed', e); }
       }
@@ -563,12 +542,12 @@
 
   // Instead of setting a huge CSS width on the sequence canvas, use a spacer element to define scroll width
   // Ensure column offsets are synced from the viewer and compute actual total width
-  try{ ensureViewerColOffsetsBuilt(); }catch(_){ }
+  try{ if(viewer && typeof viewer.buildColOffsetsFor === 'function'){ try{ viewer.colOffsets = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), REDUCED_COL_WIDTH: getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH), maskStr: maskStr }); }catch(_){ } } }catch(_){ }
   // colOffsets may be in backing pixels when transformations were applied; compute a
   // CSS-pixel total width by dividing by devicePixelRatio when appropriate so the
   // overview scale matches the visible CSS width.
   const pr_local = window.devicePixelRatio || 1;
-  const _co = getViewerColOffsets();
+  const _co = (viewer && viewer.colOffsets) ? viewer.colOffsets : [];
   const rawTotal = (_co && _co.length > 0) ? (_co[maxSeqLen] || (_co[_co.length - 1] || 0)) : (maxSeqLen * (getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth') + getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD)));
   // colOffsets are maintained in CSS pixels; use rawTotal directly for spacer width
   const totalWidth = rawTotal;
@@ -620,7 +599,7 @@
     // round up to integer CSS pixels to avoid underestimation
     const newCharWidth = Math.max(1, Math.ceil(w));
     // Rebuild offsets (CHAR_WIDTH changed) and sync to viewer if present
-  try{ setViewerProp('CHAR_WIDTH', newCharWidth, 'charWidth'); ensureViewerColOffsetsBuilt(); }catch(_){ }
+  try{ setViewerProp('CHAR_WIDTH', newCharWidth, 'charWidth'); try{ if(viewer && typeof viewer.buildColOffsetsFor === 'function'){ try{ viewer.colOffsets = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), REDUCED_COL_WIDTH: getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH), maskStr: maskStr }); }catch(_){ } } }catch(_){ } }catch(_){ }
     try{ const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null; if(v && typeof v.charWidth !== 'undefined'){ try{ v.charWidth = newCharWidth; }catch(_){ } } }catch(_){ }
   }
 
@@ -766,7 +745,22 @@
     // a measurement in CSS pixels. The visible seqCanvas context may have a
     // DPR transform applied which would return values in backing pixels, causing
     // CHAR_WIDTH to be inflated by devicePixelRatio.
-  try{ const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null; if(v && typeof v.measureCharWidthFromReal === 'function'){ const val = v.measureCharWidthFromReal(FONT); CHAR_WIDTH = val; try{ if(v && typeof v.charWidth !== 'undefined') v.charWidth = CHAR_WIDTH; }catch(_){ } try{ ensureViewerColOffsetsBuilt(); }catch(_){ } return; } }catch(_){ }
+  try{
+    const v = (viewer || (window && window.viewer)) ? (viewer || window.viewer) : null;
+    if(v && typeof v.measureCharWidthFromReal === 'function'){
+      const val = v.measureCharWidthFromReal(FONT);
+      CHAR_WIDTH = val;
+      try{ if(v && typeof v.charWidth !== 'undefined') v.charWidth = CHAR_WIDTH; }catch(_){ }
+      try{
+        if(viewer && typeof viewer.buildColOffsetsFor === 'function'){
+          try{
+            viewer.colOffsets = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), REDUCED_COL_WIDTH: getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH), maskStr: maskStr });
+          }catch(_){ }
+        }
+      }catch(_){ }
+      return;
+    }
+  }catch(_){ }
     try{
       const off = document.createElement('canvas').getContext('2d');
       off.font = getViewerProp('FONT', FONT);
@@ -787,7 +781,11 @@
       }catch(_){ /* nothing */ }
     }
   // CHAR_WIDTH changed -> ask viewer to rebuild col offsets
-  try{ ensureViewerColOffsetsBuilt(); }catch(_){ }
+  try{
+    if(viewer && typeof viewer.buildColOffsetsFor === 'function'){
+      try{ viewer.colOffsets = viewer.buildColOffsetsFor(maskEnabled, { maxSeqLen: maxSeqLen, CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), REDUCED_COL_WIDTH: getViewerProp('REDUCED_COL_WIDTH', REDUCED_COL_WIDTH), maskStr: maskStr }); }catch(_){ }
+    }
+  }catch(_){ }
     // ensure viewer sees updated char width as well
     try{ const v = (typeof viewer !== 'undefined' && viewer) ? viewer : (window && window.viewer) ? window.viewer : null; if(v && typeof v.charWidth !== 'undefined'){ try{ v.charWidth = CHAR_WIDTH; }catch(_){ } } }catch(_){ }
   }
@@ -883,7 +881,7 @@
     // compute column range: prefer viewer offsets when available, otherwise approximate via char width
     let rawFirstCol = 0, rawLastCol = Math.max(0, Math.min(maxSeqLen - 1, Math.floor(viewW / Math.max(1, getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth')))));
     try{
-      const co = getViewerColOffsets();
+      const co = (viewer && viewer.colOffsets) ? viewer.colOffsets : [];
       if(co && co.length > 0){
         // binary-search like approach via colIndexFromOffset helper
         rawFirstCol = colIndexFromOffset(scrollLeft);
@@ -952,9 +950,9 @@
       CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
       try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
       setCanvasCSSSizes();
-      measureTextVerticalOffset();
-      resizeBackings();
-          safeScheduleRender();
+    measureTextVerticalOffset();
+    resizeBackings();
+    try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     }catch(e){
       console.error('Initialization rAF handler failed', e);
     }finally{
@@ -968,11 +966,11 @@
   const observer = new ResizeObserver(()=>{
     clearTimeout(resizeDebounce);
     resizeDebounce = setTimeout(()=>{
-      measureCharWidthFromReal();
-      setCanvasCSSSizes();
-      measureTextVerticalOffset();
-      resizeBackings();
-      safeScheduleRender();
+  measureCharWidthFromReal();
+  setCanvasCSSSizes();
+  measureTextVerticalOffset();
+  resizeBackings();
+  try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
     }, 50);
   });
   if(scroller) observer.observe(scroller);
@@ -1001,7 +999,7 @@
       LABEL_WIDTH = nw;
       // sync CSS var and apply immediate layout changes
       try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
-    try{ setCanvasCSSSizes(); resizeBackings(); safeScheduleRender(); }catch(_){ }
+  try{ setCanvasCSSSizes(); resizeBackings(); try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ } }catch(_){ }
     });
     window.addEventListener('mouseup', (e)=>{
       if(!isLabelDragging) return;
@@ -1010,7 +1008,7 @@
       // final apply and persist preference
       try{ document.documentElement.style.setProperty('--label-width', LABEL_WIDTH + 'px'); }catch(_){ }
       try{ localStorage.setItem('sealion_label_width', String(LABEL_WIDTH)); }catch(_){ }
-    try{ setCanvasCSSSizes(); resizeBackings(); safeScheduleRender(); }catch(_){ }
+  try{ setCanvasCSSSizes(); resizeBackings(); try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ } }catch(_){ }
     });
     // restore persisted width if present
     try{
@@ -1078,7 +1076,7 @@
   function drawColumnSelectionOverlay(visible){
     try{
       const sel = getSelectedCols();
-      viewer.drawColumnSelectionOverlay(seqCanvas, visible, { CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), selectedCols: sel, colOffsets: getViewerColOffsets() });
+  viewer.drawColumnSelectionOverlay(seqCanvas, visible, { CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), selectedCols: sel, colOffsets: ((viewer && viewer.colOffsets) ? viewer.colOffsets : []) });
     }catch(e){ console.error('viewer.drawColumnSelectionOverlay failed', e); }
   }
 
@@ -1162,7 +1160,7 @@
   window.addEventListener('resize', ()=>{
     setCanvasCSSSizes();
     resizeBackings();
-    safeScheduleRender();
+    try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
   });
 
   // compute and expose constantMask at initialization
