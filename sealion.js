@@ -35,15 +35,21 @@
       // owns its markup and callers may interact only via the class API.
       try{
         const q = (sel) => this.container.querySelector(sel);
+        // Ensure a grid wrapper exists so CSS layout (style.css) applies correctly.
+        // Older versions appended children directly into the container which
+        // broke the expected CSS grid. Create or reuse a `#grid` element and
+        // append our structural children into it.
+        let grid = q('#grid');
+        if(!grid){ grid = document.createElement('div'); grid.id = 'grid'; this.container.appendChild(grid); }
         // Corner / labels-header
-        let corner = q('#corner');
-        if(!corner){ corner = document.createElement('div'); corner.id = 'corner'; this.container.appendChild(corner); }
+  let corner = q('#corner');
+  if(!corner){ corner = document.createElement('div'); corner.id = 'corner'; grid.appendChild(corner); }
         let labelsHeaderCanvas = q('#labels-header-canvas');
-        if(!labelsHeaderCanvas){ labelsHeaderCanvas = document.createElement('canvas'); labelsHeaderCanvas.id = 'labels-header-canvas'; labelsHeaderCanvas.className = 'labels-header-canvas'; corner.appendChild(labelsHeaderCanvas); }
+  if(!labelsHeaderCanvas){ labelsHeaderCanvas = document.createElement('canvas'); labelsHeaderCanvas.id = 'labels-header-canvas'; labelsHeaderCanvas.className = 'labels-header-canvas'; corner.appendChild(labelsHeaderCanvas); }
 
         // Header area: overview, header ruler, consensus
-        let header = q('#header');
-        if(!header){ header = document.createElement('div'); header.id = 'header'; this.container.appendChild(header); }
+  let header = q('#header');
+  if(!header){ header = document.createElement('div'); header.id = 'header'; grid.appendChild(header); }
         let overviewCanvas = q('#overview-canvas');
         if(!overviewCanvas){ overviewCanvas = document.createElement('canvas'); overviewCanvas.id = 'overview-canvas'; overviewCanvas.className = 'overview-canvas'; header.appendChild(overviewCanvas); }
         let headerCanvas = q('#header-canvas');
@@ -52,8 +58,8 @@
         if(!consensusCanvas){ consensusCanvas = document.createElement('canvas'); consensusCanvas.id = 'consensus-canvas'; consensusCanvas.className = 'consensus-canvas'; header.appendChild(consensusCanvas); }
 
         // Labels column + divider
-        let labels = q('#labels');
-        if(!labels){ labels = document.createElement('div'); labels.id = 'labels'; this.container.appendChild(labels); }
+  let labels = q('#labels');
+  if(!labels){ labels = document.createElement('div'); labels.id = 'labels'; grid.appendChild(labels); }
         let leftInner = q('#left-inner');
         if(!leftInner){ leftInner = document.createElement('div'); leftInner.id = 'left-inner'; labels.appendChild(leftInner); }
         let labelsCanvas = q('#labels-canvas');
@@ -65,8 +71,8 @@
         if(!leftSpacer){ leftSpacer = document.createElement('div'); leftSpacer.id = 'left-spacer'; leftSpacer.style.display = 'none'; labels.appendChild(leftSpacer); }
 
         // Alignment viewport: seq canvas and scrollable spacer
-        let alignment = q('#alignment');
-        if(!alignment){ alignment = document.createElement('div'); alignment.id = 'alignment'; this.container.appendChild(alignment); }
+  let alignment = q('#alignment');
+  if(!alignment){ alignment = document.createElement('div'); alignment.id = 'alignment'; grid.appendChild(alignment); }
         let seqCanvas = q('#seq-canvas');
         if(!seqCanvas){ seqCanvas = document.createElement('canvas'); seqCanvas.id = 'seq-canvas'; seqCanvas.className = 'seq-canvas'; alignment.appendChild(seqCanvas); }
         let scroller = q('#alignment-scroll');
@@ -101,6 +107,25 @@
       if(alignment) this.alignment = alignment;
   // default mask-enabled flag (matches legacy script.js initial state)
   this.maskEnabled = true;
+
+        // Debug wrapper for colOffsets: log every assignment so we can trace
+        // who/when overwrites the computed offsets during staged migration.
+        try{
+          Object.defineProperty(this, 'colOffsets', {
+            configurable: true,
+            enumerable: true,
+            get: function(){ return this._colOffsets || []; },
+            set: function(v){
+              try{
+                // include a short stack snippet to help locate call sites that assign colOffsets
+                const raw = (new Error()).stack || '';
+                const stack = String(raw).split('\n').slice(1,4).map(s=>s.trim()).join(' | ');
+                console.debug('SealionViewer: colOffsets set', { len: (v && v.length) ? v.length : 0, stack });
+              }catch(_){ try{ console.debug('SealionViewer: colOffsets set', { len: (v && v.length) ? v.length : 0 }); }catch(__){ } }
+              try{ this._colOffsets = v; }catch(_){ }
+            }
+          });
+        }catch(_){ }
 
       // Merge provided options with class defaults and set instance-level
       // visual constants. This centralizes fonts, sizes, colours and other
@@ -160,17 +185,18 @@
   // Persist scroller onto the instance so other methods can reference it
   // without relying on closure variables. This also makes debugging
   // and inspection from the console easier (window.viewer.scroller).
-  try{ this.scroller = scroller; }catch(_){ }
-  // store canvases and spacers for sizing/resizing helpers
-  try{ this.headerCanvas = headerCanvas; }catch(_){ }
-  try{ this.seqCanvas = seqCanvas; }catch(_){ }
-  try{ this.labelCanvas = labelCanvas; }catch(_){ }
-  try{ this.consensusCanvas = consensusCanvas; }catch(_){ }
-  try{ this.overviewCanvas = overviewCanvas; }catch(_){ }
-  try{ this.labelsHeaderCanvas = (opts && opts.labelsHeaderCanvas) ? opts.labelsHeaderCanvas : null; }catch(_){ }
-  try{ this.seqSpacer = (opts && opts.seqSpacer) ? opts.seqSpacer : null; }catch(_){ }
-  try{ this.leftSpacer = (opts && opts.leftSpacer) ? opts.leftSpacer : null; }catch(_){ }
-  try{ this.leftScroll = (opts && opts.leftScroll) ? opts.leftScroll : null; }catch(_){ }
+  try{ if(scroller) this.scroller = scroller; }catch(_){ }
+  // store canvases and spacers for sizing/resizing helpers, but only overwrite
+  // existing instance-held canvases if the caller explicitly provided them.
+  try{ if(headerCanvas) this.headerCanvas = headerCanvas; }catch(_){ }
+  try{ if(seqCanvas) this.seqCanvas = seqCanvas; }catch(_){ }
+  try{ if(labelCanvas) this.labelCanvas = labelCanvas; }catch(_){ }
+  try{ if(consensusCanvas) this.consensusCanvas = consensusCanvas; }catch(_){ }
+  try{ if(overviewCanvas) this.overviewCanvas = overviewCanvas; }catch(_){ }
+  try{ if(opts && opts.labelsHeaderCanvas) this.labelsHeaderCanvas = opts.labelsHeaderCanvas; }catch(_){ }
+  try{ if(opts && opts.seqSpacer) this.seqSpacer = opts.seqSpacer; }catch(_){ }
+  try{ if(opts && opts.leftSpacer) this.leftSpacer = opts.leftSpacer; }catch(_){ }
+  try{ if(opts && opts.leftScroll) this.leftScroll = opts.leftScroll; }catch(_){ }
 
   // Light-weight instrumentation: report which handlers were attached
   try{ console.info('SealionViewer: attachInteractionHandlers', { headerCanvas: !!headerCanvas, seqCanvas: !!seqCanvas, labelCanvas: !!labelCanvas, consensusCanvas: !!consensusCanvas, overviewCanvas: !!overviewCanvas, scroller: !!scroller }); }catch(_){ }
@@ -696,7 +722,19 @@
         this.charWidth = val;
         try{ if(window) window.CHAR_WIDTH = val; }catch(_){ }
         if(opts && opts.apply){
-          try{ const colOffsets = this.buildColOffsetsFor((opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true, opts); this.colOffsets = colOffsets; }catch(_){ }
+          // Only build col offsets when we have a reliable maxSeqLen available.
+          // Avoid building with a missing alignment which yields maxSeqLen=0 and
+          // causes early, incorrect colOffsets to be published (race during init).
+          try{
+            const maxSeq = (opts && Number.isFinite(opts.maxSeqLen)) ? opts.maxSeqLen : ((this.alignment && this.alignment.length) ? Math.max(0, ...this.alignment.map(r=> (r && r.sequence) ? r.sequence.length : 0)) : ((window && typeof window.maxSeqLen === 'number') ? window.maxSeqLen : null));
+            if(Number.isFinite(maxSeq) && maxSeq > 0){
+              const colOffsets = this.buildColOffsetsFor((opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true, Object.assign({}, opts, { maxSeqLen: maxSeq }));
+              try{ this.colOffsets = colOffsets; }catch(_){ }
+            } else {
+              // Defer building colOffsets until later when alignment/maxSeqLen is known.
+              try{ console.debug('SealionViewer.measureCharWidth: skipping colOffsets build (no maxSeqLen yet)', { computedMaxSeq: maxSeq }); }catch(_){ }
+            }
+          }catch(_){ }
           try{ this.setCanvasCSSSizes(opts); }catch(_){ }
           try{ this.resizeBackings(opts); }catch(_){ }
           try{ if(typeof this.scheduleRender === 'function') this.scheduleRender(); }catch(_){ }
@@ -812,8 +850,9 @@
         if(consensusCanvas){ const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.width = Math.max(1, Math.round(hdrCssWc * pr)); consensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try{ consensusCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
         if(labelsHeaderCanvas){ labelsHeaderCanvas.width = Math.max(1, Math.round(((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260) * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try{ labelsHeaderCanvas.getContext('2d').setTransform(pr,0,0,pr,0,0); }catch(_){ } }
 
-        // ensure integer geometry
+        // ensure integer geometry and post-resize diagnostics
         this.enforceIntegerGeometry();
+        this.logLayoutDiagnostics('resizeBackings');
       }catch(e){ console.warn('SealionViewer.resizeBackings failed', e); }
     }
 
@@ -861,7 +900,40 @@
       }catch(e){ console.warn('SealionViewer.enforceIntegerGeometry failed', e); }
     }
 
-    // layout diagnostics removed
+    // Layout diagnostics helper similar to script.js.logLayoutDiagnostics
+    logLayoutDiagnostics(ctxLabel){
+      try{
+        const scroller = this.scroller || document.getElementById('alignment-scroll');
+        const seqInner = (this.seqInner) ? this.seqInner : (document.getElementById ? document.getElementById('seq-inner') : null);
+        const seqSpacer = this.seqSpacer || (document.getElementById ? document.getElementById('seq-spacer') : null);
+        const seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
+        const labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
+        const pr = window.devicePixelRatio || 1;
+        const rs = scroller ? scroller.getBoundingClientRect() : { width:0, height:0 };
+        const si = seqInner ? seqInner.getBoundingClientRect() : { width:0, height:0 };
+        const sp = seqSpacer ? seqSpacer.getBoundingClientRect() : { width:0, height:0 };
+        const sc = seqCanvas ? seqCanvas.getBoundingClientRect() : { width:0, height:0 };
+        const lc = labelCanvas ? labelCanvas.getBoundingClientRect() : { width:0, height:0 };
+        const info = {
+          ctx: ctxLabel,
+          rightScrollClient: scroller ? { w: scroller.clientWidth, h: scroller.clientHeight } : null,
+          rightScrollScroll: scroller ? { top: scroller.scrollTop, height: scroller.scrollHeight } : null,
+          rightScrollRect: { w: Math.round(rs.width), h: Math.round(rs.height) },
+          seqInnerRect: { w: Math.round(si.width), h: Math.round(si.height) },
+          seqSpacerRect: { w: Math.round(sp.width), h: Math.round(sp.height) },
+          seqCanvasCss: { w: Math.round(sc.width), h: Math.round(sc.height) },
+          seqCanvasBacking: seqCanvas ? { w: seqCanvas.width, h: seqCanvas.height } : null,
+          labelCanvasCss: { w: Math.round(lc.width), h: Math.round(lc.height) },
+          labelCanvasBacking: labelCanvas ? { w: labelCanvas.width, h: labelCanvas.height } : null,
+          leftScrollScroll: (this.leftScroll) ? { top: this.leftScroll.scrollTop, height: this.leftScroll.scrollHeight } : null,
+          pr: pr,
+          ROW_HEIGHT: (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20,
+          HEADER_HEIGHT: (window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30,
+          CHAR_WIDTH: this.charWidth || 8
+        };
+        console.info('LAYOUT-DIAG', info);
+      }catch(e){ console.warn('SealionViewer.logLayoutDiagnostics failed', e); }
+    }
 
     // Ensure a canvas has a DPR-correct backing and that its 2D context is
     // transformed so future drawing code may operate in CSS pixels.
@@ -1450,7 +1522,9 @@
     buildColOffsetsFor(maskEnabled, opts){
       try{
         opts = opts || {};
+        try{ console.debug('SealionViewer.buildColOffsetsFor called', { maskEnabled: !!maskEnabled, opts: opts }); }catch(_){ }
         const maxSeqLen = (typeof opts.maxSeqLen === 'number') ? opts.maxSeqLen : Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0);
+        try{ console.debug('SealionViewer.buildColOffsetsFor computed maxSeqLen', { maxSeqLen }); }catch(_){ }
         const CHAR_WIDTH = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
         const EXPANDED_RIGHT_PAD = (typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
         const REDUCED_COL_WIDTH = (typeof opts.REDUCED_COL_WIDTH === 'number') ? opts.REDUCED_COL_WIDTH : ((window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1);
@@ -1463,8 +1537,11 @@
           const w = useReduced ? REDUCED_COL_WIDTH : (CHAR_WIDTH + EXPANDED_RIGHT_PAD);
           out[i+1] = out[i] + w;
         }
+        try{ this.colOffsets = out; }catch(_){ }
+        try{ console.debug('SealionViewer.buildColOffsetsFor built offsets length', { len: (out && out.length) ? out.length : 0 }); }catch(_){ }
         return out;
       }catch(e){
+        try{ console.warn('SealionViewer.buildColOffsetsFor failed, falling back', e); }catch(_){ }
         // fallback to uniform offsets
         const w = (this.charWidth || 8) + 2;
         const maxSeqLen = (opts && typeof opts.maxSeqLen === 'number') ? opts.maxSeqLen : 0;
@@ -1670,9 +1747,46 @@
     // Placeholder drawAll implementation. In staged migration we'll replace
     // this with the real drawing functions ported from `script.js`.
     drawAll() {
-      // Clients will implement drawing routines during migration.
-      // For now this is a safe no-op so adding the file doesn't change behavior.
-      // e.g. this.drawSequences(); this.drawOverview();
+      // Centralized renderer: size canvases, compute visible region and
+      // invoke individual drawing helpers. This replaces the prior
+      // no-op used during a staged migration so canvases actually paint.
+      try{
+        // refresh DPR
+        this.pr = window.devicePixelRatio || 1;
+
+        // ensure we have DOM refs
+        this.seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
+        this.labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
+        this.headerCanvas = this.headerCanvas || (document.getElementById ? document.getElementById('header-canvas') : null);
+        this.overviewCanvas = this.overviewCanvas || (document.getElementById ? document.getElementById('overview-canvas') : null);
+        this.consensusCanvas = this.consensusCanvas || (document.getElementById ? document.getElementById('consensus-canvas') : null);
+        this.labelsHeaderCanvas = this.labelsHeaderCanvas || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
+        this.seqSpacer = this.seqSpacer || (document.getElementById ? document.getElementById('seq-spacer') : null);
+        this.scroller = this.scroller || (document.getElementById ? document.getElementById('alignment-scroll') : null);
+
+        // Update CSS sizes and backing stores to current viewport/DPR
+        try{ this.setCanvasCSSSizes(); }catch(_){ }
+        try{ this.resizeBackings(); }catch(_){ }
+
+        // ensure spacer width is in sync
+        try{ if(this.seqSpacer){ const totalWidth = (this.colOffsets && this.colOffsets.length) ? this.colOffsets[this.colOffsets.length - 1] : Math.max(1, (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0) * ((this.charWidth || 8) + 2)); this.seqSpacer.style.width = totalWidth + 'px'; } }catch(_){ }
+
+        // compute visible region
+        const rowCount = (this.alignment && this.alignment.length) ? this.alignment.length : (window && typeof window.rowCount === 'number' ? window.rowCount : 0);
+        const visible = this.computeVisible(this.scroller, { ROW_HEIGHT: (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20, CHAR_WIDTH: this.charWidth || 8, rowCount: rowCount });
+
+        // prepare a common opts object we pass to helpers so they can use
+        // instance state during migration.
+        const commonOpts = { colOffsets: this.colOffsets, maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0), CHAR_WIDTH: this.charWidth || 8, rows: this.alignment };
+
+        // draw in logical order
+        try{ this.drawLabelsHeader(this.labelsHeaderCanvas, visible, commonOpts); }catch(e){}
+        try{ this.drawHeader(this.headerCanvas, visible, commonOpts); }catch(e){}
+        try{ this.drawLabels(this.labelCanvas, visible, commonOpts); }catch(e){}
+        try{ this.drawSequences(this.seqCanvas, visible, commonOpts); }catch(e){}
+        try{ this.drawConsensus(this.consensusCanvas, visible, commonOpts); }catch(e){}
+        try{ this.drawOverview(this.overviewCanvas, visible, commonOpts); }catch(e){}
+      }catch(e){ console.warn('SealionViewer.drawAll failed', e); }
     }
 
     // Small helper to cancel any pending RAF
