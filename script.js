@@ -353,19 +353,61 @@
       return 'N'.repeat(Math.max(0, maxSeqLen));
     }
 
+    // Helper function to AND two mask strings together
+    // In mask logic: '0' = collapsed, '1' = expanded
+    // We want to collapse (set to '0') if EITHER mask says to collapse
+    function andMasks(mask1, mask2) {
+      const len = Math.max(mask1.length, mask2.length);
+      const m1 = mask1.padEnd(len, '1');
+      const m2 = mask2.padEnd(len, '1');
+      let result = '';
+      for(let i = 0; i < len; i++) {
+        // '0' AND '0' = '0', '0' AND '1' = '0', '1' AND '0' = '0', '1' AND '1' = '1'
+        // Collapse if either says to collapse
+        result += (m1[i] === '1' && m2[i] === '1') ? '1' : '0';
+      }
+      return result;
+    }
+
     // Apply constant mask button
     const applyConstantMaskBtn = document.getElementById('apply-constant-mask-btn');
     if(applyConstantMaskBtn){
       applyConstantMaskBtn.addEventListener('click', ()=>{
         try{
+          if(!viewer){
+            console.error('Viewer not available');
+            return;
+          }
+          
           const cm = computeConstantMask();
-          if(cm){
-            try{ window.mask = String(cm); }catch(_){ mask = String(cm); }
-            console.info('apply-constant-mask: applied (length=' + (String(cm).length) + ')');
+          if(!cm){
+            console.warn('computeConstantMask returned no mask');
+            return;
+          }
+          
+          // Get current mask from viewer
+          let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
+          if(!currentMask || currentMask.length < cm.length){
+            currentMask = '1'.repeat(cm.length);
+          }
+          
+          // AND the new mask with the current mask (collapse if either says to collapse)
+          const newMask = andMasks(currentMask, String(cm));
+          
+          // Update the mask in viewer and window
+          try{ 
+            window.mask = newMask; 
+            window.maskStr = newMask; 
+            viewer.maskStr = newMask; 
+          }catch(_){ }
+          
+          console.info('apply-constant-mask: applied with AND (length=' + newMask.length + ')');
+          
+          // Trigger the mask transition with current maskEnabled state
+          if(typeof viewer.startMaskTransition === 'function'){
+            viewer.startMaskTransition(!!viewer.maskEnabled);
           }
         }catch(e){ console.warn('apply-constant-mask failed', e); }
-        refreshMaskStr();
-        try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
       });
     }
   if(refToggle){
@@ -408,11 +450,40 @@
   if(applyConstantAmbiguousBtn){
     applyConstantAmbiguousBtn.addEventListener('click', ()=>{
       try{
+        if(!viewer){
+          console.error('Viewer not available');
+          return;
+        }
+        
         const cm = computeConstantMaskAllowN();
-        if(cm){ try{ window.mask = String(cm); }catch(_){ mask = String(cm); } console.info('apply-constant-ambiguous: applied (length=' + cm.length + ')'); }
+        if(!cm){
+          console.warn('computeConstantMaskAllowN returned no mask');
+          return;
+        }
+        
+        // Get current mask from viewer
+        let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
+        if(!currentMask || currentMask.length < cm.length){
+          currentMask = '1'.repeat(cm.length);
+        }
+        
+        // AND the new mask with the current mask (collapse if either says to collapse)
+        const newMask = andMasks(currentMask, String(cm));
+        
+        // Update the mask in viewer and window
+        try{ 
+          window.mask = newMask; 
+          window.maskStr = newMask; 
+          viewer.maskStr = newMask; 
+        }catch(_){ }
+        
+        console.info('apply-constant-ambiguous: applied with AND (length=' + newMask.length + ')');
+        
+        // Trigger the mask transition with current maskEnabled state
+        if(typeof viewer.startMaskTransition === 'function'){
+          viewer.startMaskTransition(!!viewer.maskEnabled);
+        }
       }catch(e){ console.warn('apply-constant-ambiguous failed', e); }
-      refreshMaskStr();
-      try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
     });
   }
 
@@ -420,11 +491,40 @@
   if(applyConstantGappedBtn){
     applyConstantGappedBtn.addEventListener('click', ()=>{
       try{
+        if(!viewer){
+          console.error('Viewer not available');
+          return;
+        }
+        
         const cm = computeConstantMaskAllowNAndGaps();
-        if(cm){ try{ window.mask = String(cm); }catch(_){ mask = String(cm); } console.info('apply-constant-gapped: applied (length=' + cm.length + ')'); }
+        if(!cm){
+          console.warn('computeConstantMaskAllowNAndGaps returned no mask');
+          return;
+        }
+        
+        // Get current mask from viewer
+        let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
+        if(!currentMask || currentMask.length < cm.length){
+          currentMask = '1'.repeat(cm.length);
+        }
+        
+        // AND the new mask with the current mask (collapse if either says to collapse)
+        const newMask = andMasks(currentMask, String(cm));
+        
+        // Update the mask in viewer and window
+        try{ 
+          window.mask = newMask; 
+          window.maskStr = newMask; 
+          viewer.maskStr = newMask; 
+        }catch(_){ }
+        
+        console.info('apply-constant-gapped: applied with AND (length=' + newMask.length + ')');
+        
+        // Trigger the mask transition with current maskEnabled state
+        if(typeof viewer.startMaskTransition === 'function'){
+          viewer.startMaskTransition(!!viewer.maskEnabled);
+        }
       }catch(e){ console.warn('apply-constant-gapped failed', e); }
-      refreshMaskStr();
-      try{ if(viewer && typeof viewer.startMaskTransition === 'function') viewer.startMaskTransition(!!maskEnabled); else console.error('startMaskTransition: SealionViewer missing; cannot run mask transition'); }catch(e){ console.error('startMaskTransition call failed', e); }
     });
   }
 
@@ -561,6 +661,37 @@
           updateFontSize(-1);
         });
       }
+
+    // Column collapse/expand controls
+    const collapseColumnsBtn = document.getElementById('collapse-columns-btn');
+    const expandColumnsBtn = document.getElementById('expand-columns-btn');
+    console.info('Column buttons found:', { collapse: !!collapseColumnsBtn, expand: !!expandColumnsBtn });
+    
+    if(collapseColumnsBtn) {
+      collapseColumnsBtn.addEventListener('click', ()=> {
+        try{
+          console.info('Collapse columns button clicked');
+          if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
+            viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '0');
+          } else {
+            console.warn('setMaskBitsForCols not available on viewer');
+          }
+        }catch(e){ console.warn('Collapse columns failed', e); }
+      });
+    }
+    
+    if(expandColumnsBtn) {
+      expandColumnsBtn.addEventListener('click', ()=> {
+        try{
+          console.info('Expand columns button clicked');
+          if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
+            viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '1');
+          } else {
+            console.warn('setMaskBitsForCols not available on viewer');
+          }
+        }catch(e){ console.warn('Expand columns failed', e); }
+      });
+    }
 
     // Search functionality
     let searchMatches = [];

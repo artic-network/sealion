@@ -681,11 +681,33 @@
                 }
               }
             }
-            // mask edit shortcuts using Cmd+Plus/Minus: prefer the viewer's own
-            // mask-editing API, falling back to any provided callback.
+            // Font size shortcuts using Alt-Cmd-Plus/Minus
             const mod = ke.metaKey;
+            const alt = ke.altKey;
             const isPlus = (ke.key === '+' ) || (ke.key === '=') || (ke.code === 'Equal') || ke.code === 'NumpadAdd';
             const isMinus = (ke.key === '-') || ke.code === 'Minus' || ke.code === 'NumpadSubtract';
+            
+            // Alt-Cmd-Plus: Increase font size
+            if(mod && alt && isPlus){
+              try{
+                const increaseBtn = document.getElementById('font-increase-btn');
+                if(increaseBtn) increaseBtn.click();
+              }catch(_){ }
+              try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){}
+              return;
+            }
+            // Alt-Cmd-Minus: Decrease font size
+            if(mod && alt && isMinus){
+              try{
+                const decreaseBtn = document.getElementById('font-decrease-btn');
+                if(decreaseBtn) decreaseBtn.click();
+              }catch(_){ }
+              try{ ke.preventDefault(); ke.stopImmediatePropagation(); }catch(_){}
+              return;
+            }
+            
+            // mask edit shortcuts using Cmd+Plus/Minus: prefer the viewer's own
+            // mask-editing API, falling back to any provided callback.
             if(mod && isPlus){
               try{
                 if(typeof this.setMaskBitsForCols === 'function'){
