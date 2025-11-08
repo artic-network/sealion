@@ -824,7 +824,16 @@
   try{ const cm = alignment.computeConstantMask(); window.constantMask = cm; }catch(_){ }
   try{ const cam = alignment.computeConstantMaskAllowN(); window.constantAmbiguousMask = cam; }catch(_){ }
   try{ const cgm = alignment.computeConstantMaskAllowNAndGaps(); window.constantGappedMask = cgm; }catch(_){ }
-  try{ const cons = alignment.computeConsensusSequence(); window.consensusSequence = cons; }catch(_){ }
+  try{ 
+    const cons = alignment.computeConsensusSequence(); 
+    window.consensusSequence = cons;
+    // Set consensus as default reference sequence on initialization
+    if(cons){
+      try{ window.reference = String(cons); }catch(_){ reference = String(cons); }
+      refreshRefStr();
+      console.info('Initialized with consensus as reference sequence');
+    }
+  }catch(_){ }
   // all initialization completed
   setStatus('initialized');
 
