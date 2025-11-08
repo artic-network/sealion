@@ -979,8 +979,14 @@
           // Increasing: grow label up to initial size, then keep it capped there
           newLabelSize = Math.min(this.initialLabelFontSize, currentLabelSize + delta);
         } else {
-          // Decreasing: reduce both together, but don't go below minimum
-          newLabelSize = Math.max(8, currentLabelSize + delta);
+          // Decreasing: only reduce label size once sequence size has reached label size
+          if (newSeqSize >= currentLabelSize) {
+            // Sequence is still larger than or equal to label - keep label size unchanged
+            newLabelSize = currentLabelSize;
+          } else {
+            // Sequence has dropped below label - now reduce both together
+            newLabelSize = Math.max(8, currentLabelSize + delta);
+          }
         }
 
         const newSeqFont = newSeqSize + 'px monospace';
