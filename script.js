@@ -729,38 +729,20 @@
       });
     }
 
-    // Animation helpers for mask toggle
-  // Measure vertical text metrics (ascent/descent) to compute a centering offset
-  let labelTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
-  let seqTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
   // Populate local maskStr from utils
   try{ maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); }catch(_){ maskStr = '1'.repeat(maxSeqLen); }
 
   // initial sizing + measure
-  // initial measure and sizing
   viewer.measureCharWidth(getViewerProp('FONT', ''), { apply: true, maskEnabled: !!maskEnabled });
-  // measure fonts to determine ROW_HEIGHT before sizing
-  viewer.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true });
-  // consensus row should match sequence row height
-  CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
-  try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-  viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
+  viewer.measureRowHeightFromFonts({ apply: true });
+  viewer.setCanvasCSSSizes();
   // give the spacer a moment to size (if DOM still settling) then measure real width and backings
   requestAnimationFrame(()=>{
     try{
-      viewer.measureCharWidthFromReal(FONT);
-      // remeasure row height in case font rendering differs in the real canvas
-      viewer.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true });
-      // update consensus height to match new row measurements
-      // ensure consensus height equals ROW_HEIGHT so it matches sequence rows on first paint
-      CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
-      try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-      viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
-      const res = viewer.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT });
-      if(res){
-        seqTextVertOffset = res.seqTextVertOffset;
-        labelTextVertOffset = res.labelTextVertOffset;
-      }
+      viewer.measureCharWidthFromReal();
+      viewer.measureRowHeightFromFonts({ apply: true });
+      viewer.setCanvasCSSSizes();
+      viewer.measureTextVerticalOffset();
       viewer.scheduleBackingResize();
     }catch(e){
       console.error('Initialization rAF handler failed', e);
@@ -775,13 +757,9 @@
   const observer = new ResizeObserver(()=>{
     clearTimeout(resizeDebounce);
     resizeDebounce = setTimeout(()=>{
-      viewer.measureCharWidthFromReal(FONT);
-      viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
-      const res = viewer.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT });
-      if(res){
-        seqTextVertOffset = res.seqTextVertOffset;
-        labelTextVertOffset = res.labelTextVertOffset;
-      }
+      viewer.measureCharWidthFromReal();
+      viewer.setCanvasCSSSizes();
+      viewer.measureTextVerticalOffset();
       viewer.scheduleBackingResize();
     }, 50);
   });
@@ -791,7 +769,7 @@
 
   // on window resize recompute backings
   window.addEventListener('resize', ()=>{
-    viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
+    viewer.setCanvasCSSSizes();
     viewer.scheduleBackingResize();
   });
 
