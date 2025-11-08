@@ -580,6 +580,74 @@
     });
   }
 
+  // Sort by start position button
+  const sortStartPosBtn = document.getElementById('sort-start-pos-btn');
+  if(sortStartPosBtn){
+    sortStartPosBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderByStartPos === 'function'){
+          alignment.orderByStartPos();
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by start position', e); }
+    });
+  }
+
+  // Sort by start position (reverse) button
+  const sortStartPosReverseBtn = document.getElementById('sort-start-pos-reverse-btn');
+  if(sortStartPosReverseBtn){
+    sortStartPosReverseBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderByStartPos === 'function'){
+          alignment.orderByStartPos(true);
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by start position (reverse)', e); }
+    });
+  }
+
+  // Sort by sequence length button
+  const sortSeqLengthBtn = document.getElementById('sort-seq-length-btn');
+  if(sortSeqLengthBtn){
+    sortSeqLengthBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderBySeqLength === 'function'){
+          alignment.orderBySeqLength();
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by sequence length', e); }
+    });
+  }
+
+  // Sort by sequence length (reverse) button
+  const sortSeqLengthReverseBtn = document.getElementById('sort-seq-length-reverse-btn');
+  if(sortSeqLengthReverseBtn){
+    sortSeqLengthReverseBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderBySeqLength === 'function'){
+          alignment.orderBySeqLength(true);
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by sequence length (reverse)', e); }
+    });
+  }
+
   // Compute constant mask treating 'N' as an ambiguous wildcard that matches any base.
   // Delegates to SealionViewer when available, otherwise to SealionUtils/global helper.
   function computeConstantMaskAllowN(){

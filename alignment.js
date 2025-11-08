@@ -10,12 +10,21 @@ class Alignment {
     // Store the raw data
     this._rawData = alignmentData;
     
-    // Add original index to each sequence
-    this._sequences = alignmentData.map((seq, idx) => ({
-      originalIndex: idx,
-      label: seq.label,
-      sequence: seq.sequence
-    }));
+    // Add original index and compute start/end positions for each sequence
+    this._sequences = alignmentData.map((seq, idx) => {
+      const startPos = this._findFirstNonGap(seq.sequence);
+      const endPos = this._findLastNonGap(seq.sequence);
+      const seqLength = (startPos !== -1 && endPos !== -1) ? (endPos - startPos + 1) : 0;
+      
+      return {
+        originalIndex: idx,
+        label: seq.label,
+        sequence: seq.sequence,
+        startPos: startPos,
+        endPos: endPos,
+        seqLength: seqLength
+      };
+    });
 
     // Current ordering (starts as original order)
     this._currentOrder = this._sequences.slice();
@@ -49,6 +58,26 @@ class Alignment {
         return prop in target;
       }
     });
+  }
+
+  // Helper method to find the first non-gap position in a sequence
+  _findFirstNonGap(sequence) {
+    for (let i = 0; i < sequence.length; i++) {
+      if (sequence[i] !== '-') {
+        return i;
+      }
+    }
+    return -1; // All gaps
+  }
+
+  // Helper method to find the last non-gap position in a sequence
+  _findLastNonGap(sequence) {
+    for (let i = sequence.length - 1; i >= 0; i--) {
+      if (sequence[i] !== '-') {
+        return i;
+      }
+    }
+    return -1; // All gaps
   }
 
   // Compute the maximum sequence length
@@ -154,6 +183,29 @@ class Alignment {
       
       // Otherwise alphabetical
       const result = charA.localeCompare(charB);
+      return reverse ? -result : result;
+    });
+    this._invalidateCache();
+  }
+
+  // Order sequences by start position (position of first non-gap character)
+  orderByStartPos(reverse = false) {
+    this._currentOrder = this._sequences.slice().sort((a, b) => {
+      // Sequences with no non-gap characters (startPos === -1) go to the end
+      if (a.startPos === -1 && b.startPos !== -1) return 1;
+      if (a.startPos !== -1 && b.startPos === -1) return -1;
+      if (a.startPos === -1 && b.startPos === -1) return 0;
+      
+      const result = a.startPos - b.startPos;
+      return reverse ? -result : result;
+    });
+    this._invalidateCache();
+  }
+
+  // Order sequences by sequence length (excluding gaps)
+  orderBySeqLength(reverse = false) {
+    this._currentOrder = this._sequences.slice().sort((a, b) => {
+      const result = a.seqLength - b.seqLength;
       return reverse ? -result : result;
     });
     this._invalidateCache();
