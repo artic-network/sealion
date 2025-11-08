@@ -94,6 +94,7 @@
         this.overviewCanvas = overviewCanvas;
         this.headerCanvas = headerCanvas;
         this.consensusCanvas = consensusCanvas;
+        this.alignment = alignment;
         this.labelCanvas = labelsCanvas;
         this.labelDivider = labelDivider;
         this.leftSpacer = leftSpacer;
@@ -114,6 +115,9 @@
       if(alignment) this.alignment = alignment;
   // default mask-enabled flag (matches legacy script.js initial state)
   this.maskEnabled = true;
+      // Search state
+      this.searchMatches = [];
+      this.currentMatchIndex = -1;
 
       // Merge provided options with class defaults and set instance-level
       // visual constants. This centralizes fonts, sizes, colours and other
@@ -125,6 +129,10 @@
         this.FONT = cfg.FONT;
         this.HEADER_FONT = cfg.HEADER_FONT;
         this.FONT_SIZE = cfg.FONT_SIZE;
+        this.fontSize = cfg.FONT_SIZE; // Current sequence font size
+        this.labelFontSize = cfg.FONT_SIZE; // Current label font size
+        this.initialLabelFontSize = cfg.FONT_SIZE; // Track initial label font size for scaling logic
+        this.labelFont = cfg.FONT; // Label font string
         this.LABEL_WIDTH = cfg.LABEL_WIDTH;
         this.ROW_HEIGHT = cfg.ROW_HEIGHT;
         this.ROW_PADDING = cfg.ROW_PADDING;
@@ -406,6 +414,7 @@
           headerCanvas.addEventListener('mousedown', (e)=>{
             if(e.button !== 0) return;
             try{ this.clearRectSelection(); }catch(_){ }
+            try{ this.selectedRows.clear(); }catch(_){ }
             const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
             if(e.shiftKey && this.anchorCol !== null){ try{ this.setColSelectionToRange(this.anchorCol, col); }catch(_){ } this.selectionStartCol = this.anchorCol; }
             else this.selectionStartCol = col;
@@ -438,7 +447,11 @@
           consensusCanvas.addEventListener('mousedown', (e)=>{
             if(e.button !== 0) return;
             try{ this.clearRectSelection(); }catch(_){ }
+            try{ this.selectedRows.clear(); }catch(_){ }
             const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
+            if(e.shiftKey && this.anchorCol !== null){ try{ this.setColSelectionToRange(this.anchorCol, col); }catch(_){ } this.selectionStartCol = this.anchorCol; }
+            else this.selectionStartCol = col;
+            this.selectionMode = e.metaKey ? 'add' : 'replace';
             if(e.shiftKey && this.anchorCol !== null){ try{ this.setColSelectionToRange(this.anchorCol, col); }catch(_){ } }
             else if(e.metaKey){ try{ if(this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); }catch(_){ } this.anchorCol = col; }
             else { try{ this.selectedCols.clear(); this.selectedCols.add(col); }catch(_){ } this.anchorCol = col; }
@@ -538,6 +551,7 @@
             if(alt && !meta){
               // Alt alone: select rows
               try{ this.clearRectSelection(); }catch(_){ }
+              try{ this.selectedCols.clear(); }catch(_){ }
               const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
               if(e.shiftKey && this.anchorRow !== null){ this.selectionOrigin = this.anchorRow; } else { this.selectionOrigin = row; }
               this.selectionMode = e.metaKey ? 'add' : 'replace';
@@ -551,6 +565,7 @@
 
             // Default: select columns
             try{ this.clearRectSelection(); }catch(_){ }
+            try{ this.selectedRows.clear(); }catch(_){ }
             const col = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
             if(e.shiftKey && this.anchorCol !== null){ this.selectionStartCol = this.anchorCol; } else { this.selectionStartCol = col; }
             this.selectionMode = e.metaKey ? 'add' : 'replace';
@@ -600,6 +615,7 @@
             if(e.button !== 0) return;
             const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
             try{ this.clearRectSelection(); }catch(_){ }
+            try{ this.selectedCols.clear(); }catch(_){ }
             if(e.shiftKey && this.anchorRow !== null){ this.selectionOrigin = this.anchorRow; } else { this.selectionOrigin = row; }
             this.selectionMode = e.metaKey ? 'add' : 'replace';
             if(e.shiftKey && this.anchorRow !== null){ try{ this.setSelectionToRange(this.anchorRow, row); }catch(_){ } }
@@ -900,6 +916,151 @@
       }catch(e){ return (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20; }
     }
 
+    // Update font sizes by a delta amount (positive to increase, negative to decrease)
+    updateFontSize(delta){
+      try{
+        // Get current font sizes
+        const currentSeqSize = this.fontSize || 14;
+        const currentLabelSize = this.labelFontSize || 14;
+        
+        // Set initial label font size on first call
+        if(this.initialLabelFontSize === null || this.initialLabelFontSize === undefined){
+          this.initialLabelFontSize = currentLabelSize;
+        }
+        
+        // Calculate new sizes with bounds
+        const newSeqSize = Math.max(8, Math.min(32, currentSeqSize + delta));
+        let newLabelSize;
+        
+        if(delta > 0){
+          // Increasing: grow label up to initial size, then keep it capped there
+          newLabelSize = Math.min(this.initialLabelFontSize, currentLabelSize + delta);
+        } else {
+          // Decreasing: reduce both together, but don't go below minimum
+          newLabelSize = Math.max(8, currentLabelSize + delta);
+        }
+        
+        const newSeqFont = newSeqSize + 'px monospace';
+        const newLabelFont = newLabelSize + 'px monospace';
+        
+        // Update viewer's FONT properties
+        this.FONT = newSeqFont;
+        this.fontSize = newSeqSize;
+        this.labelFont = newLabelFont;
+        this.labelFontSize = newLabelSize;
+        
+        // Re-measure character width with the new sequence font
+        if(typeof this.measureCharWidthFromReal === 'function'){
+          this.measureCharWidthFromReal(newSeqFont);
+        }
+        
+        // Re-measure row height based on both fonts
+        if(typeof this.measureRowHeightFromFonts === 'function'){
+          this.measureRowHeightFromFonts({
+            FONT: newSeqFont,
+            LABEL_FONT: newLabelFont,
+            apply: true  // This will call setCanvasCSSSizes, resizeBackings, and scheduleRender
+          });
+        } else {
+          // Fallback if measureRowHeightFromFonts doesn't exist
+          if(typeof this.setCanvasCSSSizes === 'function'){
+            this.setCanvasCSSSizes();
+          }
+          if(typeof this.resizeBackings === 'function'){
+            this.resizeBackings();
+          }
+          if(typeof this.scheduleRender === 'function'){
+            this.scheduleRender();
+          }
+        }
+        
+        // Rebuild column offsets with new character width
+        if(typeof this.buildColOffsetsFor === 'function' && this.colOffsets){
+          const maxSeqLen = this.colOffsets.length - 1;
+          this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
+            maxSeqLen: maxSeqLen,
+            CHAR_WIDTH: this.charWidth,
+            EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
+            REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            maskStr: (window && window.maskStr) || (window && window.mask) || null
+          });
+        }
+        
+        // Update window properties for compatibility
+        try{ window.FONT_SIZE = newSeqSize; }catch(_){ }
+        try{ window.FONT = newSeqFont; }catch(_){ }
+        try{ window.LABEL_FONT_SIZE = newLabelSize; }catch(_){ }
+        try{ window.LABEL_FONT = newLabelFont; }catch(_){ }
+        
+        console.info('Font sizes set to - sequence:', newSeqSize, 'label:', newLabelSize);
+      }catch(e){ console.warn('updateFontSize failed', e); }
+    }
+    
+    // Reset font sizes to default values
+    resetFontSize(){
+      try{
+        const defaultSeqSize = 14;
+        const defaultLabelSize = 14;
+        
+        const defaultSeqFont = defaultSeqSize + 'px monospace';
+        const defaultLabelFont = defaultLabelSize + 'px monospace';
+        
+        // Reset initial label font size tracker
+        this.initialLabelFontSize = defaultLabelSize;
+        
+        // Update viewer's FONT properties
+        this.FONT = defaultSeqFont;
+        this.fontSize = defaultSeqSize;
+        this.labelFont = defaultLabelFont;
+        this.labelFontSize = defaultLabelSize;
+        
+        // Re-measure character width with the default font
+        if(typeof this.measureCharWidthFromReal === 'function'){
+          this.measureCharWidthFromReal(defaultSeqFont);
+        }
+        
+        // Re-measure row height based on both fonts
+        if(typeof this.measureRowHeightFromFonts === 'function'){
+          this.measureRowHeightFromFonts({
+            FONT: defaultSeqFont,
+            LABEL_FONT: defaultLabelFont,
+            apply: true
+          });
+        } else {
+          // Fallback if measureRowHeightFromFonts doesn't exist
+          if(typeof this.setCanvasCSSSizes === 'function'){
+            this.setCanvasCSSSizes();
+          }
+          if(typeof this.resizeBackings === 'function'){
+            this.resizeBackings();
+          }
+          if(typeof this.scheduleRender === 'function'){
+            this.scheduleRender();
+          }
+        }
+        
+        // Rebuild column offsets with default character width
+        if(typeof this.buildColOffsetsFor === 'function' && this.colOffsets){
+          const maxSeqLen = this.colOffsets.length - 1;
+          this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
+            maxSeqLen: maxSeqLen,
+            CHAR_WIDTH: this.charWidth,
+            EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
+            REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            maskStr: (window && window.maskStr) || (window && window.mask) || null
+          });
+        }
+        
+        // Update window properties
+        try{ window.FONT_SIZE = defaultSeqSize; }catch(_){ }
+        try{ window.FONT = defaultSeqFont; }catch(_){ }
+        try{ window.LABEL_FONT_SIZE = defaultLabelSize; }catch(_){ }
+        try{ window.LABEL_FONT = defaultLabelFont; }catch(_){ }
+        
+        console.info('Font sizes reset to defaults - sequence:', defaultSeqSize, 'label:', defaultLabelSize);
+      }catch(e){ console.warn('resetFontSize failed', e); }
+    }
+
     // Set CSS sizes for the canvases and spacer elements. Accepts optional
     // overrides in opts: { LABEL_WIDTH, ROW_HEIGHT }
     setCanvasCSSSizes(opts){
@@ -955,6 +1116,27 @@
         if(labelsOutlineCanvas){ labelsOutlineCanvas.style.width = LABEL_WIDTH + 'px'; labelsOutlineCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if(labelsHeaderCanvas){ labelsHeaderCanvas.style.width = LABEL_WIDTH + 'px'; labelsHeaderCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if(labelsConsensusCanvas){ labelsConsensusCanvas.style.width = LABEL_WIDTH + 'px'; labelsConsensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
+        
+        // Update CSS custom properties for dynamic heights
+        const overviewHeight = (window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48;
+        const headerHeight = (window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30;
+        const consensusHeight = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT : 20;
+        try{
+          const root = document.documentElement;
+          if(root){
+            root.style.setProperty('--overview-height', overviewHeight + 'px');
+            root.style.setProperty('--header-height', headerHeight + 'px');
+            root.style.setProperty('--consensus-height', consensusHeight + 'px');
+          }
+        }catch(_){}
+        
+        // Update alignment div position to account for dynamic header heights
+        const alignment = this.alignment || (document.getElementById ? document.getElementById('alignment') : null);
+        if(alignment){
+          const totalHeaderHeight = overviewHeight + headerHeight + consensusHeight;
+          alignment.style.marginTop = totalHeaderHeight + 'px';
+          alignment.style.height = 'calc(100% - ' + totalHeaderHeight + 'px)';
+        }
       }catch(e){ console.warn('SealionViewer.setCanvasCSSSizes failed', e); }
     }
 
@@ -1554,7 +1736,9 @@
             ctx.fillRect(x, topQ, w, hQ);
           } else {
             ctx.fillStyle = color;
-            ctx.fillText(ch, x + 3, y);
+            // Center the text in the column
+            const textOffset = Math.round((w - CHAR_WIDTH) / 2);
+            ctx.fillText(ch, x + textOffset, y);
           }
         }
       }
@@ -1683,8 +1867,18 @@
           ctx.fillRect(x, blockTop, w, blockH);
         } else {
           ctx.fillStyle = color;
-          ctx.fillText(ch, x + 3, baselineY);
+          // Center the text in the column
+          const textOffset = Math.round((w - CHAR_WIDTH) / 2);
+          ctx.fillText(ch, x + textOffset, baselineY);
         }
+      }
+
+      // Draw column selection overlay
+      const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()));
+      if(selectedCols && selectedCols.size > 0){
+        try{
+          this.drawColumnSelectionOverlay(canvas, visible, { CHAR_WIDTH, EXPANDED_RIGHT_PAD, selectedCols, colOffsets });
+        }catch(e){}
       }
     }
 
@@ -1807,97 +2001,40 @@
       }catch(e){ return { firstRow:0, lastRow:0, firstCol:0, lastCol:0, rawFirstCol:0, rawLastCol:0, viewW:0, viewH:0, scrollLeft:0, scrollTop:0, firstRowNoBuffer:0, lastRowNoBuffer:0 }; }
     }
 
-    // Compute a mask string marking constant (0) vs variable (1) columns.
-    // Uses this.alignment (array of {sequence, label}) when available.
+    // Compute constant mask: delegates to alignment instance
     computeConstantMask(){
-      try{
-        const rows = this.alignment || (window && window.rows) || [];
-        const maxSeqLen = rows.length ? Math.max(0, ...rows.map(r => (r && r.sequence) ? r.sequence.length : 0)) : 0;
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          let first = null; let constant = true;
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = seq.charAt(c) || '';
-            if(first === null) first = ch;
-            else if(ch !== first){ constant = false; break; }
-          }
-          out[c] = constant ? '0' : '1';
-        }
-        const mask = out.join('');
-        try{ if(window) window.constantMask = String(mask); }catch(_){ }
-        return mask;
-      }catch(e){ console.warn('SealionViewer.computeConstantMask failed', e); return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0)); }
+      if(!this.alignment || typeof this.alignment.computeConstantMask !== 'function'){
+        console.error('SealionViewer.computeConstantMask: alignment object with computeConstantMask method required');
+        return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0));
+      }
+      return this.alignment.computeConstantMask();
     }
 
-    // Compute consensus sequence: most frequent base per column (A/C/G/T preference), else any non-empty, else 'N'.
+    // Compute consensus sequence: delegates to alignment instance
     computeConsensusSequence(){
-      try{
-        const rows = this.alignment || (window && window.rows) || [];
-        const maxSeqLen = rows.length ? Math.max(0, ...rows.map(r => (r && r.sequence) ? r.sequence.length : 0)) : 0;
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          const counts = new Map();
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = (seq.charAt(c) || '').toUpperCase();
-            const prev = counts.get(ch) || 0; counts.set(ch, prev + 1);
-          }
-          let best = ''; let bestCount = -1;
-          const preferred = ['A','C','G','T'];
-          for(const b of preferred){ const cnt = counts.get(b) || 0; if(cnt > bestCount){ best = b; bestCount = cnt; } }
-          if(bestCount <= 0){ for(const [k,v] of counts.entries()){ if(!k) continue; if(v > bestCount){ best = k; bestCount = v; } } }
-          if(!best || best === '') best = 'N';
-          out[c] = best;
-        }
-        const cons = out.join('');
-        try{ if(window) window.consensusSequence = cons; }catch(_){ }
-        return cons;
-      }catch(e){ console.warn('SealionViewer.computeConsensusSequence failed', e); return 'N'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0)); }
+      if(!this.alignment || typeof this.alignment.computeConsensusSequence !== 'function'){
+        console.error('SealionViewer.computeConsensusSequence: alignment object with computeConsensusSequence method required');
+        return 'N'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0));
+      }
+      return this.alignment.computeConsensusSequence();
     }
 
-    // Compute constant mask treating 'N' as ambiguous
+    // Compute constant mask treating 'N' as ambiguous: delegates to alignment instance
     computeConstantMaskAllowN(){
-      try{
-        const rows = this.alignment || (window && window.rows) || [];
-        const maxSeqLen = rows.length ? Math.max(0, ...rows.map(r => (r && r.sequence) ? r.sequence.length : 0)) : 0;
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          let firstNonAmbig = null; let constant = true;
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = (seq.charAt(c) || '').toUpperCase();
-            if(ch === 'N' || ch === '') continue;
-            if(firstNonAmbig === null) firstNonAmbig = ch;
-            else if(ch !== firstNonAmbig){ constant = false; break; }
-          }
-          out[c] = constant ? '0' : '1';
-        }
-        const mask = out.join(''); try{ if(window) window.constantAmbiguousMask = String(mask); }catch(_){ }
-        return mask;
-      }catch(e){ console.warn('SealionViewer.computeConstantMaskAllowN failed', e); return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0)); }
+      if(!this.alignment || typeof this.alignment.computeConstantMaskAllowN !== 'function'){
+        console.error('SealionViewer.computeConstantMaskAllowN: alignment object with computeConstantMaskAllowN method required');
+        return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0));
+      }
+      return this.alignment.computeConstantMaskAllowN();
     }
 
-    // Compute constant mask treating 'N' and gaps '-' as ambiguous
+    // Compute constant mask treating 'N' and gaps '-' as ambiguous: delegates to alignment instance
     computeConstantMaskAllowNAndGaps(){
-      try{
-        const rows = this.alignment || (window && window.rows) || [];
-        const maxSeqLen = rows.length ? Math.max(0, ...rows.map(r => (r && r.sequence) ? r.sequence.length : 0)) : 0;
-        const out = new Array(Math.max(0, maxSeqLen));
-        for(let c=0;c<maxSeqLen;c++){
-          let firstNonAmbig = null; let constant = true;
-          for(let r=0;r<rows.length;r++){
-            const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
-            const ch = (seq.charAt(c) || '').toUpperCase();
-            if(ch === 'N' || ch === '-' || ch === '') continue;
-            if(firstNonAmbig === null) firstNonAmbig = ch;
-            else if(ch !== firstNonAmbig){ constant = false; break; }
-          }
-          out[c] = constant ? '0' : '1';
-        }
-        const mask = out.join(''); try{ if(window) window.constantGappedMask = String(mask); }catch(_){ }
-        return mask;
-      }catch(e){ console.warn('SealionViewer.computeConstantMaskAllowNAndGaps failed', e); return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0)); }
+      if(!this.alignment || typeof this.alignment.computeConstantMaskAllowNAndGaps !== 'function'){
+        console.error('SealionViewer.computeConstantMaskAllowNAndGaps: alignment object with computeConstantMaskAllowNAndGaps method required');
+        return '1'.repeat(Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0));
+      }
+      return this.alignment.computeConstantMaskAllowNAndGaps();
     }
 
     // Find matches for query in alignment rows (label or sequence). Returns array of row indices.
@@ -1913,6 +2050,89 @@
         }
         return matches;
       }catch(e){ console.warn('SealionViewer.findMatches failed', e); return []; }
+    }
+
+    // Perform a search with the given query string
+    // Initializes searchMatches and currentMatchIndex, selects and scrolls to first match
+    performSearch(query){
+      try{
+        if(!query || !query.trim()){
+          this.searchMatches = [];
+          this.currentMatchIndex = -1;
+          return;
+        }
+        
+        this.searchMatches = this.findMatches(query);
+        this.currentMatchIndex = this.searchMatches.length > 0 ? 0 : -1;
+        
+        if(this.searchMatches.length > 0){
+          // Select and scroll to first match
+          const matchRow = this.searchMatches[0];
+          if(typeof this.setSelectedRows === 'function'){
+            this.setSelectedRows([matchRow]);
+            this._scrollToRow(matchRow);
+            if(typeof this.scheduleRender === 'function') this.scheduleRender();
+          }
+          console.info(`Found ${this.searchMatches.length} match${this.searchMatches.length !== 1 ? 'es' : ''} for "${query}"`);
+        } else {
+          console.info(`No matches found for "${query}"`);
+        }
+      }catch(e){ console.warn('SealionViewer.performSearch failed', e); }
+    }
+    
+    // Navigate to the next search match (wraps around to beginning)
+    nextMatch(){
+      try{
+        if(!this.searchMatches || this.searchMatches.length === 0){
+          console.warn('No search matches available. Perform a search first.');
+          return;
+        }
+        
+        this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches.length;
+        const matchRow = this.searchMatches[this.currentMatchIndex];
+        
+        if(typeof this.setSelectedRows === 'function'){
+          this.setSelectedRows([matchRow]);
+          this._scrollToRow(matchRow);
+          if(typeof this.scheduleRender === 'function') this.scheduleRender();
+        }
+        
+        console.info(`Match ${this.currentMatchIndex + 1} of ${this.searchMatches.length}`);
+      }catch(e){ console.warn('SealionViewer.nextMatch failed', e); }
+    }
+    
+    // Navigate to the previous search match (wraps around to end)
+    previousMatch(){
+      try{
+        if(!this.searchMatches || this.searchMatches.length === 0){
+          console.warn('No search matches available. Perform a search first.');
+          return;
+        }
+        
+        this.currentMatchIndex = (this.currentMatchIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
+        const matchRow = this.searchMatches[this.currentMatchIndex];
+        
+        if(typeof this.setSelectedRows === 'function'){
+          this.setSelectedRows([matchRow]);
+          this._scrollToRow(matchRow);
+          if(typeof this.scheduleRender === 'function') this.scheduleRender();
+        }
+        
+        console.info(`Match ${this.currentMatchIndex + 1} of ${this.searchMatches.length}`);
+      }catch(e){ console.warn('SealionViewer.previousMatch failed', e); }
+    }
+    
+    // Helper: scroll to a specific row (centers it in viewport)
+    _scrollToRow(rowIndex){
+      try{
+        const rowHeight = this.ROW_HEIGHT || 20;
+        const scroller = this.scroller;
+        if(scroller){
+          const targetTop = rowIndex * rowHeight;
+          const viewportHeight = scroller.clientHeight || 0;
+          scroller.scrollTop = Math.max(0, targetTop - viewportHeight / 2);
+        }
+      }catch(e){ console.warn('SealionViewer._scrollToRow failed', e); }
     }
 
     // Map a CSS-pixel x offset (relative to the canvas left) to a column index.
@@ -1994,7 +2214,7 @@
         try{ this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); }catch(e){ console.error('SealionViewer.drawLabelsConsensus failed', e); }
         try{ this.drawOverview(this.overviewCanvas, vis, commonOpts); }catch(e){ console.error('SealionViewer.drawOverview failed', e); }
         try{ this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); }catch(e){ console.error('SealionViewer.drawHeader failed', e); }
-        try{ this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD })); }catch(e){ console.error('SealionViewer.drawConsensus failed', e); }
+        try{ this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); }catch(e){ console.error('SealionViewer.drawConsensus failed', e); }
         try{ this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [] , refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); }catch(e){ console.error('SealionViewer.drawLabels failed', e); }
         try{ this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); }catch(e){ console.error('SealionViewer.drawSequences failed', e); }
       }catch(e){ console.error('SealionViewer.drawAll failed', e); }

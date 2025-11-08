@@ -343,6 +343,159 @@ class Alignment {
     }
     return null;
   }
+
+  // Compute consensus sequence for the alignment
+  // For each position, finds the most common non-gap character
+  computeConsensusSequence() {
+    try {
+      const maxLen = this.getMaxSeqLen();
+      const consensus = new Array(maxLen);
+      
+      for (let col = 0; col < maxLen; col++) {
+        const counts = {};
+        let maxCount = 0;
+        let maxChar = 'N';
+        
+        // Count characters at this position across all sequences
+        for (let row = 0; row < this._currentOrder.length; row++) {
+          const seq = this._currentOrder[row].sequence;
+          const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
+          
+          // Skip gaps in consensus calculation
+          if (ch === '-') continue;
+          
+          counts[ch] = (counts[ch] || 0) + 1;
+          if (counts[ch] > maxCount) {
+            maxCount = counts[ch];
+            maxChar = ch;
+          }
+        }
+        
+        consensus[col] = maxChar;
+      }
+      
+      const result = consensus.join('');
+      this._cache.consensus = result;
+      return result;
+    } catch (e) {
+      console.warn('Alignment.computeConsensusSequence failed', e);
+      return 'N'.repeat(this.getMaxSeqLen());
+    }
+  }
+
+  // Compute a mask that marks constant sites (0) vs variable sites (1)
+  // A site is constant if all non-gap characters are identical
+  computeConstantMask() {
+    try {
+      const maxLen = this.getMaxSeqLen();
+      const mask = new Array(maxLen);
+      
+      for (let col = 0; col < maxLen; col++) {
+        let firstChar = null;
+        let isConstant = true;
+        
+        // Check if all non-gap characters at this position are identical
+        for (let row = 0; row < this._currentOrder.length; row++) {
+          const seq = this._currentOrder[row].sequence;
+          const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
+          
+          // Skip gaps
+          if (ch === '-') continue;
+          
+          if (firstChar === null) {
+            firstChar = ch;
+          } else if (ch !== firstChar) {
+            isConstant = false;
+            break;
+          }
+        }
+        
+        // Mark constant sites as '0', variable sites as '1'
+        mask[col] = isConstant ? '0' : '1';
+      }
+      
+      const result = mask.join('');
+      this._cache.constantMask = result;
+      return result;
+    } catch (e) {
+      console.warn('Alignment.computeConstantMask failed', e);
+      return '1'.repeat(this.getMaxSeqLen());
+    }
+  }
+
+  // Compute constant mask treating 'N' as an ambiguous wildcard that matches any base
+  computeConstantMaskAllowN() {
+    try {
+      const maxLen = this.getMaxSeqLen();
+      const mask = new Array(maxLen);
+      
+      for (let col = 0; col < maxLen; col++) {
+        let firstNonAmbig = null;
+        let isConstant = true;
+        
+        // Check if all non-ambiguous characters at this position are identical
+        for (let row = 0; row < this._currentOrder.length; row++) {
+          const seq = this._currentOrder[row].sequence;
+          const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
+          
+          // Skip gaps and N (ambiguous)
+          if (ch === '-' || ch === 'N') continue;
+          
+          if (firstNonAmbig === null) {
+            firstNonAmbig = ch;
+          } else if (ch !== firstNonAmbig) {
+            isConstant = false;
+            break;
+          }
+        }
+        
+        // Mark constant sites as '0', variable sites as '1'
+        mask[col] = isConstant ? '0' : '1';
+      }
+      
+      return mask.join('');
+    } catch (e) {
+      console.warn('Alignment.computeConstantMaskAllowN failed', e);
+      return '1'.repeat(this.getMaxSeqLen());
+    }
+  }
+
+  // Compute constant mask treating both 'N' and gap '-' as ambiguous/wildcards
+  computeConstantMaskAllowNAndGaps() {
+    try {
+      const maxLen = this.getMaxSeqLen();
+      const mask = new Array(maxLen);
+      
+      for (let col = 0; col < maxLen; col++) {
+        let firstNonAmbig = null;
+        let isConstant = true;
+        
+        // Check if all definite characters at this position are identical
+        for (let row = 0; row < this._currentOrder.length; row++) {
+          const seq = this._currentOrder[row].sequence;
+          const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
+          
+          // Skip gaps, N, and empty
+          if (ch === '-' || ch === 'N' || ch === '') continue;
+          
+          if (firstNonAmbig === null) {
+            firstNonAmbig = ch;
+          } else if (ch !== firstNonAmbig) {
+            isConstant = false;
+            break;
+          }
+        }
+        
+        // Mark constant sites as '0', variable sites as '1'
+        mask[col] = isConstant ? '0' : '1';
+      }
+      
+      return mask.join('');
+    } catch (e) {
+      console.warn('Alignment.computeConstantMaskAllowNAndGaps failed', e);
+      return '1'.repeat(this.getMaxSeqLen());
+    }
+  }
 }
 
 // Export for use in other scripts
