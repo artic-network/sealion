@@ -260,9 +260,11 @@
   // values and `setViewerProp(name, value)` to publish measurements back to
   // the viewer. Local fallbacks are intentionally removed to centralize config.
 
-  const rows = alignment;
-  const rowCount = rows.length;
-  const maxSeqLen = Math.max(0, ...rows.map(r=>r.sequence.length));
+  const rows = alignment.getSequences();
+  const rowCount = alignment.getSequenceCount();
+  const maxSeqLen = alignment.getMaxSeqLen();
+
+  
   // Attempt to instantiate the SealionViewer now that alignment geometry exists.
   try{ ensureViewer(); }catch(_){ }
   // mask string (should be provided by alignment.js). If absent we initialize to all '1's
@@ -334,6 +336,7 @@
         if(viewer && typeof viewer.computeConstantMask === 'function') return viewer.computeConstantMask();
       }catch(_){ }
       try{
+        if(alignment && typeof alignment.computeConstantMask === 'function') return alignment.computeConstantMask();
         if(window && window.SealionUtils && typeof window.SealionUtils.computeConstantMask === 'function') return window.SealionUtils.computeConstantMask(rows, maxSeqLen);
         if(typeof computeConstantMask === 'function' && window && window.computeConstantMask === computeConstantMask){ /* avoid recursion if global */ }
         if(window && typeof window.computeConstantMask === 'function') return window.computeConstantMask(rows, maxSeqLen);
@@ -348,6 +351,7 @@
         if(viewer && typeof viewer.computeConsensusSequence === 'function') return viewer.computeConsensusSequence();
       }catch(_){ }
       try{
+        if(alignment && typeof alignment.computeConsensusSequence === 'function') return alignment.computeConsensusSequence();
         if(window && window.SealionUtils && typeof window.SealionUtils.computeConsensusSequence === 'function') return window.SealionUtils.computeConsensusSequence(rows, maxSeqLen);
         if(window && typeof window.computeConsensusSequence === 'function') return window.computeConsensusSequence(rows, maxSeqLen);
       }catch(_){ }
@@ -444,6 +448,135 @@
       if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
       console.info('Colour mode: differences only');
       try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+    });
+  }
+
+  // Sort by original order button
+  const sortOriginalBtn = document.getElementById('sort-original-btn');
+  if(sortOriginalBtn){
+    sortOriginalBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderByOriginalIndex === 'function'){
+          alignment.orderByOriginalIndex();
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by original order', e); }
+    });
+  }
+
+  // Sort by label button
+  const sortLabelBtn = document.getElementById('sort-label-btn');
+  if(sortLabelBtn){
+    sortLabelBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderByLabel === 'function'){
+          alignment.orderByLabel();
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by label', e); }
+    });
+  }
+
+  // Sort by selected column button
+  const sortColumnBtn = document.getElementById('sort-column-btn');
+  if(sortColumnBtn){
+    sortColumnBtn.addEventListener('click', ()=>{
+      try{
+        if(!viewer){
+          console.warn('Viewer not available');
+          return;
+        }
+        // Get selected columns
+        let selectedCols = (viewer && typeof viewer.getSelectedCols === 'function') 
+          ? viewer.getSelectedCols() 
+          : (viewer && viewer.selectedCols) 
+            ? viewer.selectedCols
+            : new Set();
+        
+        // Convert Set to Array
+        selectedCols = Array.from(selectedCols);
+        
+        if(selectedCols.length === 0){
+          alert('No column selected. Please select a column first by clicking on a column in the alignment.');
+          return;
+        }
+        
+        // Use the first selected column for sorting
+        const siteIndex = selectedCols[0];
+        
+        if(alignment && typeof alignment.orderBySite === 'function'){
+          alignment.orderBySite(siteIndex);
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by column', e); }
+    });
+  }
+
+  // Sort by label (reverse) button
+  const sortLabelReverseBtn = document.getElementById('sort-label-reverse-btn');
+  if(sortLabelReverseBtn){
+    sortLabelReverseBtn.addEventListener('click', ()=>{
+      try{
+        if(alignment && typeof alignment.orderByLabel === 'function'){
+          alignment.orderByLabel(true);
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by label (reverse)', e); }
+    });
+  }
+
+  // Sort by selected column (reverse) button
+  const sortColumnReverseBtn = document.getElementById('sort-column-reverse-btn');
+  if(sortColumnReverseBtn){
+    sortColumnReverseBtn.addEventListener('click', ()=>{
+      try{
+        if(!viewer){
+          console.warn('Viewer not available');
+          return;
+        }
+        // Get selected columns
+        let selectedCols = (viewer && typeof viewer.getSelectedCols === 'function') 
+          ? viewer.getSelectedCols() 
+          : (viewer && viewer.selectedCols) 
+            ? viewer.selectedCols
+            : new Set();
+        
+        // Convert Set to Array
+        selectedCols = Array.from(selectedCols);
+        
+        if(selectedCols.length === 0){
+          alert('No column selected. Please select a column first by clicking on a column in the alignment.');
+          return;
+        }
+        
+        // Use the first selected column for sorting
+        const siteIndex = selectedCols[0];
+        
+        if(alignment && typeof alignment.orderBySite === 'function'){
+          alignment.orderBySite(siteIndex, true);
+          if(viewer){
+            viewer.alignment = alignment;
+            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
+            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
+          }
+        }
+      }catch(e){ console.error('Failed to sort by column (reverse)', e); }
     });
   }
 

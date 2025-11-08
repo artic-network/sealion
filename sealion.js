@@ -160,6 +160,11 @@
         this.LABELS_BG = cfg.LABELS_BG;
         this.LABELS_TEXT = cfg.LABELS_TEXT;
         this.LABELS_HEADER_TEXT = cfg.LABELS_HEADER_TEXT;
+        // index styling
+        this.INDEX_FONT_STYLE = cfg.INDEX_FONT_STYLE;
+        this.INDEX_COLOR = cfg.INDEX_COLOR;
+        this.INDEX_RIGHT_ALIGN_POS = cfg.INDEX_RIGHT_ALIGN_POS;
+        this.LABEL_START_POS = cfg.LABEL_START_POS;
         this.SEQ_SELECTED_ROW = cfg.SEQ_SELECTED_ROW;
         this.SEQ_EVEN_ROW = cfg.SEQ_EVEN_ROW;
         this.SEQ_ODD_ROW = cfg.SEQ_ODD_ROW;
@@ -1421,10 +1426,23 @@
         if(typeof refIndex === 'number' && i === refIndex){
           try{ ctx.fillStyle = REF_ACCENT; ctx.fillRect(0, rowY, 4, rowH); }catch(_){ }
         }
-        // draw label text
-        ctx.fillStyle = this.LABELS_TEXT;
+        // draw original index number in italics (right-aligned), starting from 1
+        const originalIndex = (rows[i] && typeof rows[i].originalIndex === 'number') ? rows[i].originalIndex + 1 : i + 1;
+        const indexText = String(originalIndex);
+        const indexFontStyle = this.INDEX_FONT_STYLE || 'italic';
+        ctx.font = indexFontStyle + ' ' + FONT;
+        ctx.textAlign = 'right';
+        ctx.fillStyle = this.INDEX_COLOR || '#888888';
         const y = Math.round((rawRowY + labelTextVertOffset) * pr) / pr;
-        ctx.fillText(label, 6, y);
+        const indexAlignPos = (typeof this.INDEX_RIGHT_ALIGN_POS === 'number') ? this.INDEX_RIGHT_ALIGN_POS : 50;
+        ctx.fillText(indexText, indexAlignPos, y);
+        
+        // draw label text
+        ctx.font = FONT; // restore normal font
+        ctx.textAlign = 'left';
+        ctx.fillStyle = this.LABELS_TEXT;
+        const labelStartPos = (typeof this.LABEL_START_POS === 'number') ? this.LABEL_START_POS : 56;
+        ctx.fillText(label, labelStartPos, y);
       }
     }
 
@@ -2186,6 +2204,11 @@
       LABELS_BG: '#f3f3f3',
       LABELS_TEXT: '#111',
       LABELS_HEADER_TEXT: '#333',
+      // Index styling
+      INDEX_FONT_STYLE: 'italic',
+      INDEX_COLOR: '#888888',
+      INDEX_RIGHT_ALIGN_POS: 50,
+      LABEL_START_POS: 56,
       SEQ_SELECTED_ROW: '#cfe8ff',
       SEQ_EVEN_ROW: '#fff',
       SEQ_ODD_ROW: '#fafafa',
