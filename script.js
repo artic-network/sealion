@@ -616,12 +616,20 @@
       });
     }
     
-    // Keyboard shortcut: Cmd+0 (or Ctrl+0) to reset font size
+    // Keyboard shortcuts
     window.addEventListener('keydown', (e)=>{
+      // Cmd+0 (or Ctrl+0) to reset font size
       if((e.metaKey || e.ctrlKey) && e.key === '0'){
         e.preventDefault();
         console.info('Reset font size shortcut triggered (Cmd+0)');
         viewer.resetFontSize();
+      }
+      // Cmd+G (or Ctrl+G) to search next
+      if((e.metaKey || e.ctrlKey) && e.key === 'g'){
+        e.preventDefault();
+        if(viewer && viewer.searchMatches && viewer.searchMatches.length > 0){
+          viewer.nextMatch();
+        }
       }
     });
 
@@ -649,54 +657,32 @@
       searchInput.addEventListener('keydown', (e)=>{
         if(e.key === 'Enter'){
           e.preventDefault();
-          try{
-            if(!viewer){
-              console.warn('Viewer not available for search');
-              return;
-            }
             
-            const query = searchInput.value.trim();
-            if(!query){
-              return;
-            }
-            
-            if(e.shiftKey){
-              // Shift+Enter goes to previous match
-              if(typeof viewer.previousMatch === 'function'){
-                viewer.previousMatch();
-              } else {
-                console.warn('Viewer previousMatch method not available');
-              }
+          const query = searchInput.value.trim();
+          if(!query){
+            return;
+          }
+          
+          if(e.shiftKey){
+            // Shift+Enter goes to previous match
+            viewer.previousMatch();
+          } else {
+            // Enter performs search or goes to next match
+            if(viewer.searchMatches && viewer.searchMatches.length > 0){
+              // Already have matches, go to next
+              viewer.nextMatch();
             } else {
-              // Enter performs search or goes to next match
-              if(viewer.searchMatches && viewer.searchMatches.length > 0){
-                // Already have matches, go to next
-                if(typeof viewer.nextMatch === 'function'){
-                  viewer.nextMatch();
-                } else {
-                  console.warn('Viewer nextMatch method not available');
-                }
-              } else {
-                // No matches yet, perform search
-                if(typeof viewer.performSearch === 'function'){
-                  viewer.performSearch(query);
-                } else {
-                  console.warn('Viewer performSearch method not available');
-                }
-              }
+              // No matches yet, perform search
+              viewer.performSearch(query);
             }
-          }catch(e){ console.warn('Search keydown failed', e); }
+          }
         }
       });
       
       // Clear search results when input changes
       searchInput.addEventListener('input', ()=>{
-        try{
-          if(viewer){
             viewer.searchMatches = [];
             viewer.currentMatchIndex = -1;
-          }
-        }catch(e){ console.warn('Search input clear failed', e); }
       });
     }
     
@@ -726,6 +712,67 @@
             }
           }
         }catch(e){ console.warn('Search next button failed', e); }
+      });
+    }
+
+    // Help button - load and display instructions
+    const helpBtn = document.getElementById('help-btn');
+    if(helpBtn){
+      helpBtn.addEventListener('click', async ()=>{
+        try{
+          const helpModal = document.getElementById('helpModal');
+          const helpContent = document.getElementById('help-content');
+          
+          if(!helpModal || !helpContent) return;
+          
+          // Show the modal
+          const modal = new bootstrap.Modal(helpModal);
+          modal.show();
+          
+          // Load the markdown content if not already loaded
+          if(helpContent.querySelector('.spinner-border')){
+            try{
+              const response = await fetch('instructions.md');
+              const markdown = await response.text();
+              
+              // Convert markdown to HTML (basic conversion)
+              let html = markdown
+                // Headers
+                .replace(/^### (.*$)/gim, '<h4>$1</h4>')
+                .replace(/^## (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^# (.*$)/gim, '<h2>$1</h2>')
+                // Bold
+                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+                // Italic
+                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+                // Code inline
+                .replace(/`([^`]+)`/gim, '<code>$1</code>')
+                // Lists
+                .replace(/^\- (.*$)/gim, '<li>$1</li>')
+                .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
+                // Paragraphs
+                .replace(/\n\n/g, '</p><p>')
+                // Line breaks
+                .replace(/\n/g, '<br>');
+              
+              // Wrap in paragraph tags
+              html = '<p>' + html + '</p>';
+              
+              // Clean up list formatting
+              html = html.replace(/(<li>.*?<\/li>)/gis, (match) => {
+                return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
+              });
+              
+              // Clean up consecutive ul tags
+              html = html.replace(/<\/ul><ul>/g, '');
+              
+              helpContent.innerHTML = html;
+            }catch(e){
+              helpContent.innerHTML = '<div class="alert alert-warning">Failed to load help content. Please see instructions.md in the repository.</div>';
+              console.error('Failed to load help content', e);
+            }
+          }
+        }catch(e){ console.warn('Help button failed', e); }
       });
     }
 

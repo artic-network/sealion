@@ -184,6 +184,11 @@
                 <i class="bi bi-search"></i>
               </button>
             </form>
+            
+            <!-- Help Button -->
+            <button class="btn btn-outline-secondary ms-2" id="help-btn" type="button" title="Show help">
+              <i class="bi bi-question-circle"></i>
+            </button>
           </div>
         </div>
       </nav>
@@ -191,6 +196,29 @@
       <!-- initialization status is shown in a centered overlay (#center-status) managed by the main script -->
 
       <div id="sealion"></div>
+
+      <!-- Help Modal -->
+      <div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="helpModalLabel"><i class="bi bi-question-circle me-2"></i>Sealion Instructions</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="help-content">
+              <!-- Help content will be loaded here -->
+              <div class="text-center py-5">
+                <div class="spinner-border" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- debug HUD removed; use console for diagnostics -->
     </div>
