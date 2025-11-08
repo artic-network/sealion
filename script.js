@@ -101,12 +101,6 @@
       return;
     }
 
-  const labelCanvas = document.getElementById('labels-canvas');
-  const seqCanvas = document.getElementById('seq-canvas');
-  const headerCanvas = document.getElementById('header-canvas');
-  const overviewCanvas = document.getElementById('overview-canvas');
-  const labelsHeaderCanvas = document.getElementById('labels-header-canvas');
-  const consensusCanvas = document.getElementById('consensus-canvas');
   // viewer instance reference (populated later, after geometry is known)
   let viewer = null;
   // Helper to prefer viewer-owned properties but fall back to local value.
@@ -123,21 +117,11 @@
     }catch(_){ return localVal; }
   }
 
-  // Setter that writes to the viewer instance when available, otherwise to window globals.
-  function setViewerProp(name, value, viewerKey){
-    try{
-      const key = viewerKey || name;
-      if(viewer){ try{ viewer[key] = value; }catch(_){ } return; }
-      try{ window[name] = value; }catch(_){ }
-    }catch(_){ }
-  }
   // prefer the single scroll root when present — we'll override these below if needed
   let leftScroll = document.getElementById('left-scroll');
   let rightScroll = document.getElementById('right-scroll');
   const seqSpacer = document.getElementById('seq-spacer');
-  const seqInner = document.getElementById('seq-inner');
   const leftSpacer = document.getElementById('left-spacer');
-  const leftInner = document.getElementById('left-inner');
   // the alignment scroll element is the authoritative scroller for both axes
   const alignScroll = document.getElementById('alignment-scroll');
   if(alignScroll){ leftScroll = alignScroll; rightScroll = alignScroll; }
@@ -255,8 +239,7 @@
 
   // Visual constants (fonts, sizes, colors) are provided by the SealionViewer
   // instance and its `DEFAULTS`. Use `getViewerProp(name, fallback)` to read
-  // values and `setViewerProp(name, value)` to publish measurements back to
-  // the viewer. Local fallbacks are intentionally removed to centralize config.
+  // values. Local fallbacks are intentionally removed to centralize config.
 
   const rows = alignment.getSequences();
   const rowCount = alignment.getSequenceCount();
@@ -276,33 +259,9 @@
   let refIndex = null;
   // populate refStr/refIndex using utils (if available)
   try{ const _r = (window && window.refreshRefStr) ? window.refreshRefStr() : { refStr: null, refIndex: null }; refStr = _r.refStr; refIndex = _r.refIndex; }catch(_){ refStr = null; refIndex = null; }
-  const REDUCED_COL_WIDTH = 1; // CSS pixels for compressed columns
-  // extra right-side padding (CSS pixels) added to expanded columns to avoid clipping
-  const EXPANDED_RIGHT_PAD = 2;
-  // vertical padding inside compressed cell blocks so background peeks above/below
-  const COMPRESSED_CELL_VPAD = 2; // CSS pixels
-  // vertical padding inside consensus row (fixed top and bottom pads)
-  const CONSENSUS_TOP_PAD = 4; // px
-  const CONSENSUS_BOTTOM_PAD = 8; // px
   // Mask compression is always enabled; start with a mask of all '1's (no actual compression)
   let maskEnabled = true;
   let refModeEnabled = false;
-
-    // Helper function to AND two mask strings together
-    // In mask logic: '0' = collapsed, '1' = expanded
-    // We want to collapse (set to '0') if EITHER mask says to collapse
-    function andMasks(mask1, mask2) {
-      const len = Math.max(mask1.length, mask2.length);
-      const m1 = mask1.padEnd(len, '1');
-      const m2 = mask2.padEnd(len, '1');
-      let result = '';
-      for(let i = 0; i < len; i++) {
-        // '0' AND '0' = '0', '0' AND '1' = '0', '1' AND '0' = '0', '1' AND '1' = '1'
-        // Collapse if either says to collapse
-        result += (m1[i] === '1' && m2[i] === '1') ? '1' : '0';
-      }
-      return result;
-    }
 
     // Apply constant mask button
     const applyConstantMaskBtn = document.getElementById('apply-constant-mask-btn');
@@ -771,9 +730,6 @@
     }
 
     // Animation helpers for mask toggle
-    let maskAnimRequest = null;
-    const MASK_ANIM_MS = 220;
-
   // Measure vertical text metrics (ascent/descent) to compute a centering offset
   let labelTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
   let seqTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
@@ -830,29 +786,6 @@
     }, 50);
   });
   if(scroller) observer.observe(scroller);
-
-  // Command-drag panning: hold Meta (Command on macOS) and drag to pan the alignment viewport
-  let isCmdDrag = false;
-  let dragStartX = 0, dragStartY = 0, dragStartScrollLeft = 0, dragStartScrollTop = 0;
-  function endCmdDrag(){
-    if(!isCmdDrag) return;
-    isCmdDrag = false;
-    try{ document.body.style.userSelect = ''; }catch(e){}
-    // restore grab cursor if space is still down
-    updateSpaceCursor();
-  }
-  // Smooth scroll animation helper moved into SealionViewer (viewer.animateScrollTo).
-  // Track Space key as the panning modifier (user requested Space to enable drag-scroll)
-  let isSpaceDown = false;
-  // helper: when space is held, show 'grab' cursor on relevant elements; when released, clear it
-  function updateSpaceCursor(){
-    const cur = (isSpaceDown && !isCmdDrag) ? 'grab' : '';
-    // restrict cursor hint to seqCanvas only per user request
-    if(seqCanvas) seqCanvas.style.cursor = cur;
-  }
-  
-
-  // snapScrollToChar legacy removed; inline fallback used where needed
 
   // Snapping and scroll handling are delegated to the SealionViewer instance.
 

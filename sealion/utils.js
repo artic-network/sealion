@@ -169,14 +169,31 @@
     }catch(e){ try{ if(window) window.constantGappedMask = '1'.repeat(Math.max(0, (maxSeqLen||0))); }catch(_){ } return '1'.repeat(Math.max(0, (maxSeqLen||0))); }
   }
 
+  // Helper function to AND two mask strings together
+  // In mask logic: '0' = collapsed, '1' = expanded
+  // We want to collapse (set to '0') if EITHER mask says to collapse
+  function andMasks(mask1, mask2) {
+    const len = Math.max(mask1.length, mask2.length);
+    const m1 = mask1.padEnd(len, '1');
+    const m2 = mask2.padEnd(len, '1');
+    let result = '';
+    for(let i = 0; i < len; i++) {
+      // '0' AND '0' = '0', '0' AND '1' = '0', '1' AND '0' = '0', '1' AND '1' = '1'
+      // Collapse if either says to collapse
+      result += (m1[i] === '1' && m2[i] === '1') ? '1' : '0';
+    }
+    return result;
+  }
+
   // expose new utilities
   exports.computeConstantMask = computeConstantMask;
   exports.computeConsensusSequence = computeConsensusSequence;
   exports.computeConstantMaskAllowN = computeConstantMaskAllowN;
   exports.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps;
-  try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.computeConstantMask = computeConstantMask; window.SealionUtils.computeConsensusSequence = computeConsensusSequence; window.SealionUtils.computeConstantMaskAllowN = computeConstantMaskAllowN; window.SealionUtils.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; } }catch(_){ }
+  exports.andMasks = andMasks;
+  try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.computeConstantMask = computeConstantMask; window.SealionUtils.computeConsensusSequence = computeConsensusSequence; window.SealionUtils.computeConstantMaskAllowN = computeConstantMaskAllowN; window.SealionUtils.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.SealionUtils.andMasks = andMasks; } }catch(_){ }
   // attach globals for backward compatibility
-  try{ if(window){ window.computeConstantMask = computeConstantMask; window.computeConsensusSequence = computeConsensusSequence; window.computeConstantMaskAllowN = computeConstantMaskAllowN; window.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; } }catch(_){ }
+  try{ if(window){ window.computeConstantMask = computeConstantMask; window.computeConsensusSequence = computeConsensusSequence; window.computeConstantMaskAllowN = computeConstantMaskAllowN; window.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.andMasks = andMasks; } }catch(_){ }
   // attach to window.SealionUtils
   try{ if(window) window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.refreshMaskStr = refreshMaskStr; window.SealionUtils.refreshRefStr = refreshRefStr; }catch(_){ }
   // attach globals (so unqualified calls like `refreshMaskStr()` in script.js will find them)
