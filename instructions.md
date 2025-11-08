@@ -25,11 +25,30 @@ The interface consists of:
 
 ### Keyboard Shortcuts
 
-- **Arrow keys** - Navigate through the alignment
+#### Navigation
+- **Arrow keys** - Move one column/row at a time through the alignment
+- **Alt+Arrow keys** - Page scroll (move by viewport width/height)
+- **Shift+Left/Right** - Jump to leftmost/rightmost extent of alignment
+- **Shift+Up/Down** - Jump to top/bottom extent of alignment
+
+#### View Controls
 - **Cmd+0** (Ctrl+0) - Reset font size to default
-- **Cmd+G** (Ctrl+G) - Go to next search match
+- **Cmd+D** (Ctrl+D) - Toggle colour differences mode on/off
+
+#### Difference Navigation
+- **Cmd+Left** (Ctrl+Left) - Jump to previous difference from reference
+- **Cmd+Right** (Ctrl+Right) - Jump to next difference from reference
+  - Selects the column and centers it horizontally
+  - When rows are selected, only checks those sequences for differences
+  - When no rows selected, checks all sequences and scrolls to first difference
+  - Ignores 'N' and '-' characters
+
+#### Column Operations
 - **Cmd+-** (Ctrl+-) - Collapse selected columns
 - **Cmd+=** (Ctrl+=) - Expand selected columns
+
+#### Search
+- **Cmd+G** (Ctrl+G) - Go to next search match
 - **Enter** - Perform search or go to next match
 - **Shift+Enter** - Go to previous search match
 
@@ -60,6 +79,20 @@ Use the dropdown menu to quickly collapse common patterns:
 
 **Note:** Collapse operations are cumulative. Each preset ANDs with the current mask, so sites already collapsed stay collapsed.
 
+### Difference Navigation
+
+Quickly jump between sites that differ from the reference sequence:
+
+- **Previous difference** <i class="bi bi-arrow-left-circle"></i> - Jump to the previous column with a difference (Cmd+Left)
+- **Next difference** <i class="bi bi-arrow-right-circle"></i> - Jump to the next column with a difference (Cmd+Right)
+
+When navigating differences:
+- The column with the difference is selected and centered horizontally
+- If one or more rows are selected, only those sequences are checked for differences
+- If no rows are selected, all sequences are checked and the view scrolls to the first differing row
+- 'N' (ambiguous) and '-' (gap) characters are ignored when finding differences
+- A reference sequence must be set first (use "Set consensus as reference" or "Set selected as reference")
+
 ### Colour Controls
 
 Control how nucleotides are colored in the alignment.
@@ -67,6 +100,7 @@ Control how nucleotides are colored in the alignment.
 - **Colour all sites** - Show nucleotide colors at all positions
 - **Colour differences only** - Show colors only where sequences differ from the reference
   - If no reference is set, the consensus sequence is used automatically
+  - Toggle this mode quickly with **Cmd+D** (Ctrl+D)
 - **Set selected as reference** - Use the currently selected sequence as the reference for difference coloring
 - **Set consensus as reference** - Use the consensus sequence (most common nucleotide at each position) as the reference
 
@@ -125,17 +159,21 @@ Use the search box to find sequences by label name:
 
 1. **Focus on variable sites**: Use "Constant sites" collapse preset to hide invariant positions and focus on differences
 
-2. **Compare to reference**: Set a sequence as reference and use "Colour differences only" to quickly spot variations
+2. **Compare to reference**: Set a sequence as reference and use "Colour differences only" (Cmd+D) to quickly spot variations
 
-3. **Find outliers**: Sort by selected column to group sequences with the same nucleotide at a position of interest
+3. **Navigate differences efficiently**: Select specific sequences of interest, then use Cmd+Left/Right to jump between their differences while keeping them in view
 
-4. **Navigate large alignments**: Use the overview panel to jump to different regions quickly
+4. **Find outliers**: Sort by selected column to group sequences with the same nucleotide at a position of interest
 
-5. **Adjust view density**: Decrease font size to see more sequences on screen, or increase to examine details
+5. **Navigate large alignments**: Use Shift+Arrow keys to jump to alignment extremes, or Alt+Arrow for page scrolling
 
-6. **Cumulative filtering**: Apply multiple collapse presets sequentially to refine which columns are visible
+6. **Adjust view density**: Decrease font size to see more sequences on screen, or increase to examine details
 
-7. **Quick search**: Use Cmd+G to rapidly cycle through search results without using the mouse
+7. **Cumulative filtering**: Apply multiple collapse presets sequentially to refine which columns are visible
+
+8. **Quick search**: Use Cmd+G to rapidly cycle through search results without using the mouse
+
+9. **Keyboard-driven workflow**: Most operations have keyboard shortcuts - see the shortcuts section for a complete list
 
 ## Technical Notes
 
