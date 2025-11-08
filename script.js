@@ -74,11 +74,11 @@
           diffConsensusBtn.addEventListener('click', ()=>{
         try{
           // compute or reuse consensus
-          const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
+          const cons = (window && window.consensusSequence) ? window.consensusSequence : alignment.computeConsensusSequence();
           if(!cons){ console.warn('No consensus available to set as reference'); return; }
           try{ window.reference = String(cons); }catch(_){ reference = String(cons); }
           // clear any selected row (user asked to clear the previously selected row)
-          try{ if(viewer && typeof viewer.clearSelectionSets === 'function') viewer.clearSelectionSets(); }catch(_){ }
+          viewer.clearSelectionSets();
           // refresh reference state (will set refIndex if any row exactly matches consensus)
           // note: we intentionally do NOT auto-select any matching row when the reference
           // is the consensus; rows that happen to equal the consensus should be treated
@@ -89,7 +89,7 @@
           try{ window.refModeEnabled = true; }catch(_){ }
           if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
           console.info('Set reference to consensus');
-          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+          viewer.scheduleRender();
         }catch(e){ console.warn('diff-consensus failed', e); }
       });
     }
@@ -198,14 +198,14 @@
     leftSpacer: realLeftSpacer,
     leftScroll: realLeftScroll,
     callbacks: {
-      setColSelectionToRange: function(a,b){ try{ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(maxSeqLen-1, Math.max(a,b)); const cols = []; for(let c=lo;c<=hi;c++) cols.push(c); if(viewer && typeof viewer.setSelectedCols === 'function') viewer.setSelectedCols(cols); }catch(_){ } },
-      addRangeToColSelection: function(a,b){ try{ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(maxSeqLen-1, Math.max(a,b)); if(viewer && typeof viewer.getSelectedCols === 'function' && typeof viewer.setSelectedCols === 'function'){ const cur = new Set(viewer.getSelectedCols()); for(let c=lo;c<=hi;c++) cur.add(c); viewer.setSelectedCols(Array.from(cur)); } }catch(_){ } },
-      setSelectionToRange: setSelectionToRange,
-      addRangeToSelection: addRangeToSelection,
-      clearRectSelection: clearRectSelection,
-      clearSelectionSets: function(){ try{ if(viewer && typeof viewer.clearSelectionSets === 'function') viewer.clearSelectionSets(); }catch(_){ } },
-      updateRectSelection: function(r0,r1,c0,c1,orig){ try{ if(viewer && typeof viewer.updateRectSelection === 'function'){ viewer.updateRectSelection(r0,r1,c0,c1,orig); } }catch(_){ } },
-      finalizeRectSelection: function(r0,r1,c0,c1,orig){ try{ if(viewer && typeof viewer.finalizeRectSelection === 'function'){ viewer.finalizeRectSelection(r0,r1,c0,c1,orig); } }catch(_){ } }
+      setColSelectionToRange: function(a,b){ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(maxSeqLen-1, Math.max(a,b)); const cols = []; for(let c=lo;c<=hi;c++) cols.push(c); viewer.setSelectedCols(cols); },
+      addRangeToColSelection: function(a,b){ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(maxSeqLen-1, Math.max(a,b)); const cur = new Set(viewer.getSelectedCols()); for(let c=lo;c<=hi;c++) cur.add(c); viewer.setSelectedCols(Array.from(cur)); },
+      setSelectionToRange: function(a,b){ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(rowCount-1, Math.max(a,b)); const rows = []; for(let r=lo;r<=hi;r++) rows.push(r); viewer.setSelectedRows(rows); viewer.scheduleRender(); },
+      addRangeToSelection: function(a,b){ const lo = Math.max(0, Math.min(a,b)); const hi = Math.min(rowCount-1, Math.max(a,b)); const cur = new Set(viewer.getSelectedRows()); for(let r=lo;r<=hi;r++) cur.add(r); viewer.setSelectedRows(Array.from(cur)); viewer.scheduleRender(); },
+      clearRectSelection: function(){ viewer.clearRectSelection(); },
+      clearSelectionSets: function(){ viewer.clearSelectionSets(); },
+      updateRectSelection: function(r0,r1,c0,c1,orig){ viewer.updateRectSelection(r0,r1,c0,c1,orig); },
+      finalizeRectSelection: function(r0,r1,c0,c1,orig){ viewer.finalizeRectSelection(r0,r1,c0,c1,orig); }
     }
   });
         } catch (e) {
@@ -216,27 +216,25 @@
         // referencing local variables that may still be in the TDZ by only
         // consulting `viewer` or `window` globals here.
         try{
-          if(viewer && typeof viewer.buildColOffsetsFor === 'function'){
-            const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', 12, 'charWidth');
-            const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', 2);
-            const _REDUCED_COL_WIDTH = getViewerProp('REDUCED_COL_WIDTH', 1);
-            // Don't reference local `maskEnabled`/`maskStr` directly (they are
-            // declared later in this file). Prefer window globals if present.
-            const _maskEnabled = (typeof window !== 'undefined' && typeof window.maskEnabled !== 'undefined') ? window.maskEnabled : true;
-            // maxSeqLen was declared earlier in this file before ensureViewer() is
-            // first invoked; if not present fallback to any viewer-derived value.
-            let _maxSeqLen = 0;
-            try{ if(typeof maxSeqLen !== 'undefined') _maxSeqLen = maxSeqLen; }catch(_){ /* ignore TDZ */ }
-            if(!_maxSeqLen){ try{ if(viewer && viewer.colOffsets && viewer.colOffsets.length) _maxSeqLen = Math.max(0, viewer.colOffsets.length - 1); }catch(_){ } }
-            // prefer explicit window.maskStr or window.mask if available; otherwise default to all '1's
-            const _maskStr = (typeof window !== 'undefined' && typeof window.maskStr !== 'undefined') ? window.maskStr : ((typeof window !== 'undefined' && typeof window.mask !== 'undefined') ? window.mask : '1'.repeat(Math.max(0,_maxSeqLen)));
-            const initial = viewer.buildColOffsetsFor(_maskEnabled, { maxSeqLen: _maxSeqLen, CHAR_WIDTH: _CHAR_WIDTH, EXPANDED_RIGHT_PAD: _EXPANDED_RIGHT_PAD, REDUCED_COL_WIDTH: _REDUCED_COL_WIDTH, maskStr: _maskStr });
-            try{ viewer.colOffsets = initial; }catch(_){ }
-          }
-          try{ if(typeof viewer.setCanvasCSSSizes === 'function') viewer.setCanvasCSSSizes(); }catch(_){ }
-          try{ if(typeof viewer.resizeBackings === 'function') viewer.resizeBackings(); }catch(_){ }
-          try{ const _font = getViewerProp('FONT', '14px monospace'); const _rowH = getViewerProp('ROW_HEIGHT', 20); if(typeof viewer.measureTextVerticalOffset === 'function') viewer.measureTextVerticalOffset({ FONT: _font, ROW_HEIGHT: _rowH }); }catch(_){ }
-          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+          const _CHAR_WIDTH = getViewerProp('CHAR_WIDTH', 12, 'charWidth');
+          const _EXPANDED_RIGHT_PAD = getViewerProp('EXPANDED_RIGHT_PAD', 2);
+          const _REDUCED_COL_WIDTH = getViewerProp('REDUCED_COL_WIDTH', 1);
+          // Don't reference local `maskEnabled`/`maskStr` directly (they are
+          // declared later in this file). Prefer window globals if present.
+          const _maskEnabled = (typeof window !== 'undefined' && typeof window.maskEnabled !== 'undefined') ? window.maskEnabled : true;
+          // maxSeqLen was declared earlier in this file before ensureViewer() is
+          // first invoked; if not present fallback to any viewer-derived value.
+          let _maxSeqLen = 0;
+          try{ if(typeof maxSeqLen !== 'undefined') _maxSeqLen = maxSeqLen; }catch(_){ /* ignore TDZ */ }
+          if(!_maxSeqLen){ try{ if(viewer && viewer.colOffsets && viewer.colOffsets.length) _maxSeqLen = Math.max(0, viewer.colOffsets.length - 1); }catch(_){ } }
+          // prefer explicit window.maskStr or window.mask if available; otherwise default to all '1's
+          const _maskStr = (typeof window !== 'undefined' && typeof window.maskStr !== 'undefined') ? window.maskStr : ((typeof window !== 'undefined' && typeof window.mask !== 'undefined') ? window.mask : '1'.repeat(Math.max(0,_maxSeqLen)));
+          const initial = viewer.buildColOffsetsFor(_maskEnabled, { maxSeqLen: _maxSeqLen, CHAR_WIDTH: _CHAR_WIDTH, EXPANDED_RIGHT_PAD: _EXPANDED_RIGHT_PAD, REDUCED_COL_WIDTH: _REDUCED_COL_WIDTH, maskStr: _maskStr });
+          viewer.colOffsets = initial;
+          viewer.setCanvasCSSSizes();
+          viewer.resizeBackings();
+          const _font = getViewerProp('FONT', '14px monospace'); const _rowH = getViewerProp('ROW_HEIGHT', 20); viewer.measureTextVerticalOffset({ FONT: _font, ROW_HEIGHT: _rowH });
+          viewer.scheduleRender();
           // Hide any initialization overlay now that the viewer was created
           try{ setStatus(null); }catch(_){ }
         }catch(e){ console.warn('ensureViewer: initial build/render failed', e); }
@@ -289,54 +287,6 @@
   // Mask compression is always enabled; start with a mask of all '1's (no actual compression)
   let maskEnabled = true;
   let refModeEnabled = false;
-  // Helper: modify the global `mask` string for a set of columns and animate to the new offsets.
-  function setMaskBitsForCols(colsSet, bitChar){
-    // Viewer-only API: the SealionViewer now owns mask edits. If the viewer
-    // is missing this is a fatal migration error (log and no-op).
-    try{
-      if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
-        return viewer.setMaskBitsForCols(colsSet, bitChar);
-      }
-      console.error('setMaskBitsForCols: SealionViewer not available — viewer required for mask edits');
-    }catch(e){ console.warn('setMaskBitsForCols failed', e); }
-  }
-  // Helper to obtain authoritative column offsets from the SealionViewer instance.
-  // The viewer owns the offsets; script-level code should consult the viewer
-  // rather than maintain a separate global copy.
-  // Note: `colOffsets` are now owned by the `viewer` instance. Use
-  // `(viewer && viewer.colOffsets) ? viewer.colOffsets : []` to access them
-  // and call `viewer.buildColOffsetsFor(...)` directly when a rebuild is required.
-  // Helper: find column index from CSS offset
-  // Requires viewer object with colIndexFromCssOffset method.
-  function colIndexFromOffset(offset){
-    if(!viewer || typeof viewer.colIndexFromCssOffset !== 'function'){
-      console.error('colIndexFromOffset: viewer object with colIndexFromCssOffset method required');
-      return 0;
-    }
-    return viewer.colIndexFromCssOffset(offset);
-  }
-  // Apply custom mask button: when clicked, override current mask with `custom_mask` global
-
-
-    // Compute a mask that marks constant sites (0) vs variable sites (1).
-    // Requires alignment object with computeConstantMask method.
-    function computeConstantMask(){
-      if(!alignment || typeof alignment.computeConstantMask !== 'function'){
-        console.error('computeConstantMask: alignment object with computeConstantMask method required');
-        return '1'.repeat(Math.max(0, maxSeqLen));
-      }
-      return alignment.computeConstantMask();
-    }
-
-    // Compute consensus sequence for the alignment.
-    // Requires alignment object with computeConsensusSequence method.
-    function computeConsensusSequence(){
-      if(!alignment || typeof alignment.computeConsensusSequence !== 'function'){
-        console.error('computeConsensusSequence: alignment object with computeConsensusSequence method required');
-        return 'N'.repeat(Math.max(0, maxSeqLen));
-      }
-      return alignment.computeConsensusSequence();
-    }
 
     // Helper function to AND two mask strings together
     // In mask logic: '0' = collapsed, '1' = expanded
@@ -364,7 +314,7 @@
             return;
           }
           
-          const cm = computeConstantMask();
+          const cm = alignment.computeConstantMask();
           if(!cm){
             console.warn('computeConstantMask returned no mask');
             return;
@@ -403,7 +353,7 @@
       try{ window.refModeEnabled = false; }catch(_){ }
       if(viewer){ try{ viewer.refModeEnabled = false; }catch(_){ } }
       console.info('Colour mode: all sites');
-      try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+      viewer.scheduleRender();
     });
   }
 
@@ -414,7 +364,7 @@
       const hasReference = !!(window && window.reference);
       if(!hasReference){
         console.info('No reference set, using consensus');
-        const cons = (window && window.consensusSequence) ? window.consensusSequence : computeConsensusSequence();
+        const cons = (window && window.consensusSequence) ? window.consensusSequence : alignment.computeConsensusSequence();
         if(cons){
           try{ window.reference = String(cons); }catch(_){ reference = String(cons); }
         } else {
@@ -427,7 +377,7 @@
       try{ window.refModeEnabled = true; }catch(_){ }
       if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
       console.info('Colour mode: differences only');
-      try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+      viewer.scheduleRender();
     });
   }
 
@@ -435,16 +385,10 @@
   const sortOriginalBtn = document.getElementById('sort-original-btn');
   if(sortOriginalBtn){
     sortOriginalBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderByOriginalIndex === 'function'){
-          alignment.orderByOriginalIndex();
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by original order', e); }
+      alignment.orderByOriginalIndex();
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -452,16 +396,10 @@
   const sortLabelBtn = document.getElementById('sort-label-btn');
   if(sortLabelBtn){
     sortLabelBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderByLabel === 'function'){
-          alignment.orderByLabel();
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by label', e); }
+      alignment.orderByLabel();
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -469,38 +407,24 @@
   const sortColumnBtn = document.getElementById('sort-column-btn');
   if(sortColumnBtn){
     sortColumnBtn.addEventListener('click', ()=>{
-      try{
-        if(!viewer){
-          console.warn('Viewer not available');
-          return;
-        }
-        // Get selected columns
-        let selectedCols = (viewer && typeof viewer.getSelectedCols === 'function') 
-          ? viewer.getSelectedCols() 
-          : (viewer && viewer.selectedCols) 
-            ? viewer.selectedCols
-            : new Set();
-        
-        // Convert Set to Array
-        selectedCols = Array.from(selectedCols);
-        
-        if(selectedCols.length === 0){
-          alert('No column selected. Please select a column first by clicking on a column in the alignment.');
-          return;
-        }
-        
-        // Use the first selected column for sorting
-        const siteIndex = selectedCols[0];
-        
-        if(alignment && typeof alignment.orderBySite === 'function'){
-          alignment.orderBySite(siteIndex);
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by column', e); }
+      // Get selected columns
+      let selectedCols = viewer.getSelectedCols();
+      
+      // Convert Set to Array
+      selectedCols = Array.from(selectedCols);
+      
+      if(selectedCols.length === 0){
+        alert('No column selected. Please select a column first by clicking on a column in the alignment.');
+        return;
+      }
+      
+      // Use the first selected column for sorting
+      const siteIndex = selectedCols[0];
+      
+      alignment.orderBySite(siteIndex);
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -508,16 +432,10 @@
   const sortLabelReverseBtn = document.getElementById('sort-label-reverse-btn');
   if(sortLabelReverseBtn){
     sortLabelReverseBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderByLabel === 'function'){
-          alignment.orderByLabel(true);
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by label (reverse)', e); }
+      alignment.orderByLabel(true);
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -525,38 +443,24 @@
   const sortColumnReverseBtn = document.getElementById('sort-column-reverse-btn');
   if(sortColumnReverseBtn){
     sortColumnReverseBtn.addEventListener('click', ()=>{
-      try{
-        if(!viewer){
-          console.warn('Viewer not available');
-          return;
-        }
-        // Get selected columns
-        let selectedCols = (viewer && typeof viewer.getSelectedCols === 'function') 
-          ? viewer.getSelectedCols() 
-          : (viewer && viewer.selectedCols) 
-            ? viewer.selectedCols
-            : new Set();
-        
-        // Convert Set to Array
-        selectedCols = Array.from(selectedCols);
-        
-        if(selectedCols.length === 0){
-          alert('No column selected. Please select a column first by clicking on a column in the alignment.');
-          return;
-        }
-        
-        // Use the first selected column for sorting
-        const siteIndex = selectedCols[0];
-        
-        if(alignment && typeof alignment.orderBySite === 'function'){
-          alignment.orderBySite(siteIndex, true);
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by column (reverse)', e); }
+      // Get selected columns
+      let selectedCols = viewer.getSelectedCols();
+      
+      // Convert Set to Array
+      selectedCols = Array.from(selectedCols);
+      
+      if(selectedCols.length === 0){
+        alert('No column selected. Please select a column first by clicking on a column in the alignment.');
+        return;
+      }
+      
+      // Use the first selected column for sorting
+      const siteIndex = selectedCols[0];
+      
+      alignment.orderBySite(siteIndex, true);
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -564,16 +468,10 @@
   const sortStartPosBtn = document.getElementById('sort-start-pos-btn');
   if(sortStartPosBtn){
     sortStartPosBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderByStartPos === 'function'){
-          alignment.orderByStartPos();
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by start position', e); }
+      alignment.orderByStartPos();
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -581,16 +479,10 @@
   const sortStartPosReverseBtn = document.getElementById('sort-start-pos-reverse-btn');
   if(sortStartPosReverseBtn){
     sortStartPosReverseBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderByStartPos === 'function'){
-          alignment.orderByStartPos(true);
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by start position (reverse)', e); }
+      alignment.orderByStartPos(true);
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -598,16 +490,10 @@
   const sortSeqLengthBtn = document.getElementById('sort-seq-length-btn');
   if(sortSeqLengthBtn){
     sortSeqLengthBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderBySeqLength === 'function'){
-          alignment.orderBySeqLength();
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by sequence length', e); }
+      alignment.orderBySeqLength();
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
@@ -615,119 +501,77 @@
   const sortSeqLengthReverseBtn = document.getElementById('sort-seq-length-reverse-btn');
   if(sortSeqLengthReverseBtn){
     sortSeqLengthReverseBtn.addEventListener('click', ()=>{
-      try{
-        if(alignment && typeof alignment.orderBySeqLength === 'function'){
-          alignment.orderBySeqLength(true);
-          if(viewer){
-            viewer.alignment = alignment;
-            if(typeof viewer.cancelRender === 'function') viewer.cancelRender();
-            if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-          }
-        }
-      }catch(e){ console.error('Failed to sort by sequence length (reverse)', e); }
+      alignment.orderBySeqLength(true);
+      viewer.alignment = alignment;
+      viewer.cancelRender();
+      viewer.scheduleRender();
     });
   }
 
-  // Compute constant mask treating 'N' as an ambiguous wildcard that matches any base.
-  // Requires alignment object with computeConstantMaskAllowN method.
-  function computeConstantMaskAllowN(){
-    if(!alignment || typeof alignment.computeConstantMaskAllowN !== 'function'){
-      console.error('computeConstantMaskAllowN: alignment object with computeConstantMaskAllowN method required');
-      return '1'.repeat(Math.max(0, maxSeqLen));
-    }
-    return alignment.computeConstantMaskAllowN();
-  }
 
-  // Compute constant mask treating both 'N' and gap '-' as ambiguous/wildcards.
-  // Requires alignment object with computeConstantMaskAllowNAndGaps method.
-  function computeConstantMaskAllowNAndGaps(){
-    if(!alignment || typeof alignment.computeConstantMaskAllowNAndGaps !== 'function'){
-      console.error('computeConstantMaskAllowNAndGaps: alignment object with computeConstantMaskAllowNAndGaps method required');
-      return '1'.repeat(Math.max(0, maxSeqLen));
-    }
-    return alignment.computeConstantMaskAllowNAndGaps();
-  }
 
   // Wire up the new apply buttons
   const applyConstantAmbiguousBtn = document.getElementById('apply-constant-ambiguous-btn');
   if(applyConstantAmbiguousBtn){
     applyConstantAmbiguousBtn.addEventListener('click', ()=>{
-      try{
-        if(!viewer){
-          console.error('Viewer not available');
-          return;
-        }
-        
-        const cm = computeConstantMaskAllowN();
-        if(!cm){
-          console.warn('computeConstantMaskAllowN returned no mask');
-          return;
-        }
-        
-        // Get current mask from viewer
-        let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
-        if(!currentMask || currentMask.length < cm.length){
-          currentMask = '1'.repeat(cm.length);
-        }
-        
-        // AND the new mask with the current mask (collapse if either says to collapse)
-        const newMask = andMasks(currentMask, String(cm));
-        
-        // Update the mask in viewer and window
-        try{ 
-          window.mask = newMask; 
-          window.maskStr = newMask; 
-          viewer.maskStr = newMask; 
-        }catch(_){ }
-        
-        console.info('apply-constant-ambiguous: applied with AND (length=' + newMask.length + ')');
-        
-        // Trigger the mask transition with current maskEnabled state
-        if(typeof viewer.startMaskTransition === 'function'){
-          viewer.startMaskTransition(!!viewer.maskEnabled);
-        }
-      }catch(e){ console.warn('apply-constant-ambiguous failed', e); }
+      const cm = alignment.computeConstantMaskAllowN();
+      if(!cm){
+        console.warn('computeConstantMaskAllowN returned no mask');
+        return;
+      }
+      
+      // Get current mask from viewer
+      let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
+      if(!currentMask || currentMask.length < cm.length){
+        currentMask = '1'.repeat(cm.length);
+      }
+      
+      // AND the new mask with the current mask (collapse if either says to collapse)
+      const newMask = andMasks(currentMask, String(cm));
+      
+      // Update the mask in viewer and window
+      try{ 
+        window.mask = newMask; 
+        window.maskStr = newMask; 
+        viewer.maskStr = newMask; 
+      }catch(_){ }
+      
+      console.info('apply-constant-ambiguous: applied with AND (length=' + newMask.length + ')');
+      
+      // Trigger the mask transition with current maskEnabled state
+      viewer.startMaskTransition(!!viewer.maskEnabled);
     });
   }
 
   const applyConstantGappedBtn = document.getElementById('apply-constant-gapped-btn');
   if(applyConstantGappedBtn){
     applyConstantGappedBtn.addEventListener('click', ()=>{
-      try{
-        if(!viewer){
-          console.error('Viewer not available');
-          return;
-        }
+      const cm = alignment.computeConstantMaskAllowNAndGaps();
+      if(!cm){
+        console.warn('computeConstantMaskAllowNAndGaps returned no mask');
+        return;
+      }
+      
+      // Get current mask from viewer
+      let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
+      if(!currentMask || currentMask.length < cm.length){
+        currentMask = '1'.repeat(cm.length);
+      }
+      
+      // AND the new mask with the current mask (collapse if either says to collapse)
+      const newMask = andMasks(currentMask, String(cm));
         
-        const cm = computeConstantMaskAllowNAndGaps();
-        if(!cm){
-          console.warn('computeConstantMaskAllowNAndGaps returned no mask');
-          return;
-        }
-        
-        // Get current mask from viewer
-        let currentMask = viewer.maskStr || (typeof window.mask !== 'undefined' ? String(window.mask) : null);
-        if(!currentMask || currentMask.length < cm.length){
-          currentMask = '1'.repeat(cm.length);
-        }
-        
-        // AND the new mask with the current mask (collapse if either says to collapse)
-        const newMask = andMasks(currentMask, String(cm));
-        
-        // Update the mask in viewer and window
-        try{ 
-          window.mask = newMask; 
-          window.maskStr = newMask; 
-          viewer.maskStr = newMask; 
-        }catch(_){ }
-        
-        console.info('apply-constant-gapped: applied with AND (length=' + newMask.length + ')');
-        
-        // Trigger the mask transition with current maskEnabled state
-        if(typeof viewer.startMaskTransition === 'function'){
-          viewer.startMaskTransition(!!viewer.maskEnabled);
-        }
-      }catch(e){ console.warn('apply-constant-gapped failed', e); }
+      // Update the mask in viewer and window
+      try{ 
+        window.mask = newMask; 
+        window.maskStr = newMask; 
+        viewer.maskStr = newMask; 
+      }catch(_){ }
+      
+      console.info('apply-constant-gapped: applied with AND (length=' + newMask.length + ')');
+      
+      // Trigger the mask transition with current maskEnabled state
+      viewer.startMaskTransition(!!viewer.maskEnabled);
     });
   }
 
@@ -735,24 +579,18 @@
   const expandAllBtn = document.getElementById('expand-all-btn');
   if(expandAllBtn){
     expandAllBtn.addEventListener('click', ()=>{
-      try{
-        console.info('Expand all button clicked');
-        if(!viewer || typeof viewer.setMaskBitsForCols !== 'function'){
-          console.error('Viewer or setMaskBitsForCols not available');
-          return;
-        }
-        
-        // Create a set of all column indices
-        const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
-        const allCols = new Set();
-        for(let i = 0; i < seqLen; i++){
-          allCols.add(i);
-        }
-        
-        // Use setMaskBitsForCols to expand all columns
-        viewer.setMaskBitsForCols(allCols, '1');
-        console.info('expand-all: expanded all ' + seqLen + ' sites');
-      }catch(e){ console.warn('expand-all failed', e); }
+      console.info('Expand all button clicked');
+      
+      // Create a set of all column indices
+      const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
+      const allCols = new Set();
+      for(let i = 0; i < seqLen; i++){
+        allCols.add(i);
+      }
+      
+      // Use setMaskBitsForCols to expand all columns
+      viewer.setMaskBitsForCols(allCols, '1');
+      console.info('expand-all: expanded all ' + seqLen + ' sites');
     });
   }
 
@@ -760,24 +598,18 @@
   const collapseAllBtn = document.getElementById('collapse-all-btn');
   if(collapseAllBtn){
     collapseAllBtn.addEventListener('click', ()=>{
-      try{
-        console.info('Collapse all button clicked');
-        if(!viewer || typeof viewer.setMaskBitsForCols !== 'function'){
-          console.error('Viewer or setMaskBitsForCols not available');
-          return;
-        }
-        
-        // Create a set of all column indices
-        const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
-        const allCols = new Set();
-        for(let i = 0; i < seqLen; i++){
-          allCols.add(i);
-        }
-        
-        // Use setMaskBitsForCols to collapse all columns
-        viewer.setMaskBitsForCols(allCols, '0');
-        console.info('collapse-all: collapsed all ' + seqLen + ' sites');
-      }catch(e){ console.warn('collapse-all failed', e); }
+      console.info('Collapse all button clicked');
+      
+      // Create a set of all column indices
+      const seqLen = viewer.maxSeqLen || (rows && rows[0] && rows[0].sequence ? rows[0].sequence.length : 0);
+      const allCols = new Set();
+      for(let i = 0; i < seqLen; i++){
+        allCols.add(i);
+      }
+      
+      // Use setMaskBitsForCols to collapse all columns
+      viewer.setMaskBitsForCols(allCols, '0');
+      console.info('collapse-all: collapsed all ' + seqLen + ' sites');
     });
   }
 
@@ -788,8 +620,8 @@
         try{
           // prefer viewer.anchorRow if available, else first selected row, else top visible row (0)
           let idx = null;
-          try{ if(viewer && typeof viewer.anchorRow !== 'undefined' && viewer.anchorRow !== null) idx = viewer.anchorRow; }catch(_){ }
-          if(idx === null){ const s = getSelectedRows(); if(s && s.size > 0) idx = Array.from(s)[0]; else idx = 0; }
+          if(viewer.anchorRow !== undefined && viewer.anchorRow !== null) idx = viewer.anchorRow;
+          if(idx === null){ const s = viewer.getSelectedRows(); if(s && s.size > 0) idx = Array.from(s)[0]; else idx = 0; }
           idx = Math.max(0, Math.min(rowCount - 1, idx));
           const seq = (rows[idx] && rows[idx].sequence) ? rows[idx].sequence : null;
           if(!seq){ console.warn('No sequence available at selected row to use as reference'); return; }
@@ -802,7 +634,7 @@
           try{ window.refModeEnabled = true; }catch(_){ }
           if(viewer){ try{ viewer.refModeEnabled = true; }catch(_){ } }
           console.info('Set reference to row', idx);
-          try{ if(viewer && typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); }catch(_){ }
+          viewer.scheduleRender();
         }catch(e){ console.warn('set-ref failed', e); }
       });
     }
@@ -815,25 +647,13 @@
     if(fontIncreaseBtn) {
       fontIncreaseBtn.addEventListener('click', ()=> {
         console.info('Increase button clicked');
-        try{
-          if(viewer && typeof viewer.updateFontSize === 'function'){
-            viewer.updateFontSize(1);
-          } else {
-            console.warn('Viewer updateFontSize method not available');
-          }
-        }catch(e){ console.warn('Font increase failed', e); }
+        viewer.updateFontSize(1);
       });
     }
     if(fontDecreaseBtn) {
       fontDecreaseBtn.addEventListener('click', ()=> {
         console.info('Decrease button clicked');
-        try{
-          if(viewer && typeof viewer.updateFontSize === 'function'){
-            viewer.updateFontSize(-1);
-          } else {
-            console.warn('Viewer updateFontSize method not available');
-          }
-        }catch(e){ console.warn('Font decrease failed', e); }
+        viewer.updateFontSize(-1);
       });
     }
     
@@ -842,13 +662,7 @@
       if((e.metaKey || e.ctrlKey) && e.key === '0'){
         e.preventDefault();
         console.info('Reset font size shortcut triggered (Cmd+0)');
-        try{
-          if(viewer && typeof viewer.resetFontSize === 'function'){
-            viewer.resetFontSize();
-          } else {
-            console.warn('Viewer resetFontSize method not available');
-          }
-        }catch(e){ console.warn('Font reset failed', e); }
+        viewer.resetFontSize();
       }
     });
 
@@ -859,27 +673,15 @@
     
     if(collapseColumnsBtn) {
       collapseColumnsBtn.addEventListener('click', ()=> {
-        try{
-          console.info('Collapse columns button clicked');
-          if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
-            viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '0');
-          } else {
-            console.warn('setMaskBitsForCols not available on viewer');
-          }
-        }catch(e){ console.warn('Collapse columns failed', e); }
+        console.info('Collapse columns button clicked');
+        viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '0');
       });
     }
     
     if(expandColumnsBtn) {
       expandColumnsBtn.addEventListener('click', ()=> {
-        try{
-          console.info('Expand columns button clicked');
-          if(viewer && typeof viewer.setMaskBitsForCols === 'function'){
-            viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '1');
-          } else {
-            console.warn('setMaskBitsForCols not available on viewer');
-          }
-        }catch(e){ console.warn('Expand columns failed', e); }
+        console.info('Expand columns button clicked');
+        viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '1');
       });
     }
 
@@ -971,200 +773,39 @@
     // Animation helpers for mask toggle
     let maskAnimRequest = null;
     const MASK_ANIM_MS = 220;
-  // mask transition is handled directly by the SealionViewer; no fallback here.
-
-  // Selection is owned by the SealionViewer instance. After migration the
-  // viewer is authoritative; these helpers call the viewer API directly and
-  // fall back to sensible no-ops (empty sets) if the viewer isn't available.
-  function getSelectedRows(){
-    try{ return (viewer && typeof viewer.getSelectedRows === 'function') ? viewer.getSelectedRows() : new Set(); }catch(_){ return new Set(); }
-  }
-  function getSelectedCols(){
-    try{ return (viewer && typeof viewer.getSelectedCols === 'function') ? viewer.getSelectedCols() : new Set(); }catch(_){ return new Set(); }
-  }
-
-  // Selection setters now directly call the viewer. If the viewer is not yet
-  // present we intentionally no-op — the app should instantiate the viewer
-  // early in the migration so these methods are available.
-  function setSelectionToRange(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(rowCount-1, Math.max(a,b));
-    const rows = [];
-    for(let r=lo;r<=hi;r++) rows.push(r);
-    try{ if(viewer && typeof viewer.setSelectedRows === 'function'){ viewer.setSelectedRows(rows); if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender(); } }catch(_){ }
-  }
-
-  function addRangeToSelection(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(rowCount-1, Math.max(a,b));
-    try{
-      if(viewer && typeof viewer.setSelectedRows === 'function' && typeof viewer.getSelectedRows === 'function'){
-        const cur = new Set(viewer.getSelectedRows());
-        for(let r=lo;r<=hi;r++) cur.add(r);
-        viewer.setSelectedRows(Array.from(cur)); if(typeof viewer.scheduleRender === 'function') viewer.scheduleRender();
-      }
-    }catch(_){ }
-  }
-
-  function clearRectSelection(){
-    try{ if(viewer && typeof viewer.clearRectSelection === 'function') viewer.clearRectSelection(); }catch(_){ }
-  }
-
-  // leave canvas placement to DOM (they live in `left-inner` / `seq-inner` in index.html)
-  // and rely on the spacer + absolute/sticky positioning to control layout.
-
-  // We'll use large CSS-sized canvases for scrollbars, but render only the visible region.
-  // Set canvas CSS sizes
-  // Requires viewer object with setCanvasCSSSizes method.
-  function setCanvasCSSSizes(){
-    if(!viewer || typeof viewer.setCanvasCSSSizes !== 'function'){
-      console.error('setCanvasCSSSizes: viewer object with setCanvasCSSSizes method required');
-      return;
-    }
-    viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
-  }
-
-  // Measure character width using the chosen font
-  // Requires viewer object with measureCharWidth method.
-  function measureCharWidth(){
-    if(!viewer || typeof viewer.measureCharWidth !== 'function'){
-      console.error('measureCharWidth: viewer object with measureCharWidth method required');
-      return;
-    }
-    viewer.measureCharWidth(getViewerProp('FONT', ''), { apply: true, maskEnabled: !!maskEnabled });
-  }
-
-  // Backing store pixel scaling for crisp text
-  // Requires viewer object with resizeBackings method.
-  function resizeBackings(){
-    if(!viewer || typeof viewer.resizeBackings !== 'function'){
-      console.error('resizeBackings: viewer object with resizeBackings method required');
-      return;
-    }
-    viewer.resizeBackings();
-  }
-
-  // Enforce exact integer CSS dimensions and backing pixel dimensions for all canvases.
-  // Requires viewer object with enforceIntegerGeometry method.
-  function enforceIntegerGeometry(){
-    if(!viewer || typeof viewer.enforceIntegerGeometry !== 'function'){
-      console.error('enforceIntegerGeometry: viewer object with enforceIntegerGeometry method required');
-      return;
-    }
-    viewer.enforceIntegerGeometry();
-  }
-
-  // `logLayoutDiagnostics` removed.
-
-  // If the scroll position is past the maximum allowed by content height, clamp it.
-  function clampScrollPositions(){
-    try{
-    const viewportHeight = Math.max(1, scroller ? scroller.clientHeight : window.innerHeight);
-      const totalHeight = rowCount * ROW_HEIGHT;
-      const maxScroll = Math.max(0, totalHeight - viewportHeight);
-      // Prefer viewer-managed programmatic scroll to keep scrolling/snap logic centralized.
-      try{
-        if(viewer && typeof viewer.setScrollTopImmediate === 'function'){
-          if(scroller && scroller.scrollTop > maxScroll) viewer.setScrollTopImmediate(maxScroll);
-          try{ if(leftScroll && leftScroll !== scroller && leftScroll.scrollTop > maxScroll) viewer.setScrollTopImmediate(maxScroll); }catch(_){ }
-        } else {
-          // Fallback (rare): do not perform direct DOM writes here. Warn so the issue
-          // can be diagnosed and the viewer required for programmatic scrolling.
-          console.warn('clampScrollPositions: SealionViewer not available; cannot clamp without direct DOM write (viewer required)');
-        }
-      }catch(e){ /* tolerate clamp errors */ }
-    }catch(e){}
-  }
-
-  // Measure character width from actual canvas context
-  // Requires viewer object with measureCharWidthFromReal method.
-  function measureCharWidthFromReal(){
-    if(!viewer || typeof viewer.measureCharWidthFromReal !== 'function'){
-      console.error('measureCharWidthFromReal: viewer object with measureCharWidthFromReal method required');
-      return;
-    }
-    viewer.measureCharWidthFromReal(FONT);
-  }
-
 
   // Measure vertical text metrics (ascent/descent) to compute a centering offset
-  // Requires viewer object with measureTextVerticalOffset method.
   let labelTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
   let seqTextVertOffset = Math.floor(ROW_HEIGHT/2); // default
-  function measureTextVerticalOffset(){
-    if(!viewer || typeof viewer.measureTextVerticalOffset !== 'function'){
-      console.error('measureTextVerticalOffset: viewer object with measureTextVerticalOffset method required');
-      return;
-    }
-    const res = viewer.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT });
-    if(res){
-      seqTextVertOffset = res.seqTextVertOffset;
-      labelTextVertOffset = res.labelTextVertOffset;
-    }
-  }
-
-  // Measure row height from font metrics
-  // Requires viewer object with measureRowHeightFromFonts method.
-  function measureRowHeightFromFonts(){
-    if(!viewer || typeof viewer.measureRowHeightFromFonts !== 'function'){
-      console.error('measureRowHeightFromFonts: viewer object with measureRowHeightFromFonts method required');
-      return;
-    }
-    viewer.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true });
-  }
-
-  // Compute visible rows/cols given current scroll positions
-  // Requires viewer object with computeVisible method.
-  function computeVisible(){
-    if(!viewer || typeof viewer.computeVisible !== 'function'){
-      console.error('computeVisible: viewer object with computeVisible method required');
-      return { firstRow: 0, lastRow: 0, firstCol: 0, lastCol: 0, rawFirstCol: 0, rawLastCol: 0, viewW: 0, viewH: 0, scrollLeft: 0, scrollTop: 0, firstRowNoBuffer: 0, lastRowNoBuffer: 0 };
-    }
-    return viewer.computeVisible(scroller, { ROW_HEIGHT: getViewerProp('ROW_HEIGHT', ROW_HEIGHT), BUFFER_ROWS: getViewerProp('BUFFER_ROWS', BUFFER_ROWS), BUFFER_COLS: getViewerProp('BUFFER_COLS', BUFFER_COLS), CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), maxSeqLen: maxSeqLen, rowCount: rowCount, maskEnabled: !!maskEnabled });
-  }
   // Populate local maskStr from utils
   try{ maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); }catch(_){ maskStr = '1'.repeat(maxSeqLen); }
-  // `drawLabels` moved into `SealionViewer.drawLabels` during staged migration.
-  // The viewer implementation is authoritative; local legacy implementation removed.
-
-  
-
-  // consensus drawing moved into `SealionViewer.drawConsensus` during staged migration
-    // overview drawing moved into `SealionViewer.drawOverview` during staged migration
-
-  
-
-  // `drawSequences` moved into `SealionViewer.drawSequences` during staged migration.
-  // The viewer implementation is authoritative; local legacy implementation removed.
-
-  // Legacy rAF-based render loop removed — the SealionViewer instance is now
-  // authoritative for scheduling and drawing. External code should call
-  // `viewer.scheduleRender()` (guarded) instead of a global shim.
 
   // initial sizing + measure
   // initial measure and sizing
-  measureCharWidth();
+  viewer.measureCharWidth(getViewerProp('FONT', ''), { apply: true, maskEnabled: !!maskEnabled });
   // measure fonts to determine ROW_HEIGHT before sizing
-  measureRowHeightFromFonts();
+  viewer.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true });
   // consensus row should match sequence row height
   CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
   try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-  setCanvasCSSSizes();
+  viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
   // give the spacer a moment to size (if DOM still settling) then measure real width and backings
   requestAnimationFrame(()=>{
     try{
-      measureCharWidthFromReal();
+      viewer.measureCharWidthFromReal(FONT);
       // remeasure row height in case font rendering differs in the real canvas
-      measureRowHeightFromFonts();
+      viewer.measureRowHeightFromFonts({ FONT: FONT, ROW_PADDING: ROW_PADDING, apply: true });
       // update consensus height to match new row measurements
       // ensure consensus height equals ROW_HEIGHT so it matches sequence rows on first paint
       CONSENSUS_HEIGHT = Math.max(12, ROW_HEIGHT);
       try{ document.documentElement.style.setProperty('--consensus-height', CONSENSUS_HEIGHT + 'px'); }catch(_){ }
-      setCanvasCSSSizes();
-    measureTextVerticalOffset();
-    try{
-      if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings();
-    }catch(_){ try{ resizeBackings(); }catch(_){} }
+      viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
+      const res = viewer.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT });
+      if(res){
+        seqTextVertOffset = res.seqTextVertOffset;
+        labelTextVertOffset = res.labelTextVertOffset;
+      }
+      viewer.scheduleBackingResize();
     }catch(e){
       console.error('Initialization rAF handler failed', e);
     }finally{
@@ -1178,124 +819,17 @@
   const observer = new ResizeObserver(()=>{
     clearTimeout(resizeDebounce);
     resizeDebounce = setTimeout(()=>{
-  measureCharWidthFromReal();
-  setCanvasCSSSizes();
-  measureTextVerticalOffset();
-  try{
-    if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings();
-  }catch(_){ try{ resizeBackings(); }catch(_){} }
+      viewer.measureCharWidthFromReal(FONT);
+      viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
+      const res = viewer.measureTextVerticalOffset({ FONT: FONT, ROW_HEIGHT: ROW_HEIGHT });
+      if(res){
+        seqTextVertOffset = res.seqTextVertOffset;
+        labelTextVertOffset = res.labelTextVertOffset;
+      }
+      viewer.scheduleBackingResize();
     }, 50);
   });
   if(scroller) observer.observe(scroller);
-
-  // Label divider drag-to-resize is handled by SealionViewer.attachInteractionHandlers
-  // to avoid duplicate listeners and centralize behavior inside the viewer instance.
-
-
-  // selection helpers: compute row from clientY within labelCanvas
-  function rowFromClientY(clientY){
-    // Viewer is authoritative for hit-testing
-    try{
-      return viewer.rowFromClientY(clientY, { labelCanvas: labelCanvas, scroller: scroller, ROW_HEIGHT: ROW_HEIGHT, rowCount: rowCount });
-    }catch(e){
-      console.error('viewer.rowFromClientY failed', e);
-      throw e;
-    }
-  }
-
-  // helper: compute column under clientX within seq/header
-  // helper: compute column under clientX within seq/header — use viewer.hit-testing when needed
-  // label interactions (click/drag/wheel) are handled by SealionViewer.attachInteractionHandlers
-  // (selection state now lives in the viewer; these helpers delegate to the viewer when available)
-
-  // colFromClientX removed during migration — use viewer.colIndexFromCssOffset(absX) instead
-
-  function setColSelectionToRange(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    try{
-      if(viewer && typeof viewer.setSelectedCols === 'function'){
-        const cols = [];
-        for(let c=lo;c<=hi;c++) cols.push(c);
-        viewer.setSelectedCols(cols);
-      }
-    }catch(_){ }
-  }
-
-  function addRangeToColSelection(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    try{
-      if(viewer && typeof viewer.setSelectedCols === 'function' && typeof viewer.getSelectedCols === 'function'){
-        const cur = new Set(viewer.getSelectedCols());
-        for(let c=lo;c<=hi;c++) cur.add(c);
-        viewer.setSelectedCols(Array.from(cur));
-      }
-    }catch(_){ }
-  }
-
-  function toggleRangeInColSelection(a,b){
-    const lo = Math.max(0, Math.min(a,b));
-    const hi = Math.min(maxSeqLen-1, Math.max(a,b));
-    try{
-      if(viewer && typeof viewer.setSelectedCols === 'function' && typeof viewer.getSelectedCols === 'function'){
-        const cur = new Set(viewer.getSelectedCols());
-        for(let c=lo;c<=hi;c++){ if(cur.has(c)) cur.delete(c); else cur.add(c); }
-        viewer.setSelectedCols(Array.from(cur));
-      }
-    }catch(_){ }
-  }
-
-  // render selected columns as a pale overlay in header and sequence area
-  function drawColumnSelectionOverlay(visible){
-    try{
-      const sel = getSelectedCols();
-  viewer.drawColumnSelectionOverlay(seqCanvas, visible, { CHAR_WIDTH: getViewerProp('CHAR_WIDTH', CHAR_WIDTH, 'charWidth'), EXPANDED_RIGHT_PAD: getViewerProp('EXPANDED_RIGHT_PAD', EXPANDED_RIGHT_PAD), selectedCols: sel, colOffsets: ((viewer && viewer.colOffsets) ? viewer.colOffsets : []) });
-    }catch(e){ console.error('viewer.drawColumnSelectionOverlay failed', e); }
-  }
-
-  
-
-  // header interactions (column click/drag) are handled by SealionViewer.attachInteractionHandlers
-
-  // consensus canvas column interactions are handled by SealionViewer.attachInteractionHandlers
-
-  // overview interactions (click/drag) are handled by SealionViewer.attachInteractionHandlers
-
-  // Sequence canvas interactions (wheel, selection, panning) are handled by SealionViewer.attachInteractionHandlers
-
-  // Vertical scrolling is handled by the SealionViewer instance's scroll handler.
-  // The viewer was passed the canonical `scroller` in ensureViewer() and will
-  // mirror left/right scrolls and schedule renders. We keep the legacy helpers
-  // below so callers can still programmatically set scroll positions; those
-  // helpers prefer to call into `viewer` when available.
-
-  // helpers to set scroll positions programmatically while suppressing the scroll handler actions
-  function setScrollLeftImmediate(x){
-    // Delegate to viewer-provided programmatic scroll method. If the viewer
-    // is not present treat this as a no-op and warn — we removed legacy
-    // direct DOM fallbacks to keep the viewer authoritative.
-    try{
-      if(viewer && typeof viewer.setScrollLeftImmediate === 'function'){
-        return viewer.setScrollLeftImmediate(x);
-      }
-    }catch(_){ }
-    console.warn('setScrollLeftImmediate: SealionViewer not available; no-op');
-  }
-
-  function setScrollTopImmediate(y){
-    try{
-      if(viewer && typeof viewer.setScrollTopImmediate === 'function'){
-        return viewer.setScrollTopImmediate(y);
-      }
-    }catch(_){ }
-    console.warn('setScrollTopImmediate: SealionViewer not available; no-op');
-  }
-
-  // when the right horizontally scrolls we only need to redraw header and sequences
-  // re-enable snapping to integer character after scrolling stops (direction-aware)
-  // Snap scrolling is always enabled and managed by the SealionViewer instance
-  
 
   // Command-drag panning: hold Meta (Command on macOS) and drag to pan the alignment viewport
   let isCmdDrag = false;
@@ -1312,11 +846,9 @@
   let isSpaceDown = false;
   // helper: when space is held, show 'grab' cursor on relevant elements; when released, clear it
   function updateSpaceCursor(){
-    try{
-      const cur = (isSpaceDown && !isCmdDrag) ? 'grab' : '';
-      // restrict cursor hint to seqCanvas only per user request
-      if(seqCanvas) seqCanvas.style.cursor = cur;
-    }catch(e){ }
+    const cur = (isSpaceDown && !isCmdDrag) ? 'grab' : '';
+    // restrict cursor hint to seqCanvas only per user request
+    if(seqCanvas) seqCanvas.style.cursor = cur;
   }
   
 
@@ -1326,16 +858,15 @@
 
   // on window resize recompute backings
   window.addEventListener('resize', ()=>{
-    setCanvasCSSSizes();
-    try{ if(viewer && typeof viewer.scheduleBackingResize === 'function') viewer.scheduleBackingResize(); else resizeBackings(); }catch(_){ try{ resizeBackings(); }catch(_){} }
-    
+    viewer.setCanvasCSSSizes({ LABEL_WIDTH: LABEL_WIDTH, ROW_HEIGHT: ROW_HEIGHT });
+    viewer.scheduleBackingResize();
   });
 
   // compute and expose constantMask at initialization
-  try{ const cm = computeConstantMask(); window.constantMask = cm; }catch(_){ }
-  try{ const cam = computeConstantMaskAllowN(); window.constantAmbiguousMask = cam; }catch(_){ }
-  try{ const cgm = computeConstantMaskAllowNAndGaps(); window.constantGappedMask = cgm; }catch(_){ }
-  try{ const cons = computeConsensusSequence(); window.consensusSequence = cons; }catch(_){ }
+  try{ const cm = alignment.computeConstantMask(); window.constantMask = cm; }catch(_){ }
+  try{ const cam = alignment.computeConstantMaskAllowN(); window.constantAmbiguousMask = cam; }catch(_){ }
+  try{ const cgm = alignment.computeConstantMaskAllowNAndGaps(); window.constantGappedMask = cgm; }catch(_){ }
+  try{ const cons = alignment.computeConsensusSequence(); window.consensusSequence = cons; }catch(_){ }
   // all initialization completed
   setStatus('initialized');
 
