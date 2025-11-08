@@ -41,11 +41,10 @@
   width: 10px; /* hit target width */
   cursor: col-resize;
   z-index: 50;
-  /* subtle visible handle in center */
-  background: linear-gradient(90deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0) 60%);
+  background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.2) 70%,rgb(150, 150, 150) 100%);
 }
 @media (hover:hover){
-  #label-divider:hover{ background: linear-gradient(90deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.12) 50%, rgba(0,0,0,0) 65%); }
+  #label-divider:hover{ background: linear-gradient(90deg,  rgba(0,0,0,0) 0%, rgba(0,0,0,0.2) 70%,rgb(150, 150, 150) 100%);}
 }
 
 /* The alignment-scroll is the only scroller in the layout */

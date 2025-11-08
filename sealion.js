@@ -1401,10 +1401,30 @@
       const start = Math.max(0, (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1);
       const end = Math.min(maxSeqLen - 1, (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : Math.min(maxSeqLen - 1, start + 100)) + 1);
 
-      // Adaptive tick step
-      const MIN_TICK_PX = 48;
+      // Adaptive tick step based on actual visual spacing
       const totalVisualWidth = (colOffsets && typeof colOffsets[maxSeqLen] !== 'undefined') ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
       const avgBasePx = (maxSeqLen > 0) ? (totalVisualWidth / maxSeqLen) : CHAR_WIDTH;
+      
+      // Calculate actual visual spacing by sampling visible columns
+      let actualAvgPx = avgBasePx;
+      if (colOffsets && colOffsets.length > 1) {
+        const sampleCount = Math.min(20, end - start);
+        if (sampleCount > 1) {
+          let totalSampleWidth = 0;
+          for (let i = 0; i < sampleCount; i++) {
+            const c = start + Math.floor(i * (end - start) / sampleCount);
+            if (c >= 0 && c < colOffsets.length - 1) {
+              const colWidth = (colOffsets[c + 1] || 0) - (colOffsets[c] || 0);
+              totalSampleWidth += colWidth;
+            }
+          }
+          actualAvgPx = totalSampleWidth / sampleCount;
+        }
+      }
+      
+      // Use higher minimum spacing for collapsed columns to prevent label overlap
+      const MIN_TICK_PX = actualAvgPx < 5 ? 80 : 48;
+      
       function chooseTickStep(avgPx) {
         if (avgPx <= 0) return 10;
         const candidates = [1, 2, 5];
@@ -1418,7 +1438,7 @@
         }
         return Math.max(10, Math.ceil(raw));
       }
-      const step = chooseTickStep(avgBasePx);
+      const step = chooseTickStep(actualAvgPx);
       const smallTickH = Math.max(2, Math.round(HEADER_HEIGHT * 0.28));
       const largeTickH = Math.max(3, Math.round(HEADER_HEIGHT * 0.6));
       const bottom = HEADER_HEIGHT;
@@ -1502,7 +1522,7 @@
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = this.LABELS_HEADER_TEXT;
 
-      const title = 'consensus';
+      const title = 'ruler';
 
       // Calculate vertical centering like consensus row does
       const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
@@ -1575,7 +1595,7 @@
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = this.LABELS_HEADER_TEXT;
 
-      const title = 'consensus';
+      const title = 'consensus: ';
 
       // Calculate vertical centering like consensus row does
       const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
@@ -2252,8 +2272,8 @@
         };
 
         // draw headers/overview/consensus/labels/sequences in safe guards
-        try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
-        try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
+        //try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
+        //try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
         try { this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsConsensus failed', e); }
         try { this.drawOverview(this.overviewCanvas, vis, commonOpts); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
