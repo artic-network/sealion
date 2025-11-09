@@ -408,6 +408,19 @@
         const hi = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(a, b));
         for (let r = lo; r <= hi; r++) this.selectedRows.add(r);
       };
+      this.expandSelectionToInclude = (newPos) => {
+        // Expand row selection to include newPos
+        if (this.selectedRows.size === 0) {
+          this.selectedRows.add(newPos);
+          return;
+        }
+        const currentMin = Math.min(...Array.from(this.selectedRows));
+        const currentMax = Math.max(...Array.from(this.selectedRows));
+        const lo = Math.max(0, Math.min(currentMin, newPos));
+        const hi = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(currentMax, newPos));
+        this.selectedRows.clear();
+        for (let r = lo; r <= hi; r++) this.selectedRows.add(r);
+      };
       this.setColSelectionToRange = (a, b) => {
         const lo = Math.max(0, Math.min(a, b));
         const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
@@ -417,6 +430,19 @@
       this.addRangeToColSelection = (a, b) => {
         const lo = Math.max(0, Math.min(a, b));
         const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
+        for (let c = lo; c <= hi; c++) this.selectedCols.add(c);
+      };
+      this.expandColSelectionToInclude = (newPos) => {
+        // Expand column selection to include newPos
+        if (this.selectedCols.size === 0) {
+          this.selectedCols.add(newPos);
+          return;
+        }
+        const currentMin = Math.min(...Array.from(this.selectedCols));
+        const currentMax = Math.max(...Array.from(this.selectedCols));
+        const lo = Math.max(0, Math.min(currentMin, newPos));
+        const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, currentMax), Math.max(currentMax, newPos));
+        this.selectedCols.clear();
         for (let c = lo; c <= hi; c++) this.selectedCols.add(c);
       };
       this.clearRectSelection = () => { this.isRectSelecting = false; this.rectStartRow = this.rectStartCol = this.rectEndRow = this.rectEndCol = null; };
@@ -465,21 +491,42 @@
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedRows.clear(); } catch (_) { }
           const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
-          if (e.shiftKey && this.anchorCol !== null) { try { this.setColSelectionToRange(this.anchorCol, col); } catch (_) { } this.selectionStartCol = this.anchorCol; }
-          else this.selectionStartCol = col;
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Shift-click: expand selection to include this column
+            this.expandColSelectionToInclude(col);
+            // Determine which end we're extending from
+            const currentMin = Math.min(...Array.from(this.selectedCols));
+            const currentMax = Math.max(...Array.from(this.selectedCols));
+            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
+          } else {
+            this.selectionStartCol = col;
+          }
+          
           this.selectionMode = e.metaKey ? 'add' : 'replace';
-          if (e.shiftKey && this.anchorCol !== null) { try { this.setColSelectionToRange(this.anchorCol, col); } catch (_) { } }
-          else if (e.metaKey) { try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
-          else { try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
-          this.isColSelecting = true; this.scheduleRender();
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Already handled above
+          } else if (e.metaKey) { 
+            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } 
+            this.anchorCol = col; 
+          } else { 
+            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } 
+            this.anchorCol = col; 
+          }
+          this.isColSelecting = true; 
+          this.scheduleRender();
           e.preventDefault();
         });
 
         window.addEventListener('mousemove', (e) => {
           if (!this.isColSelecting) return;
           const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
-          if (e.metaKey) { try { this.addRangeToColSelection(this.selectionStartCol, col); } catch (_) { } }
-          else { try { this.setColSelectionToRange(this.selectionStartCol, col); } catch (_) { } }
+          if (e.metaKey) { 
+            try { this.addRangeToColSelection(this.selectionStartCol, col); } catch (_) { } 
+          } else { 
+            try { this.setColSelectionToRange(this.selectionStartCol, col); } catch (_) { } 
+          }
           this.scheduleRender();
         });
 
@@ -498,13 +545,31 @@
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedRows.clear(); } catch (_) { }
           const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
-          if (e.shiftKey && this.anchorCol !== null) { try { this.setColSelectionToRange(this.anchorCol, col); } catch (_) { } this.selectionStartCol = this.anchorCol; }
-          else this.selectionStartCol = col;
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Shift-click: expand selection to include this column
+            this.expandColSelectionToInclude(col);
+            // Determine which end we're extending from
+            const currentMin = Math.min(...Array.from(this.selectedCols));
+            const currentMax = Math.max(...Array.from(this.selectedCols));
+            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
+          } else {
+            this.selectionStartCol = col;
+          }
+          
           this.selectionMode = e.metaKey ? 'add' : 'replace';
-          if (e.shiftKey && this.anchorCol !== null) { try { this.setColSelectionToRange(this.anchorCol, col); } catch (_) { } }
-          else if (e.metaKey) { try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
-          else { try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
-          this.isColSelecting = true; this.scheduleRender();
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Already handled above
+          } else if (e.metaKey) { 
+            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } 
+            this.anchorCol = col; 
+          } else { 
+            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } 
+            this.anchorCol = col; 
+          }
+          this.isColSelecting = true; 
+          this.scheduleRender();
           e.preventDefault();
         });
       }
@@ -602,12 +667,32 @@
             try { this.clearRectSelection(); } catch (_) { }
             try { this.selectedCols.clear(); } catch (_) { }
             const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-            if (e.shiftKey && this.anchorRow !== null) { this.selectionOrigin = this.anchorRow; } else { this.selectionOrigin = row; }
+            
+            if (e.shiftKey && this.selectedRows.size > 0) {
+              // Shift-click: expand selection to include this row
+              this.expandSelectionToInclude(row);
+              // Determine which end we're extending from
+              const currentMin = Math.min(...Array.from(this.selectedRows));
+              const currentMax = Math.max(...Array.from(this.selectedRows));
+              this.selectionOrigin = (row < currentMin) ? currentMax : currentMin;
+            } else {
+              this.selectionOrigin = row;
+            }
+            
             this.selectionMode = e.metaKey ? 'add' : 'replace';
-            if (e.shiftKey && this.anchorRow !== null) { try { this.setSelectionToRange(this.anchorRow, row); } catch (_) { } }
-            else if (e.metaKey) { try { if (this.selectedRows.has(row)) this.selectedRows.delete(row); else this.selectedRows.add(row); } catch (_) { } this.anchorRow = row; }
-            else { try { this.selectedRows.clear(); this.selectedRows.add(row); } catch (_) { } this.anchorRow = row; }
-            this.isSelecting = true; this.selectionStartRow = row; this.scheduleRender();
+            
+            if (e.shiftKey && this.selectedRows.size > 0) {
+              // Already handled above
+            } else if (e.metaKey) {
+              try { if (this.selectedRows.has(row)) this.selectedRows.delete(row); else this.selectedRows.add(row); } catch (_) { }
+              this.anchorRow = row;
+            } else {
+              try { this.selectedRows.clear(); this.selectedRows.add(row); } catch (_) { }
+              this.anchorRow = row;
+            }
+            this.isSelecting = true;
+            this.selectionStartRow = row;
+            this.scheduleRender();
             e.preventDefault();
             return;
           }
@@ -616,11 +701,29 @@
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedRows.clear(); } catch (_) { }
           const col = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-          if (e.shiftKey && this.anchorCol !== null) { this.selectionStartCol = this.anchorCol; } else { this.selectionStartCol = col; }
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Shift-click: expand selection to include this column
+            this.expandColSelectionToInclude(col);
+            // Determine which end we're extending from
+            const currentMin = Math.min(...Array.from(this.selectedCols));
+            const currentMax = Math.max(...Array.from(this.selectedCols));
+            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
+          } else {
+            this.selectionStartCol = col;
+          }
+          
           this.selectionMode = e.metaKey ? 'add' : 'replace';
-          if (e.shiftKey && this.anchorCol !== null) { try { this.setColSelectionToRange(this.anchorCol, col); } catch (_) { } }
-          else if (e.metaKey) { try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
-          else { try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } this.anchorCol = col; }
+          
+          if (e.shiftKey && this.selectedCols.size > 0) {
+            // Already handled above
+          } else if (e.metaKey) {
+            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
+            this.anchorCol = col;
+          } else {
+            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { }
+            this.anchorCol = col;
+          }
           this.isColSelecting = true;
           this.scheduleRender();
           e.preventDefault();
@@ -665,12 +768,32 @@
           const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedCols.clear(); } catch (_) { }
-          if (e.shiftKey && this.anchorRow !== null) { this.selectionOrigin = this.anchorRow; } else { this.selectionOrigin = row; }
+          
+          if (e.shiftKey && this.selectedRows.size > 0) {
+            // Shift-click: expand selection to include this row
+            this.expandSelectionToInclude(row);
+            // Determine which end we're extending from
+            const currentMin = Math.min(...Array.from(this.selectedRows));
+            const currentMax = Math.max(...Array.from(this.selectedRows));
+            this.selectionOrigin = (row < currentMin) ? currentMax : currentMin;
+          } else {
+            this.selectionOrigin = row;
+          }
+          
           this.selectionMode = e.metaKey ? 'add' : 'replace';
-          if (e.shiftKey && this.anchorRow !== null) { try { this.setSelectionToRange(this.anchorRow, row); } catch (_) { } }
-          else if (e.metaKey) { try { if (this.selectedRows.has(row)) this.selectedRows.delete(row); else this.selectedRows.add(row); } catch (_) { } this.anchorRow = row; }
-          else { try { this.selectedRows.clear(); this.selectedRows.add(row); } catch (_) { } this.anchorRow = row; }
-          this.isSelecting = true; this.selectionStartRow = row; this.scheduleRender();
+          
+          if (e.shiftKey && this.selectedRows.size > 0) {
+            // Already handled above
+          } else if (e.metaKey) {
+            try { if (this.selectedRows.has(row)) this.selectedRows.delete(row); else this.selectedRows.add(row); } catch (_) { }
+            this.anchorRow = row;
+          } else {
+            try { this.selectedRows.clear(); this.selectedRows.add(row); } catch (_) { }
+            this.anchorRow = row;
+          }
+          this.isSelecting = true;
+          this.selectionStartRow = row;
+          this.scheduleRender();
           e.preventDefault();
         });
 
@@ -2854,10 +2977,11 @@
     INDEX_COLOR: '#888888',
     INDEX_RIGHT_ALIGN_POS: 50,
     LABEL_START_POS: 56,
-    SEQ_SELECTED_ROW: '#cfe8ff',
+    SEQ_SELECTED_ROW: 'rgba(207, 232, 255, 0.5)',
     SEQ_EVEN_ROW: '#fff',
     SEQ_ODD_ROW: '#fafafa',
-    SEQ_COL_SELECTION: 'rgba(0,120,200,0.9)',
+    SEQ_COL_SELECTION: '#ffd54d',
+    //SEQ_COL_SELECTION: 'rgba(0,120,200,0.9)',
     SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
     SEQ_RECT_SELECTION_END: 'rgba(0,0,255,0.8)',
     maskEnabled: true,
