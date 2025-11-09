@@ -537,6 +537,14 @@ Refreshes device pixel ratio and schedules re-render.
 
 **Description:** Call when display DPI changes or window moves between displays.
 
+### `toggleHideMode()`
+
+Toggles hide mode for collapsed columns.
+
+**Returns:** void
+
+**Description:** When hide mode is enabled, collapsed regions are reduced to near-zero width with a pale grey marker (4px wide) at the center of each collapsed region. This provides maximum space for viewing variable sites while maintaining visual context. Toggle with Cmd+H keyboard shortcut or the toolbar button.
+
 ---
 
 ## Default Configuration
@@ -561,6 +569,8 @@ Object containing default configuration values:
 **Layout Settings:**
 - `EXPANDED_RIGHT_PAD`: 2
 - `REDUCED_COL_WIDTH`: 1
+- `HIDDEN_MARKER_WIDTH`: 4
+- `HIDDEN_MARKER_COLOR`: '#d0d0d0'
 - `COMPRESSED_CELL_VPAD`: 2
 - `BUFFER_ROWS`: 2
 - `BUFFER_COLS`: 5
@@ -604,6 +614,7 @@ The viewer exposes many properties that can be read or modified:
 - `colOffsets`: Column position offsets
 - `maskStr`: Current mask string
 - `maskEnabled`: Whether masking is active
+- `hideMode`: Whether hide mode is enabled (collapsed regions shown as markers)
 
 **Selection State:**
 - `selectedRows`: Set of selected row indices
@@ -672,6 +683,9 @@ viewer.startMaskTransition(true);
 
 // Collapse specific columns
 viewer.setMaskBitsForCols([5, 10, 15], '0');
+
+// Toggle hide mode
+viewer.toggleHideMode(); // Collapsed regions shown as pale grey markers
 ```
 
 ### Custom Configuration
@@ -711,6 +725,8 @@ The viewer handles the following interactions automatically when `attachInteract
 - Cmd+A: Select all
 - Cmd+Plus/Minus: Collapse/expand selected columns
 - Cmd+Alt+Plus/Minus: Change font size
+- Cmd+D: Toggle colour differences mode
+- Cmd+H: Toggle hide mode (collapsed regions as markers)
 - Space: Hold to enable panning mode
 
 ---
@@ -719,7 +735,8 @@ The viewer handles the following interactions automatically when `attachInteract
 
 - All coordinate systems use CSS pixels unless otherwise specified
 - Canvas backing stores are automatically scaled for device pixel ratio
-- Column offsets adapt based on masking state (collapsed vs expanded)
+- Column offsets adapt based on masking state (collapsed vs expanded vs hidden)
+- Hide mode reduces collapsed regions to near-zero width with 4px pale grey markers at region centers
 - Difference navigation ignores 'N' and '-' characters
 - Search is case-insensitive and searches both labels and sequences
 - Animations use `requestAnimationFrame` for smooth performance

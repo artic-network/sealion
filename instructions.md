@@ -34,6 +34,7 @@ The interface consists of:
 #### View Controls
 - **Cmd+0** (Ctrl+0) - Reset font size to default
 - **Cmd+D** (Ctrl+D) - Toggle colour differences mode on/off
+- **Cmd+H** (Ctrl+H) - Toggle hide mode (collapsed regions hidden with markers)
 
 #### Difference Navigation
 - **Cmd+Left** (Ctrl+Left) - Jump to previous difference from reference
@@ -66,6 +67,10 @@ Compress or expand columns to focus on variable sites or save screen space.
 
 - **Collapse** <i class="bi bi-arrows-collapse"></i> - Collapse selected columns to 1px width
 - **Expand** <i class="bi bi-arrows-expand"></i> - Restore selected columns to full width
+- **Hide Mode** <i class="bi bi-eye-slash"></i> - Toggle hide mode (Cmd+H)
+  - When enabled, collapsed regions are reduced to near-zero width
+  - A pale grey marker (4px wide) is shown at the center of each collapsed region
+  - This provides maximum space for viewing variable sites while maintaining context
 
 #### Collapse Presets
 

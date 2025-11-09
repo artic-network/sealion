@@ -115,6 +115,8 @@
       if (alignment) this.alignment = alignment;
       // default mask-enabled flag (matches legacy script.js initial state)
       this.maskEnabled = true;
+      // hide mode: when enabled, collapsed regions are reduced to near-zero width with center markers
+      this.hideMode = false;
       // Search state
       this.searchMatches = [];
       this.currentMatchIndex = -1;
@@ -144,6 +146,8 @@
         // layout/padding
         this.EXPANDED_RIGHT_PAD = cfg.EXPANDED_RIGHT_PAD;
         this.REDUCED_COL_WIDTH = cfg.REDUCED_COL_WIDTH;
+        this.HIDDEN_MARKER_WIDTH = cfg.HIDDEN_MARKER_WIDTH;
+        this.HIDDEN_MARKER_COLOR = cfg.HIDDEN_MARKER_COLOR;
         this.COMPRESSED_CELL_VPAD = cfg.COMPRESSED_CELL_VPAD;
         // rendering/behaviour
         this.BUFFER_ROWS = cfg.BUFFER_ROWS;
@@ -230,6 +234,8 @@
             CHAR_WIDTH: this.charWidth,
             EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
             REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            HIDDEN_MARKER_WIDTH: this.HIDDEN_MARKER_WIDTH || 4,
+            hideMode: this.hideMode || false,
             maskStr: (opts && opts.maskStr) || (window && window.maskStr) || (window && window.mask) || null
           });
         }
@@ -1031,6 +1037,8 @@
             CHAR_WIDTH: this.charWidth,
             EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
             REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            HIDDEN_MARKER_WIDTH: this.HIDDEN_MARKER_WIDTH || 4,
+            hideMode: this.hideMode || false,
             maskStr: (window && window.maskStr) || (window && window.mask) || null
           });
         }
@@ -1096,6 +1104,8 @@
             CHAR_WIDTH: this.charWidth,
             EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
             REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            HIDDEN_MARKER_WIDTH: this.HIDDEN_MARKER_WIDTH || 4,
+            hideMode: this.hideMode || false,
             maskStr: (window && window.maskStr) || (window && window.mask) || null
           });
         }
@@ -1732,6 +1742,8 @@
       const refIndex = (opts && typeof opts.refIndex === 'number') ? opts.refIndex : (window && typeof window.refIndex === 'number') ? window.refIndex : null;
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : (window && window.maskStr) ? window.maskStr : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : ((window && typeof window.maskEnabled === 'boolean') ? window.maskEnabled : false);
+      const hideMode = (opts && typeof opts.hideMode === 'boolean') ? opts.hideMode : (this.hideMode || false);
+      const HIDDEN_MARKER_COLOR = (opts && opts.HIDDEN_MARKER_COLOR) ? opts.HIDDEN_MARKER_COLOR : (this.HIDDEN_MARKER_COLOR || '#d0d0d0');
       const BASE_COLORS = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
       const DEFAULT_BASE_COLOR = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
       const PALE_REF_COLOR = (opts && opts.PALE_REF_COLOR) ? opts.PALE_REF_COLOR : (window && window.PALE_REF_COLOR) ? window.PALE_REF_COLOR : '#bfc9d6';
@@ -1796,13 +1808,25 @@
           const isSameRef = refModeEnabled && refStr && refChar === base;
           const isRefRow = (typeof refIndex === 'number' && refIndex === r);
           const color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
+          
           if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
-            ctx.fillStyle = color;
-            const topCss = rawRowY + COMPRESSED_CELL_VPAD;
-            const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
-            const topQ = Math.round(topCss * pr) / pr;
-            const hQ = Math.round(blockH * pr) / pr;
-            ctx.fillRect(x, topQ, w, hQ);
+            // Collapsed column
+            if (hideMode && w > 1) {
+              // This is a marker position in hide mode - draw pale grey marker at full row height
+              ctx.fillStyle = HIDDEN_MARKER_COLOR;
+              const topQ = Math.round(rawRowY * pr) / pr;
+              const hQ = Math.round(ROW_HEIGHT * pr) / pr;
+              ctx.fillRect(x, topQ, w, hQ);
+            } else if (!hideMode) {
+              // Normal collapse mode - draw colored block
+              ctx.fillStyle = color;
+              const topCss = rawRowY + COMPRESSED_CELL_VPAD;
+              const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
+              const topQ = Math.round(topCss * pr) / pr;
+              const hQ = Math.round(blockH * pr) / pr;
+              ctx.fillRect(x, topQ, w, hQ);
+            }
+            // If hideMode and w <= 1, skip drawing (zero-width column)
           } else {
             ctx.fillStyle = color;
             // Center the text in the column
@@ -2013,15 +2037,66 @@
         const CHAR_WIDTH = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
         const EXPANDED_RIGHT_PAD = (typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
         const REDUCED_COL_WIDTH = (typeof opts.REDUCED_COL_WIDTH === 'number') ? opts.REDUCED_COL_WIDTH : ((window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1);
+        const HIDDEN_MARKER_WIDTH = (typeof opts.HIDDEN_MARKER_WIDTH === 'number') ? opts.HIDDEN_MARKER_WIDTH : (this.HIDDEN_MARKER_WIDTH || 4);
         const maskStr = (typeof opts.maskStr === 'string') ? opts.maskStr : ((window && typeof window.maskStr === 'string') ? window.maskStr : null);
+        const hideMode = (typeof opts.hideMode === 'boolean') ? opts.hideMode : (this.hideMode || false);
 
         const out = new Array(Math.max(1, maxSeqLen + 1)).fill(0);
         out[0] = 0;
-        for (let i = 0; i < maxSeqLen; i++) {
-          const useReduced = !!maskEnabled && maskStr && maskStr.charAt(i) === '0';
-          const w = useReduced ? REDUCED_COL_WIDTH : (CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-          out[i + 1] = out[i] + w;
+        
+        if (hideMode && maskEnabled && maskStr) {
+          // Hide mode: collapsed regions get near-zero width except for central marker
+          let inCollapsedRegion = false;
+          let regionStart = -1;
+          
+          for (let i = 0; i < maxSeqLen; i++) {
+            const isCollapsed = maskStr.charAt(i) === '0';
+            
+            if (isCollapsed && !inCollapsedRegion) {
+              // Start of collapsed region
+              inCollapsedRegion = true;
+              regionStart = i;
+            } else if (!isCollapsed && inCollapsedRegion) {
+              // End of collapsed region - place marker at center
+              const regionEnd = i - 1;
+              const regionMid = Math.floor((regionStart + regionEnd) / 2);
+              
+              // Backfill collapsed region with minimal widths
+              for (let j = regionStart; j <= regionEnd; j++) {
+                const w = (j === regionMid) ? HIDDEN_MARKER_WIDTH : 0;
+                out[j + 1] = out[j] + w;
+              }
+              
+              inCollapsedRegion = false;
+              regionStart = -1;
+            }
+            
+            if (!isCollapsed) {
+              // Expanded column
+              const w = CHAR_WIDTH + EXPANDED_RIGHT_PAD;
+              out[i + 1] = out[i] + w;
+            }
+          }
+          
+          // Handle case where collapsed region extends to end
+          if (inCollapsedRegion) {
+            const regionEnd = maxSeqLen - 1;
+            const regionMid = Math.floor((regionStart + regionEnd) / 2);
+            
+            for (let j = regionStart; j <= regionEnd; j++) {
+              const w = (j === regionMid) ? HIDDEN_MARKER_WIDTH : 0;
+              out[j + 1] = out[j] + w;
+            }
+          }
+        } else {
+          // Normal mode: collapsed columns have REDUCED_COL_WIDTH
+          for (let i = 0; i < maxSeqLen; i++) {
+            const useReduced = !!maskEnabled && maskStr && maskStr.charAt(i) === '0';
+            const w = useReduced ? REDUCED_COL_WIDTH : (CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            out[i + 1] = out[i] + w;
+          }
         }
+        
         return out;
       } catch (e) {
         // fallback to uniform offsets
@@ -2274,7 +2349,9 @@
           CHAR_WIDTH: this.charWidth,
           EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD,
           maskStr: maskStr,
-          maskEnabled: !!this.maskEnabled
+          maskEnabled: !!this.maskEnabled,
+          hideMode: !!this.hideMode,
+          HIDDEN_MARKER_COLOR: this.HIDDEN_MARKER_COLOR
         };
 
         // draw headers/overview/consensus/labels/sequences in safe guards
@@ -2692,6 +2769,41 @@
       this.scheduleRender();
     }
 
+    // Toggle hide mode (collapsed regions are hidden with center markers)
+    toggleHideMode() {
+      try {
+        this.hideMode = !this.hideMode;
+        console.info('Hide mode:', this.hideMode ? 'ON' : 'OFF');
+        
+        // Rebuild column offsets with new hide mode
+        if (typeof this.buildColOffsetsFor === 'function' && this.colOffsets) {
+          const maxSeqLen = this.colOffsets.length - 1;
+          this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
+            maxSeqLen: maxSeqLen,
+            CHAR_WIDTH: this.charWidth,
+            EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
+            REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            HIDDEN_MARKER_WIDTH: this.HIDDEN_MARKER_WIDTH || 4,
+            hideMode: this.hideMode,
+            maskStr: (window && window.maskStr) || (window && window.mask) || null
+          });
+        }
+        
+        // Update canvas sizes and re-render
+        if (typeof this.setCanvasCSSSizes === 'function') {
+          this.setCanvasCSSSizes();
+        }
+        if (typeof this.resizeBackings === 'function') {
+          this.resizeBackings();
+        }
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('toggleHideMode failed', e);
+      }
+    }
+
     // Expose class on window for easy staged consumption from existing code.
   }
 
@@ -2713,6 +2825,8 @@
     CONSENSUS_BOTTOM_PAD: 8,
     EXPANDED_RIGHT_PAD: 2,
     REDUCED_COL_WIDTH: 1,
+    HIDDEN_MARKER_WIDTH: 4,
+    HIDDEN_MARKER_COLOR: '#d0d0d0',
     COMPRESSED_CELL_VPAD: 2,
     BUFFER_ROWS: 2,
     BUFFER_COLS: 5,

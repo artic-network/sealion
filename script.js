@@ -745,6 +745,16 @@
         }
       } catch (err) { console.warn('Cmd+D failed', err); }
     }
+    // Cmd+H (or Ctrl+H) to toggle hide mode
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'h' || e.key === 'H')) {
+      e.preventDefault();
+      try {
+        if (!viewer) return;
+        if (typeof viewer.toggleHideMode === 'function') {
+          viewer.toggleHideMode();
+        }
+      } catch (err) { console.warn('Cmd+H failed', err); }
+    }
     // Cmd+Right (or Ctrl+Right) to jump to next difference
     if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
       e.preventDefault();
@@ -825,7 +835,8 @@
   // Column collapse/expand controls
   const collapseColumnsBtn = document.getElementById('collapse-columns-btn');
   const expandColumnsBtn = document.getElementById('expand-columns-btn');
-  console.info('Column buttons found:', { collapse: !!collapseColumnsBtn, expand: !!expandColumnsBtn });
+  const toggleHideModeBtn = document.getElementById('toggle-hide-mode-btn');
+  console.info('Column buttons found:', { collapse: !!collapseColumnsBtn, expand: !!expandColumnsBtn, toggleHide: !!toggleHideModeBtn });
 
   if (collapseColumnsBtn) {
     collapseColumnsBtn.addEventListener('click', () => {
@@ -838,6 +849,15 @@
     expandColumnsBtn.addEventListener('click', () => {
       console.info('Expand columns button clicked');
       viewer.setMaskBitsForCols(viewer.selectedCols || new Set(), '1');
+    });
+  }
+
+  if (toggleHideModeBtn) {
+    toggleHideModeBtn.addEventListener('click', () => {
+      console.info('Toggle hide mode button clicked');
+      if (viewer && typeof viewer.toggleHideMode === 'function') {
+        viewer.toggleHideMode();
+      }
     });
   }
 
