@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sealion - Upload Alignment</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="sealion.css">
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    #drop-zone {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+
+    #drop-zone.drag-over {
+      background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+      transform: scale(1.02);
+    }
+
+    #drop-zone.hidden {
+      display: none;
+    }
+
+    .drop-icon {
+      font-size: 120px;
+      margin-bottom: 30px;
+      opacity: 0.9;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-20px); }
+    }
+
+    .drop-text {
+      font-size: 32px;
+      font-weight: 300;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .drop-subtext {
+      font-size: 18px;
+      opacity: 0.8;
+      text-align: center;
+      max-width: 600px;
+      line-height: 1.6;
+    }
+
+    .file-input-label {
+      margin-top: 40px;
+      padding: 15px 40px;
+      background: rgba(255, 255, 255, 0.2);
+      border: 2px solid white;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-size: 18px;
+    }
+
+    .file-input-label:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    #file-input {
+      display: none;
+    }
+
+    #viewer-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: none;
+    }
+
+    #viewer-container.visible {
+      display: block;
+    }
+
+    #loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 2000;
+      color: white;
+      font-size: 24px;
+    }
+
+    #loading-overlay.visible {
+      display: flex;
+    }
+
+    .spinner-border {
+      width: 3rem;
+      height: 3rem;
+      margin-right: 20px;
+    }
+
+    #error-message {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3000;
+      display: none;
+      max-width: 600px;
+    }
+
+    #error-message.visible {
+      display: block;
+    }
+
+    .back-button {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      z-index: 1500;
+      display: none;
+    }
+
+    .back-button.visible {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Drop Zone -->
+  <div id="drop-zone">
+    <i class="bi bi-cloud-arrow-up drop-icon"></i>
+    <div class="drop-text">Drop your FASTA file here</div>
+    <div class="drop-subtext">
+      or click below to browse for a file<br>
+      <small>Supports .fasta, .fa, .fna, .txt files</small>
+    </div>
+    <label for="file-input" class="file-input-label">
+      <i class="bi bi-folder2-open"></i> Choose File
+    </label>
+    <input type="file" id="file-input" accept=".fasta,.fa,.fna,.txt">
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay">
+    <div class="spinner-border text-light" role="status"></div>
+    <div>Loading alignment...</div>
+  </div>
+
+  <!-- Error Message -->
+  <div id="error-message" class="alert alert-danger alert-dismissible fade show" role="alert">
+    <strong>Error!</strong> <span id="error-text"></span>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+
+  <!-- Back Button -->
+  <button id="back-button" class="btn btn-primary back-button">
+    <i class="bi bi-arrow-left"></i> Load Different File
+  </button>
+
+  <!-- Viewer Container -->
+  <div id="viewer-container">
+    <!-- Navbar will be inserted here -->
+    <div id="viewer-content"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="alignment.js"></script>
+  <script src="sealion/utils.js"></script>
+  <script src="sealion.js"></script>
+  <script>
+    // Global state
+    let alignment = null;
+    let viewer = null;
+
+    // DOM elements
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const errorMessage = document.getElementById('error-message');
+    const errorText = document.getElementById('error-text');
+    const viewerContainer = document.getElementById('viewer-container');
+    const viewerContent = document.getElementById('viewer-content');
+    const backButton = document.getElementById('back-button');
+
+    // Prevent default drag behaviors
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+      document.body.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    // Highlight drop zone when item is dragged over it
+    ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => {
+        dropZone.classList.add('drag-over');
+      }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, () => {
+        dropZone.classList.remove('drag-over');
+      }, false);
+    });
+
+    // Handle dropped files
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+      const dt = e.dataTransfer;
+      const files = dt.files;
+      if (files.length > 0) {
+        handleFile(files[0]);
+      }
+    }
+
+    // Handle file input
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+      }
+    });
+
+    // Parse FASTA file
+    function parseFasta(text) {
+      const sequences = [];
+      const lines = text.split('\n');
+      let currentLabel = null;
+      let currentSequence = '';
+
+      for (let line of lines) {
+        line = line.trim();
+        if (line.startsWith('>')) {
+          // Save previous sequence if exists
+          if (currentLabel !== null) {
+            sequences.push({
+              label: currentLabel,
+              sequence: currentSequence
+            });
+          }
+          // Start new sequence
+          currentLabel = line.substring(1).trim();
+          currentSequence = '';
+        } else if (line.length > 0) {
+          currentSequence += line.toUpperCase();
+        }
+      }
+
+      // Save last sequence
+      if (currentLabel !== null) {
+        sequences.push({
+          label: currentLabel,
+          sequence: currentSequence
+        });
+      }
+
+      return sequences;
+    }
+
+    // Handle file
+    async function handleFile(file) {
+      // Validate file type
+      const validExtensions = ['.fasta', '.fa', '.fna', '.txt'];
+      const fileName = file.name.toLowerCase();
+      const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+      
+      if (!isValid) {
+        showError('Invalid file type. Please upload a FASTA file (.fasta, .fa, .fna, or .txt)');
+        return;
+      }
+
+      // Show loading
+      loadingOverlay.classList.add('visible');
+      dropZone.classList.add('hidden');
+
+      try {
+        // Read file
+        const text = await file.text();
+        
+        // Parse FASTA
+        const sequences = parseFasta(text);
+        
+        if (sequences.length === 0) {
+          throw new Error('No sequences found in file. Please check the FASTA format.');
+        }
+
+        // Create alignment using Alignment class
+        alignment = new Alignment(sequences);
+        window.alignment = alignment;
+
+        console.info('Loaded', alignment.length, 'sequences');
+
+        // Load the viewer UI
+        await loadViewerUI();
+
+        // Hide loading, show viewer
+        loadingOverlay.classList.remove('visible');
+        viewerContainer.classList.add('visible');
+        backButton.classList.add('visible');
+
+      } catch (error) {
+        console.error('Error loading file:', error);
+        showError(error.message || 'Failed to load file. Please check the file format.');
+        loadingOverlay.classList.remove('visible');
+        dropZone.classList.remove('hidden');
+      }
+    }
+
+    // Load viewer UI
+    async function loadViewerUI() {
+      // Fetch the main index.html to get the navbar and structure
+      const response = await fetch('index.html');
+      const html = await response.text();
+      
+      // Parse HTML
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      
+      // Extract navbar
+      const navbar = doc.querySelector('nav.navbar');
+      if (navbar) {
+        viewerContainer.insertBefore(navbar, viewerContent);
+      }
+      
+      // Create sealion div
+      viewerContent.innerHTML = '<div id="sealion"></div>';
+      
+      // Load and execute script.js logic
+      await initializeViewer();
+    }
+
+    // Initialize viewer (adapted from script.js)
+    async function initializeViewer() {
+      // Wait for SealionViewer class
+      while (!window.SealionViewer) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      // Create viewer with alignment data
+      viewer = new window.SealionViewer('#sealion', alignment, window.SealionViewer.DEFAULTS);
+      window.viewer = viewer;
+      
+      // Attach interaction handlers
+      const scroller = document.getElementById('alignment-scroll');
+      viewer.attachInteractionHandlers({
+        headerCanvas: viewer.headerCanvas,
+        seqCanvas: viewer.seqCanvas,
+        labelCanvas: viewer.labelCanvas,
+        consensusCanvas: viewer.consensusCanvas,
+        overviewCanvas: viewer.overviewCanvas,
+        labelsHeaderCanvas: viewer.labelsHeaderCanvas,
+        scroller: scroller,
+        callbacks: {}
+      });
+
+      // Compute and set consensus as reference
+      const consensus = alignment.computeConsensusSequence();
+      window.consensusSequence = consensus;
+      window.reference = String(consensus);
+      if (window.refreshRefStr) window.refreshRefStr();
+
+      // Schedule render
+      viewer.scheduleRender();
+
+      console.info('Viewer initialized');
+    }
+
+    // Show error message
+    function showError(message) {
+      errorText.textContent = message;
+      errorMessage.classList.add('visible');
+      setTimeout(() => {
+        errorMessage.classList.remove('visible');
+      }, 5000);
+    }
+
+    // Back button - reload page
+    backButton.addEventListener('click', () => {
+      location.reload();
+    });
+  </script>
+</body>
+</html>
