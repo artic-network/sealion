@@ -203,10 +203,42 @@
       viewer.setData(alignment);
       console.info('Viewer data set');
 
+      // Load saved dark mode preference from localStorage
+      try {
+        const darkModePref = localStorage.getItem('sealion_dark_mode');
+        if (darkModePref === 'true' && !viewer.darkMode) {
+          viewer.toggleDarkMode();
+          // Update button icon
+          const darkModeBtn = document.getElementById('toggle-dark-mode-btn');
+          if (darkModeBtn) {
+            const icon = darkModeBtn.querySelector('i');
+            if (icon) {
+              icon.className = 'bi bi-sun-fill';
+            }
+          }
+          console.info('Dark mode loaded from localStorage');
+        }
+      } catch (e) {
+        console.warn('Failed to load dark mode preference:', e);
+      }
+
+      // Load saved custom names from localStorage
+      if (typeof viewer.loadCustomNames === 'function') {
+        viewer.loadCustomNames();
+      }
+
       // Load saved tags from localStorage
       if (typeof viewer.loadTags === 'function') {
         viewer.loadTags();
       }
+
+      // Load saved bookmarks from localStorage
+      if (typeof viewer.loadBookmarks === 'function') {
+        viewer.loadBookmarks();
+      }
+
+      // Update UI with custom names
+      updateTagAndBookmarkNames();
 
       // Step 5: Attach interaction handlers
       try {
@@ -554,6 +586,21 @@
     });
   }
 
+  // Sort by tags button
+  const sortTagBtn = document.getElementById('sort-tag-btn');
+  if (sortTagBtn) {
+    sortTagBtn.addEventListener('click', () => {
+      if (!viewer || !viewer.alignment) return;
+      if (!viewer.labelTags || viewer.labelTags.size === 0) {
+        console.info('No tags to sort by');
+        return;
+      }
+      viewer.alignment.orderByTag(viewer.labelTags);
+      viewer.cancelRender();
+      viewer.scheduleRender();
+    });
+  }
+
 
 
   // Wire up the new apply buttons
@@ -705,6 +752,42 @@
     });
   }
 
+  // Dark mode toggle
+  const toggleDarkModeBtn = document.getElementById('toggle-dark-mode-btn');
+  console.info('Dark mode button found:', !!toggleDarkModeBtn);
+
+  if (toggleDarkModeBtn) {
+    toggleDarkModeBtn.addEventListener('click', (e) => {
+      console.info('Dark mode toggle clicked - button event fired');
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Access viewer from window or the closure variable
+      const v = window.viewer || viewer;
+      console.info('Viewer found:', !!v);
+      console.info('toggleDarkMode method exists:', v && typeof v.toggleDarkMode === 'function');
+      
+      if (v && typeof v.toggleDarkMode === 'function') {
+        console.info('Calling toggleDarkMode...');
+        v.toggleDarkMode();
+        console.info('toggleDarkMode completed, darkMode is now:', v.darkMode);
+        
+        // Update button icon
+        const icon = toggleDarkModeBtn.querySelector('i');
+        if (icon) {
+          if (v.darkMode) {
+            icon.className = 'bi bi-sun-fill';
+          } else {
+            icon.className = 'bi bi-moon-fill';
+          }
+          console.info('Button icon updated to:', icon.className);
+        }
+      } else {
+        console.error('Viewer not ready or toggleDarkMode method missing');
+      }
+    });
+  }
+
   // Tag controls: tag selected labels with colors
   const tagColorBtns = document.querySelectorAll('.tag-color-btn');
   const clearSelectedTagsBtn = document.getElementById('clear-selected-tags-btn');
@@ -745,6 +828,145 @@
     });
   }
 
+  // Bookmark controls: bookmark selected columns with colors
+  const bookmarkColorBtns = document.querySelectorAll('.bookmark-color-btn');
+  const clearSelectedBookmarksBtn = document.getElementById('clear-selected-bookmarks-btn');
+  const clearAllBookmarksBtn = document.getElementById('clear-all-bookmarks-btn');
+  console.info('Bookmark buttons found:', { 
+    colorButtons: bookmarkColorBtns.length, 
+    clearSelected: !!clearSelectedBookmarksBtn, 
+    clearAll: !!clearAllBookmarksBtn 
+  });
+
+  if (bookmarkColorBtns.length > 0) {
+    bookmarkColorBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const bookmarkIndex = parseInt(btn.getAttribute('data-bookmark-index'), 10);
+        console.info(`Bookmark color ${bookmarkIndex} clicked`);
+        if (viewer && typeof viewer.bookmarkSelectedColumns === 'function') {
+          viewer.bookmarkSelectedColumns(bookmarkIndex);
+        }
+      });
+    });
+  }
+
+  if (clearSelectedBookmarksBtn) {
+    clearSelectedBookmarksBtn.addEventListener('click', () => {
+      console.info('Clear selected bookmarks clicked');
+      if (viewer && typeof viewer.clearSelectedBookmarks === 'function') {
+        viewer.clearSelectedBookmarks();
+      }
+    });
+  }
+
+  if (clearAllBookmarksBtn) {
+    clearAllBookmarksBtn.addEventListener('click', () => {
+      console.info('Clear all bookmarks clicked');
+      if (viewer && typeof viewer.clearAllBookmarks === 'function') {
+        viewer.clearAllBookmarks();
+      }
+    });
+  }
+
+  // Reset tag names button
+  const resetTagNamesBtn = document.getElementById('reset-tag-names-btn');
+  if (resetTagNamesBtn) {
+    resetTagNamesBtn.addEventListener('click', () => {
+      console.info('Reset tag names clicked');
+      const v = window.viewer || viewer;
+      if (v && typeof v.resetTagNames === 'function') {
+        v.resetTagNames();
+        // Update UI with default names
+        updateTagAndBookmarkNames();
+      }
+    });
+  }
+
+  // Reset bookmark names button
+  const resetBookmarkNamesBtn = document.getElementById('reset-bookmark-names-btn');
+  if (resetBookmarkNamesBtn) {
+    resetBookmarkNamesBtn.addEventListener('click', () => {
+      console.info('Reset bookmark names clicked');
+      const v = window.viewer || viewer;
+      if (v && typeof v.resetBookmarkNames === 'function') {
+        v.resetBookmarkNames();
+        // Update UI with default names
+        updateTagAndBookmarkNames();
+      }
+    });
+  }
+
+  // Function to update tag and bookmark names in UI
+  function updateTagAndBookmarkNames() {
+    if (!viewer) return;
+    
+    // Update tag names
+    const tagNameSpans = document.querySelectorAll('.tag-name-edit');
+    tagNameSpans.forEach((span, index) => {
+      if (viewer.TAG_NAMES && viewer.TAG_NAMES[index]) {
+        span.textContent = viewer.TAG_NAMES[index];
+      }
+    });
+    
+    // Update bookmark names
+    const bookmarkNameSpans = document.querySelectorAll('.bookmark-name-edit');
+    bookmarkNameSpans.forEach((span, index) => {
+      if (viewer.BOOKMARK_NAMES && viewer.BOOKMARK_NAMES[index]) {
+        span.textContent = viewer.BOOKMARK_NAMES[index];
+      }
+    });
+  }
+
+  // Handle editing of tag names
+  const tagNameSpans = document.querySelectorAll('.tag-name-edit');
+  tagNameSpans.forEach((span, index) => {
+    // Prevent button click when editing
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    // Save on blur
+    span.addEventListener('blur', () => {
+      const newName = span.textContent.trim();
+      if (newName && viewer && typeof viewer.updateTagName === 'function') {
+        viewer.updateTagName(index, newName);
+      }
+    });
+    
+    // Save on Enter key
+    span.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        span.blur();
+      }
+    });
+  });
+
+  // Handle editing of bookmark names
+  const bookmarkNameSpans = document.querySelectorAll('.bookmark-name-edit');
+  bookmarkNameSpans.forEach((span, index) => {
+    // Prevent button click when editing
+    span.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    
+    // Save on blur
+    span.addEventListener('blur', () => {
+      const newName = span.textContent.trim();
+      if (newName && viewer && typeof viewer.updateBookmarkName === 'function') {
+        viewer.updateBookmarkName(index, newName);
+      }
+    });
+    
+    // Save on Enter key
+    span.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        span.blur();
+      }
+    });
+  });
+
   // Keyboard shortcuts
   window.addEventListener('keydown', (e) => {
     // Cmd+0 (or Ctrl+0) to reset font size
@@ -767,7 +989,10 @@
         // Toggle refModeEnabled
         refModeEnabled = !refModeEnabled;
         try { window.refModeEnabled = refModeEnabled; } catch (_) { }
-        if (viewer) { try { viewer.refModeEnabled = refModeEnabled; } catch (_) { } }
+        if (viewer) { 
+          try { viewer.refModeEnabled = refModeEnabled; } catch (_) { }
+          try { viewer.invalidateOverviewCache(); } catch (_) { }
+        }
         
         // If enabling and no reference is set, set consensus as reference
         if (refModeEnabled) {

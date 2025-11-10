@@ -211,6 +211,34 @@ class Alignment {
     this._invalidateCache();
   }
 
+  // Order sequences by tags (tagged sequences first, then by tag color order, then untagged)
+  orderByTag(labelTags) {
+    if (!labelTags || !(labelTags instanceof Map)) {
+      console.warn('orderByTag requires a Map of label tags');
+      return;
+    }
+    
+    this._currentOrder = this._sequences.slice().sort((a, b) => {
+      const aTag = labelTags.get(a.originalIndex);
+      const bTag = labelTags.get(b.originalIndex);
+      
+      // Both tagged: sort by tag index
+      if (aTag !== undefined && bTag !== undefined) {
+        return aTag - bTag;
+      }
+      
+      // Only a is tagged: a comes first
+      if (aTag !== undefined) return -1;
+      
+      // Only b is tagged: b comes first
+      if (bTag !== undefined) return 1;
+      
+      // Neither tagged: maintain original order
+      return a.originalIndex - b.originalIndex;
+    });
+    this._invalidateCache();
+  }
+
   // Invalidate cached computed values (called when order changes)
   _invalidateCache() {
     // Note: maxSeqLen doesn't change with reordering, but consensus and masks do

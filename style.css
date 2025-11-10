@@ -49,6 +49,69 @@ html, body { height:100%; margin:0; overflow:hidden; }
 .navbar { flex-shrink: 0; }
 #sealion { flex: 1; min-height: 0; }
 
+/* Dark mode navbar and UI */
+.dark-mode .navbar-light {
+  background-color: #2d2d2d !important;
+  border-bottom-color: #404040 !important;
+}
+
+.dark-mode .navbar-brand,
+.dark-mode .nav-link,
+.dark-mode .navbar-text {
+  color: #d4d4d4 !important;
+}
+
+.dark-mode .btn-outline-secondary {
+  color: #d4d4d4;
+  border-color: #555;
+}
+
+.dark-mode .btn-outline-secondary:hover {
+  background-color: #404040;
+  border-color: #666;
+  color: #fff;
+}
+
+.dark-mode .dropdown-menu {
+  background-color: #2d2d2d;
+  border-color: #404040;
+}
+
+.dark-mode .dropdown-item {
+  color: #d4d4d4;
+}
+
+.dark-mode .dropdown-item:hover,
+.dark-mode .dropdown-item:focus {
+  background-color: #404040;
+  color: #fff;
+}
+
+.dark-mode .dropdown-divider {
+  border-top-color: #404040;
+}
+
+.dark-mode .form-check:hover {
+  background-color: rgba(255,255,255,0.05);
+}
+
+.dark-mode #search-input {
+  background-color: #1e1e1e;
+  border-color: #404040;
+  color: #d4d4d4;
+}
+
+.dark-mode #search-input:focus {
+  background-color: #1e1e1e;
+  border-color: #5ba3ff;
+  color: #d4d4d4;
+  box-shadow: 0 0 0 0.25rem rgba(91, 163, 255, 0.25);
+}
+
+.dark-mode #search-input::placeholder {
+  color: #888;
+}
+
 /* Dropdown menu enhancements */
 .dropdown-menu {
   box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);

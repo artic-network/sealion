@@ -211,6 +211,7 @@
         this.OVERVIEW_EXPANDED_COL = cfg.OVERVIEW_EXPANDED_COL;
         this.OVERVIEW_COLLAPSED_COL = cfg.OVERVIEW_COLLAPSED_COL;
         this.OVERVIEW_VIEWPORT = cfg.OVERVIEW_VIEWPORT;
+        this.OVERVIEW_DIFF_COL = cfg.OVERVIEW_DIFF_COL || SealionViewer.DEFAULTS.OVERVIEW_DIFF_COL;
         this.HEADER_BG = cfg.HEADER_BG;
         this.HEADER_TEXT = cfg.HEADER_TEXT;
         this.HEADER_STROKE = cfg.HEADER_STROKE;
@@ -242,6 +243,19 @@
         this.TAG_SEQ_BACKGROUND_ALPHA = (typeof cfg.TAG_SEQ_BACKGROUND_ALPHA === 'number') ? cfg.TAG_SEQ_BACKGROUND_ALPHA : 0.15;
         this.TAG_TEXT_COLOR = (typeof cfg.TAG_TEXT_COLOR === 'boolean') ? cfg.TAG_TEXT_COLOR : true;
         this.labelTags = new Map(); // Map of row index -> tag color index
+        // site bookmark system
+        this.BOOKMARK_COLORS = cfg.BOOKMARK_COLORS || SealionViewer.DEFAULTS.BOOKMARK_COLORS;
+        this.BOOKMARK_NAMES = cfg.BOOKMARK_NAMES || SealionViewer.DEFAULTS.BOOKMARK_NAMES;
+        this.BOOKMARK_ALPHA = (typeof cfg.BOOKMARK_ALPHA === 'number') ? cfg.BOOKMARK_ALPHA : 0.3;
+        this.BOOKMARK_COL_ALPHA = (typeof cfg.BOOKMARK_COL_ALPHA === 'number') ? cfg.BOOKMARK_COL_ALPHA : 0.15;
+        this.siteBookmarks = new Map(); // Map of column index -> bookmark color index
+        // overview caching for performance
+        this._overviewCache = null; // cached canvas for overview content (bars, differences, bookmarks)
+        this._overviewCacheInvalid = true; // flag to trigger cache rebuild
+        this._overviewCacheParams = null; // parameters used to build the cache
+        // dark mode
+        this.darkMode = (typeof cfg.darkMode === 'boolean') ? cfg.darkMode : false;
+        this._lightModeColors = {}; // store original light mode colors
       } catch (_) { }
 
       // Keep canvases sized when the container or scroller change size.
@@ -1410,6 +1424,9 @@
         if (labelsHeaderCanvas) { labelsHeaderCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { labelsHeaderCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (labelsConsensusCanvas) { labelsConsensusCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsConsensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { labelsConsensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
 
+        // Invalidate overview cache when canvas size changes
+        this.invalidateOverviewCache();
+        
         // ensure integer geometry
         this.enforceIntegerGeometry();
       } catch (e) { console.warn('SealionViewer.resizeBackings failed', e); }
@@ -1520,32 +1537,144 @@
       const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
+      const refStr = (opts && opts.refStr) ? opts.refStr : null;
+      const refModeEnabled = (opts && typeof opts.refModeEnabled === 'boolean') ? opts.refModeEnabled : false;
+      const rows = (opts && opts.rows) ? opts.rows : [];
 
-      // clear and background
+      // Check if parameters have changed (need to rebuild cache)
+      const currentParams = {
+        maxSeqLen,
+        maskStr,
+        maskEnabled,
+        refStr,
+        refModeEnabled,
+        rowCount: rows.length,
+        bookmarkCount: this.siteBookmarks ? this.siteBookmarks.size : 0
+      };
+      
+      const paramsChanged = !this._overviewCacheParams || 
+        this._overviewCacheParams.maxSeqLen !== currentParams.maxSeqLen ||
+        this._overviewCacheParams.maskStr !== currentParams.maskStr ||
+        this._overviewCacheParams.maskEnabled !== currentParams.maskEnabled ||
+        this._overviewCacheParams.refStr !== currentParams.refStr ||
+        this._overviewCacheParams.refModeEnabled !== currentParams.refModeEnabled ||
+        this._overviewCacheParams.rowCount !== currentParams.rowCount ||
+        this._overviewCacheParams.bookmarkCount !== currentParams.bookmarkCount;
+
+      // Check if we need to rebuild the cache
+      if (this._overviewCacheInvalid || !this._overviewCache || 
+          this._overviewCache.width !== canvas.width || 
+          this._overviewCache.height !== canvas.height ||
+          paramsChanged) {
+        
+        // Store current parameters
+        this._overviewCacheParams = currentParams;
+        
+        // Create or resize cache canvas
+        if (!this._overviewCache) {
+          this._overviewCache = document.createElement('canvas');
+        }
+        this._overviewCache.width = canvas.width;
+        this._overviewCache.height = canvas.height;
+        
+        const cacheCtx = this._overviewCache.getContext('2d');
+        cacheCtx.setTransform(pr, 0, 0, pr, 0, 0);
+        
+        // Draw static content to cache (bars, differences, bookmarks)
+        cacheCtx.clearRect(0, 0, cssW, cssH);
+        cacheCtx.fillStyle = this.OVERVIEW_BG;
+        cacheCtx.fillRect(0, 0, cssW, cssH);
+
+        const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+        const totalWidth = Math.max(1, rawTotal);
+        const scale = cssW / totalWidth;
+
+        // draw compressed/uncompressed bars - fill most of the canvas vertically
+        const barMargin = 4; // small margin at top and bottom
+        const barH = Math.max(4, cssH - (barMargin * 2));
+        const barY = barMargin;
+        for (let c = 0; c < maxSeqLen; c++) {
+          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const x = Math.round(left * scale);
+          const nextX = Math.round(right * scale);
+          const w = Math.max(1, nextX - x);
+          const isCompressed = maskEnabled && maskStr && maskStr.charAt(c) === '0';
+          cacheCtx.fillStyle = isCompressed ? this.OVERVIEW_COLLAPSED_COL : this.OVERVIEW_EXPANDED_COL;
+          cacheCtx.fillRect(x, barY, w, barH);
+        }
+
+        // Show difference sites when refModeEnabled is active
+        if (refModeEnabled && refStr && rows.length > 0) {
+          cacheCtx.save();
+          cacheCtx.fillStyle = this.OVERVIEW_DIFF_COL;
+          
+          // For each column, check if any sequence differs from reference
+          for (let c = 0; c < maxSeqLen; c++) {
+            const refChar = (refStr.charAt(c) || '').toUpperCase();
+            if (!refChar || refChar === '-' || refChar === 'N') continue;
+            
+            // Check if any sequence has a difference at this position
+            let hasDifference = false;
+            for (let r = 0; r < rows.length; r++) {
+              const seq = rows[r].sequence || '';
+              const base = (seq.charAt(c) || '').toUpperCase();
+              if (base && base !== refChar && base !== '-' && base !== 'N') {
+                hasDifference = true;
+                break;
+              }
+            }
+            
+            if (hasDifference) {
+              const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+              const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+              const x = Math.round(left * scale);
+              const nextX = Math.round(right * scale);
+              const w = Math.max(1, nextX - x);
+              cacheCtx.fillRect(x, barY, w, barH);
+            }
+          }
+          cacheCtx.restore();
+        }
+
+        // draw bookmarks in front with translucent color
+        if (this.siteBookmarks && this.siteBookmarks.size > 0) {
+          cacheCtx.save();
+          for (const [c, bookmarkIdx] of this.siteBookmarks.entries()) {
+            if (c < 0 || c >= maxSeqLen) continue;
+            const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
+            if (!bookmarkColor) continue;
+            
+            const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const x = Math.round(left * scale);
+            const nextX = Math.round(right * scale);
+            const w = Math.max(1, nextX - x);
+            
+            // Parse hex color and apply translucent alpha (0.5 for visibility on top)
+            const r = parseInt(bookmarkColor.slice(1, 3), 16);
+            const g = parseInt(bookmarkColor.slice(3, 5), 16);
+            const b = parseInt(bookmarkColor.slice(5, 7), 16);
+            cacheCtx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.5)`;
+            // Fill full height of overview
+            cacheCtx.fillRect(x, 0, w, cssH);
+          }
+          cacheCtx.restore();
+        }
+        
+        // Mark cache as valid
+        this._overviewCacheInvalid = false;
+      }
+
+      // Clear and draw cached content
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.fillStyle = this.OVERVIEW_BG;
-      ctx.fillRect(0, 0, cssW, cssH);
+      ctx.drawImage(this._overviewCache, 0, 0);
 
+      // draw viewport rect (scaled) on top - this changes every frame during scroll
       const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
       const totalWidth = Math.max(1, rawTotal);
       const scale = cssW / totalWidth;
-
-      // draw compressed/uncompressed bars - fill most of the canvas vertically
-      const barMargin = 4; // small margin at top and bottom
-      const barH = Math.max(4, cssH - (barMargin * 2));
-      const barY = barMargin;
-      for (let c = 0; c < maxSeqLen; c++) {
-        const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-        const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-        const x = Math.round(left * scale);
-        const nextX = Math.round(right * scale);
-        const w = Math.max(1, nextX - x);
-        const isCompressed = maskEnabled && maskStr && maskStr.charAt(c) === '0';
-        ctx.fillStyle = isCompressed ? this.OVERVIEW_COLLAPSED_COL : this.OVERVIEW_EXPANDED_COL;
-        ctx.fillRect(x, barY, w, barH);
-      }
-
-      // draw viewport rect (scaled) - extends slightly beyond the bars
+      
       try {
         const viewX = Math.round((visible && visible.scrollLeft ? visible.scrollLeft : 0) * scale);
         const viewW = Math.max(2, Math.round((visible && visible.viewW ? visible.viewW : cssW) * scale));
@@ -1676,10 +1805,33 @@
         const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
         const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
         const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : new Set();
+        const headerH = HEADER_HEIGHT;
+        
+        // Draw bookmarks first (behind selection)
+        if (this.siteBookmarks && this.siteBookmarks.size > 0) {
+          headerCtx.save();
+          for (const [c, bookmarkIdx] of this.siteBookmarks.entries()) {
+            if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
+            const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
+            if (!bookmarkColor) continue;
+            
+            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD) + CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD)));
+            
+            // Parse hex color and apply alpha
+            const r = parseInt(bookmarkColor.slice(1, 3), 16);
+            const g = parseInt(bookmarkColor.slice(3, 5), 16);
+            const b = parseInt(bookmarkColor.slice(5, 7), 16);
+            headerCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${this.BOOKMARK_ALPHA})`;
+            headerCtx.fillRect(x, 0, w, headerH);
+          }
+          headerCtx.restore();
+        }
+        
+        // Draw selection overlay on top
         headerCtx.save();
         headerCtx.globalAlpha = 0.14;
         headerCtx.fillStyle = this.HEADER_SELECTION;
-        const headerH = HEADER_HEIGHT;
         for (const c of selectedCols) {
           if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
           const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
@@ -1989,6 +2141,34 @@
         }
       }
 
+      // Draw bookmark column backgrounds
+      if (this.siteBookmarks && this.siteBookmarks.size > 0 && this.BOOKMARK_COL_ALPHA > 0) {
+        ctx.save();
+        for (const [colIdx, bookmarkIdx] of this.siteBookmarks.entries()) {
+          if (colIdx < visible.firstCol || colIdx > visible.lastCol) continue;
+          const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
+          if (!bookmarkColor) continue;
+          
+          const colLeft = (colOffsets[colIdx] !== undefined) ? colOffsets[colIdx] : (colIdx * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+          const colRight = (colOffsets[colIdx + 1] !== undefined) ? colOffsets[colIdx + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const x = colLeft - visible.scrollLeft;
+          const w = Math.max(1, colRight - colLeft);
+          
+          // Parse hex color and apply alpha
+          const r_val = parseInt(bookmarkColor.slice(1, 3), 16);
+          const g_val = parseInt(bookmarkColor.slice(3, 5), 16);
+          const b_val = parseInt(bookmarkColor.slice(5, 7), 16);
+          ctx.fillStyle = `rgba(${r_val}, ${g_val}, ${b_val}, ${this.BOOKMARK_COL_ALPHA})`;
+          
+          // Draw full column height
+          const firstRowY = Math.round(((visible.firstRow * ROW_HEIGHT) - visible.scrollTop) * pr) / pr;
+          const lastRowY = Math.round((((visible.lastRow + 1) * ROW_HEIGHT) - visible.scrollTop) * pr) / pr;
+          const colH = lastRowY - firstRowY;
+          ctx.fillRect(x, firstRowY, w, colH);
+        }
+        ctx.restore();
+      }
+
       // column selection overlay (delegated to the class helper)
       if (selectedCols && selectedCols.size > 0) {
         try {
@@ -2172,6 +2352,32 @@
           const textOffset = Math.round((w - CHAR_WIDTH) / 2);
           ctx.fillText(ch, x + textOffset, baselineY);
         }
+      }
+
+      // Draw bookmark column backgrounds
+      if (this.siteBookmarks && this.siteBookmarks.size > 0 && this.BOOKMARK_COL_ALPHA > 0) {
+        ctx.save();
+        for (const [colIdx, bookmarkIdx] of this.siteBookmarks.entries()) {
+          if (colIdx < start || colIdx > end) continue;
+          const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
+          if (!bookmarkColor) continue;
+          
+          const left = (colOffsets && typeof colOffsets[colIdx] !== 'undefined') ? colOffsets[colIdx] : (colIdx * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+          const right = (colOffsets && typeof colOffsets[colIdx + 1] !== 'undefined') ? colOffsets[colIdx + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+          const w = Math.max(1, right - left);
+          
+          // Parse hex color and apply alpha
+          const r_val = parseInt(bookmarkColor.slice(1, 3), 16);
+          const g_val = parseInt(bookmarkColor.slice(3, 5), 16);
+          const b_val = parseInt(bookmarkColor.slice(5, 7), 16);
+          ctx.fillStyle = `rgba(${r_val}, ${g_val}, ${b_val}, ${this.BOOKMARK_COL_ALPHA})`;
+          
+          const blockTop = CONSENSUS_TOP_PAD;
+          const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+          ctx.fillRect(x, blockTop, w, blockH);
+        }
+        ctx.restore();
       }
 
       // Draw column selection overlay
@@ -2566,7 +2772,7 @@
         //try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
         //try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
         try { this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsConsensus failed', e); }
-        try { this.drawOverview(this.overviewCanvas, vis, commonOpts); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
+        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [] })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
         try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
@@ -2962,6 +3168,7 @@
               try { const out = that.buildColOffsetsFor(!!that.maskEnabled, { maxSeqLen: (to && to.length) ? to.length - 1 : 0, CHAR_WIDTH: that.charWidth, REDUCED_COL_WIDTH: REDUCED_COL_WIDTH, EXPANDED_RIGHT_PAD: EXPANDED_RIGHT_PAD, maskStr: maskStr }); that.colOffsets = out; } catch (_) { }
               try { that.setCanvasCSSSizes(); } catch (_) { }
               try { that.resizeBackings(); } catch (_) { }
+              that.invalidateOverviewCache();
               if (typeof that.scheduleRender === 'function') that.scheduleRender();
               console.info('SealionViewer: mask animation end', { toEnabled: !!toEnabled });
             }
@@ -3004,11 +3211,73 @@
         if (typeof this.resizeBackings === 'function') {
           this.resizeBackings();
         }
+        this.invalidateOverviewCache();
         if (typeof this.scheduleRender === 'function') {
           this.scheduleRender();
         }
       } catch (e) {
         console.warn('toggleHideMode failed', e);
+      }
+    }
+
+    // Invalidate the overview cache (call when mask, bookmarks, or ref mode changes)
+    invalidateOverviewCache() {
+      this._overviewCacheInvalid = true;
+    }
+
+    // Toggle dark mode
+    toggleDarkMode() {
+      try {
+        this.darkMode = !this.darkMode;
+        console.info('Dark mode:', this.darkMode ? 'ON' : 'OFF');
+        
+        if (this.darkMode) {
+          // Store current (light mode) colors
+          const colorProps = [
+            'DEFAULT_BASE_COLOR', 'PALE_REF_COLOR', 'REF_ACCENT',
+            'OVERVIEW_BG', 'OVERVIEW_EXPANDED_COL', 'OVERVIEW_COLLAPSED_COL', 'OVERVIEW_VIEWPORT',
+            'HEADER_BG', 'HEADER_TEXT', 'HEADER_STROKE', 'HEADER_SELECTION',
+            'CONSENSUS_BG', 'CONSENSUS_SEPARATOR',
+            'LABELS_BG', 'LABELS_TEXT', 'LABELS_HEADER_TEXT',
+            'INDEX_COLOR',
+            'SEQ_SELECTED_ROW', 'SEQ_EVEN_ROW', 'SEQ_ODD_ROW', 'SEQ_COL_SELECTION',
+            'SEQ_RECT_SELECTION_START', 'SEQ_RECT_SELECTION_END'
+          ];
+          
+          for (const prop of colorProps) {
+            this._lightModeColors[prop] = this[prop];
+            if (SealionViewer.DARK_MODE_COLORS[prop]) {
+              this[prop] = SealionViewer.DARK_MODE_COLORS[prop];
+            }
+          }
+          
+          // Update CSS for UI elements
+          document.documentElement.classList.add('dark-mode');
+        } else {
+          // Restore light mode colors
+          for (const prop in this._lightModeColors) {
+            this[prop] = this._lightModeColors[prop];
+          }
+          this._lightModeColors = {};
+          
+          // Update CSS for UI elements
+          document.documentElement.classList.remove('dark-mode');
+        }
+        
+        // Save dark mode preference to localStorage
+        try {
+          localStorage.setItem('sealion_dark_mode', this.darkMode ? 'true' : 'false');
+        } catch (e) {
+          console.warn('Failed to save dark mode preference:', e);
+        }
+        
+        // Invalidate cache and re-render
+        this.invalidateOverviewCache();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('toggleDarkMode failed', e);
       }
     }
 
@@ -3154,6 +3423,225 @@
       }
     }
 
+    // Bookmark selected columns with a specific color
+    bookmarkSelectedColumns(bookmarkIndex) {
+      try {
+        if (bookmarkIndex < 0 || bookmarkIndex >= this.BOOKMARK_COLORS.length) {
+          console.warn('Invalid bookmark index:', bookmarkIndex);
+          return;
+        }
+        
+        if (!this.selectedCols || this.selectedCols.size === 0) {
+          console.info('No columns selected to bookmark');
+          return;
+        }
+        
+        // Bookmark all selected columns
+        for (const colIdx of this.selectedCols) {
+          this.siteBookmarks.set(colIdx, bookmarkIndex);
+        }
+        
+        console.info(`Bookmarked ${this.selectedCols.size} columns with ${this.BOOKMARK_NAMES[bookmarkIndex]}`);
+        this.saveBookmarks();
+        this.invalidateOverviewCache();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('bookmarkSelectedColumns failed', e);
+      }
+    }
+
+    // Clear bookmarks from selected columns
+    clearSelectedBookmarks() {
+      try {
+        if (!this.selectedCols || this.selectedCols.size === 0) {
+          console.info('No columns selected to clear bookmarks');
+          return;
+        }
+        
+        let clearedCount = 0;
+        for (const colIdx of this.selectedCols) {
+          if (this.siteBookmarks.has(colIdx)) {
+            this.siteBookmarks.delete(colIdx);
+            clearedCount++;
+          }
+        }
+        
+        console.info(`Cleared bookmarks from ${clearedCount} columns`);
+        this.saveBookmarks();
+        this.invalidateOverviewCache();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('clearSelectedBookmarks failed', e);
+      }
+    }
+
+    // Clear all bookmarks
+    clearAllBookmarks() {
+      try {
+        const count = this.siteBookmarks.size;
+        this.siteBookmarks.clear();
+        console.info(`Cleared all ${count} bookmarks`);
+        this.saveBookmarks();
+        this.invalidateOverviewCache();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('clearAllBookmarks failed', e);
+      }
+    }
+
+    // Get bookmark info for a column
+    getColumnBookmark(colIdx) {
+      return this.siteBookmarks.has(colIdx) ? this.siteBookmarks.get(colIdx) : null;
+    }
+
+    // Get bookmark color for a column (returns null if no bookmark)
+    getColumnBookmarkColor(colIdx) {
+      const bookmarkIdx = this.getColumnBookmark(colIdx);
+      return (bookmarkIdx !== null && bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) 
+        ? this.BOOKMARK_COLORS[bookmarkIdx] 
+        : null;
+    }
+
+    // Save bookmarks to localStorage
+    saveBookmarks() {
+      try {
+        if (!this.siteBookmarks || this.siteBookmarks.size === 0) {
+          localStorage.removeItem('sealion_site_bookmarks');
+          return;
+        }
+        
+        // Save bookmarks as column index -> bookmark index
+        const bookmarksObj = {};
+        for (const [colIdx, bookmarkIdx] of this.siteBookmarks.entries()) {
+          bookmarksObj[colIdx] = bookmarkIdx;
+        }
+        
+        const key = 'sealion_site_bookmarks';
+        localStorage.setItem(key, JSON.stringify(bookmarksObj));
+        console.info(`Saved ${this.siteBookmarks.size} bookmarks to localStorage`);
+      } catch (e) {
+        console.warn('Failed to save bookmarks:', e);
+      }
+    }
+
+    // Load bookmarks from localStorage
+    loadBookmarks() {
+      try {
+        const key = 'sealion_site_bookmarks';
+        const stored = localStorage.getItem(key);
+        if (!stored) {
+          return;
+        }
+        
+        const bookmarksObj = JSON.parse(stored);
+        let loadedCount = 0;
+        
+        // Restore bookmarks
+        for (const [colIdx, bookmarkIdx] of Object.entries(bookmarksObj)) {
+          this.siteBookmarks.set(parseInt(colIdx, 10), bookmarkIdx);
+          loadedCount++;
+        }
+        
+        if (loadedCount > 0) {
+          console.info(`Loaded ${loadedCount} bookmarks from localStorage`);
+          this.invalidateOverviewCache();
+          if (typeof this.scheduleRender === 'function') {
+            this.scheduleRender();
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load bookmarks:', e);
+      }
+    }
+
+    // Update tag name for a specific index
+    updateTagName(tagIndex, newName) {
+      if (tagIndex >= 0 && tagIndex < this.TAG_NAMES.length) {
+        this.TAG_NAMES[tagIndex] = newName || this.TAG_NAMES[tagIndex];
+        this.saveCustomNames();
+        console.info(`Updated tag ${tagIndex} name to: ${newName}`);
+      }
+    }
+
+    // Update bookmark name for a specific index
+    updateBookmarkName(bookmarkIndex, newName) {
+      if (bookmarkIndex >= 0 && bookmarkIndex < this.BOOKMARK_NAMES.length) {
+        this.BOOKMARK_NAMES[bookmarkIndex] = newName || this.BOOKMARK_NAMES[bookmarkIndex];
+        this.saveCustomNames();
+        console.info(`Updated bookmark ${bookmarkIndex} name to: ${newName}`);
+      }
+    }
+
+    // Save custom names to localStorage
+    saveCustomNames() {
+      try {
+        const customNames = {
+          tags: this.TAG_NAMES,
+          bookmarks: this.BOOKMARK_NAMES
+        };
+        localStorage.setItem('sealion_custom_names', JSON.stringify(customNames));
+        console.info('Saved custom names to localStorage');
+      } catch (e) {
+        console.warn('Failed to save custom names:', e);
+      }
+    }
+
+    // Load custom names from localStorage
+    loadCustomNames() {
+      try {
+        const stored = localStorage.getItem('sealion_custom_names');
+        if (!stored) {
+          return;
+        }
+        
+        const customNames = JSON.parse(stored);
+        if (customNames.tags && Array.isArray(customNames.tags)) {
+          this.TAG_NAMES = customNames.tags;
+          console.info('Loaded custom tag names');
+        }
+        if (customNames.bookmarks && Array.isArray(customNames.bookmarks)) {
+          this.BOOKMARK_NAMES = customNames.bookmarks;
+          console.info('Loaded custom bookmark names');
+        }
+      } catch (e) {
+        console.warn('Failed to load custom names:', e);
+      }
+    }
+
+    // Reset tag names to defaults
+    resetTagNames() {
+      try {
+        this.TAG_NAMES = [...SealionViewer.DEFAULTS.TAG_NAMES];
+        this.saveCustomNames();
+        console.info('Reset tag names to defaults');
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('Failed to reset tag names:', e);
+      }
+    }
+
+    // Reset bookmark names to defaults
+    resetBookmarkNames() {
+      try {
+        this.BOOKMARK_NAMES = [...SealionViewer.DEFAULTS.BOOKMARK_NAMES];
+        this.saveCustomNames();
+        console.info('Reset bookmark names to defaults');
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('Failed to reset bookmark names:', e);
+      }
+    }
+
     // Expose class on window for easy staged consumption from existing code.
   }
 
@@ -3185,11 +3673,12 @@
     DEFAULT_BASE_COLOR: '#666',
     PALE_REF_COLOR: '#e6e6e6',
     REF_ACCENT: '#2b8cff',
-    // Canvas background colors
+    // Canvas background colors - Light mode
     OVERVIEW_BG: '#f7f7f7',
     OVERVIEW_EXPANDED_COL: '#ddd',
     OVERVIEW_COLLAPSED_COL: '#999',
     OVERVIEW_VIEWPORT: 'rgba(0,120,200,0.9)',
+    OVERVIEW_DIFF_COL: '#ff6b6b',
     HEADER_BG: '#f3f3f3',
     HEADER_TEXT: '#333',
     HEADER_STROKE: '#666',
@@ -3215,10 +3704,43 @@
     snapEnabled: true,
     // Label tagging system
     TAG_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
-    TAG_NAMES: ['Red', 'Teal', 'Blue', 'Yellow', 'Purple', 'Lavender', 'Pink', 'Orange'],
+    TAG_NAMES: ['Slay', 'Bussin', 'Vibe', 'Snatched', 'No Cap', 'Periodt', 'Fire', 'Sus'],
     TAG_BACKGROUND_ALPHA: 0.25,
     TAG_SEQ_BACKGROUND_ALPHA: 0.15,
-    TAG_TEXT_COLOR: true
+    TAG_TEXT_COLOR: true,
+    // Site bookmark system
+    BOOKMARK_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
+    BOOKMARK_NAMES: ['Slay', 'Bussin', 'Vibe', 'Snatched', 'No Cap', 'Periodt', 'Fire', 'Sus'],
+    BOOKMARK_ALPHA: 0.3,
+    BOOKMARK_COL_ALPHA: 0.15
+  };
+
+  // Dark mode color scheme
+  SealionViewer.DARK_MODE_COLORS = {
+    DEFAULT_BASE_COLOR: '#aaa',
+    PALE_REF_COLOR: '#404040',
+    REF_ACCENT: '#5ba3ff',
+    OVERVIEW_BG: '#1e1e1e',
+    OVERVIEW_EXPANDED_COL: '#404040',
+    OVERVIEW_COLLAPSED_COL: '#666',
+    OVERVIEW_VIEWPORT: 'rgba(91,163,255,0.9)',
+    OVERVIEW_DIFF_COL: '#ff6b6b',
+    HEADER_BG: '#252525',
+    HEADER_TEXT: '#d4d4d4',
+    HEADER_STROKE: '#888',
+    HEADER_SELECTION: '#6b5b00',
+    CONSENSUS_BG: '#1a1a1a',
+    CONSENSUS_SEPARATOR: '#404040',
+    LABELS_BG: '#252525',
+    LABELS_TEXT: '#d4d4d4',
+    LABELS_HEADER_TEXT: '#d4d4d4',
+    INDEX_COLOR: '#888888',
+    SEQ_SELECTED_ROW: 'rgba(91, 163, 255, 0.3)',
+    SEQ_EVEN_ROW: '#1e1e1e',
+    SEQ_ODD_ROW: '#252525',
+    SEQ_COL_SELECTION: '#6b5b00',
+    SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
+    SEQ_RECT_SELECTION_END: 'rgba(91,163,255,0.8)'
   };
 
   window.SealionViewer = SealionViewer;
