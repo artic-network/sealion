@@ -253,17 +253,6 @@ Draws the labels header area.
 
 **Returns:** void
 
-### `drawLabelsOutline(canvas, visible, opts)`
-
-Draws the labels outline in the overview area.
-
-**Parameters:**
-- `canvas` (HTMLCanvasElement): Target canvas
-- `visible` (Object): Visible region information
-- `opts` (Object): Drawing options
-
-**Returns:** void
-
 ### `drawLabelsConsensus(canvas, visible, opts)`
 
 Draws the labels consensus area.
@@ -607,6 +596,7 @@ The viewer exposes many properties that can be read or modified:
 **DOM References:**
 - `container`: Main container element
 - `labelCanvas`, `seqCanvas`, `headerCanvas`, `consensusCanvas`, `overviewCanvas`: Canvas elements
+- `labelFilterBox`: Text input for filtering labels by name
 - `scroller`: Scroll container element
 
 **Alignment Data:**

@@ -203,6 +203,11 @@
       viewer.setData(alignment);
       console.info('Viewer data set');
 
+      // Load saved tags from localStorage
+      if (typeof viewer.loadTags === 'function') {
+        viewer.loadTags();
+      }
+
       // Step 5: Attach interaction handlers
       try {
         // Query DOM for canvases created by viewer
@@ -697,6 +702,46 @@
     fontDecreaseBtn.addEventListener('click', () => {
       console.info('Decrease button clicked');
       viewer.updateFontSize(-1);
+    });
+  }
+
+  // Tag controls: tag selected labels with colors
+  const tagColorBtns = document.querySelectorAll('.tag-color-btn');
+  const clearSelectedTagsBtn = document.getElementById('clear-selected-tags-btn');
+  const clearAllTagsBtn = document.getElementById('clear-all-tags-btn');
+  console.info('Tag buttons found:', { 
+    colorButtons: tagColorBtns.length, 
+    clearSelected: !!clearSelectedTagsBtn, 
+    clearAll: !!clearAllTagsBtn 
+  });
+
+  if (tagColorBtns.length > 0) {
+    tagColorBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tagIndex = parseInt(btn.getAttribute('data-tag-index'), 10);
+        console.info(`Tag color ${tagIndex} clicked`);
+        if (viewer && typeof viewer.tagSelectedLabels === 'function') {
+          viewer.tagSelectedLabels(tagIndex);
+        }
+      });
+    });
+  }
+
+  if (clearSelectedTagsBtn) {
+    clearSelectedTagsBtn.addEventListener('click', () => {
+      console.info('Clear selected tags clicked');
+      if (viewer && typeof viewer.clearSelectedTags === 'function') {
+        viewer.clearSelectedTags();
+      }
+    });
+  }
+
+  if (clearAllTagsBtn) {
+    clearAllTagsBtn.addEventListener('click', () => {
+      console.info('Clear all tags clicked');
+      if (viewer && typeof viewer.clearAllTags === 'function') {
+        viewer.clearAllTags();
+      }
     });
   }
 

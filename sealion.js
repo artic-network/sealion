@@ -39,9 +39,23 @@
         let labels = q('#labels');
         if (!labels) { labels = document.createElement('div'); labels.id = 'labels'; this.container.appendChild(labels); }
 
-        // Label canvas for outline (overview)
-        let labelsOutlineCanvas = q('#labels-outline-canvas');
-        if (!labelsOutlineCanvas) { labelsOutlineCanvas = document.createElement('canvas'); labelsOutlineCanvas.id = 'labels-outline-canvas'; labelsOutlineCanvas.className = 'labels-outline-canvas'; labels.appendChild(labelsOutlineCanvas); }
+        // Label filter container and filter box (replaces outline canvas)
+        let labelFilter = q('#label-filter');
+        if (!labelFilter) {
+          labelFilter = document.createElement('div');
+          labelFilter.id = 'label-filter';
+          labelFilter.className = 'label-filter';
+          labels.appendChild(labelFilter);
+        }
+        let labelFilterBox = q('#label-filter-box');
+        if (!labelFilterBox) {
+          labelFilterBox = document.createElement('input');
+          labelFilterBox.id = 'label-filter-box';
+          labelFilterBox.className = 'label-filter-box';
+          labelFilterBox.type = 'text';
+          labelFilterBox.placeholder = 'Filter labels...';
+          labelFilter.appendChild(labelFilterBox);
+        }
 
         // Label canvas for header
         let labelsHeaderCanvas = q('#labels-header-canvas');
@@ -88,7 +102,7 @@
         if (!seqSpacer) { seqSpacer = document.createElement('div'); seqSpacer.id = 'seq-spacer'; seqInner.appendChild(seqSpacer); }
 
         // persist references onto the instance for later helpers
-        this.labelsOutlineCanvas = labelsOutlineCanvas;
+        this.labelFilterBox = labelFilterBox;
         this.labelsHeaderCanvas = labelsHeaderCanvas;
         this.labelsConsensusCanvas = labelsConsensusCanvas;
         this.overviewCanvas = overviewCanvas;
@@ -120,6 +134,40 @@
       // Search state
       this.searchMatches = [];
       this.currentMatchIndex = -1;
+
+      // Set up label filter box filtering
+      if (this.labelFilterBox) {
+        this.labelFilterBox.addEventListener('input', (e) => {
+          const searchText = e.target.value.toLowerCase().trim();
+          if (!searchText) {
+            // Clear selection when filter box is empty
+            if (this.selectedRows) this.selectedRows.clear();
+            if (typeof this.scheduleRender === 'function') this.scheduleRender();
+            return;
+          }
+          
+          // Find and select all matching rows
+          if (this.alignment && this.selectedRows) {
+            this.selectedRows.clear();
+            this.alignment.forEach((row, idx) => {
+              const label = row.label || row.name || '';
+              if (label.toLowerCase().includes(searchText)) {
+                this.selectedRows.add(idx);
+              }
+            });
+            
+            // Scroll to first match if any
+            if (this.selectedRows.size > 0 && this.scroller) {
+              const firstMatch = Math.min(...Array.from(this.selectedRows));
+              const ROW_HEIGHT = this.ROW_HEIGHT || 20;
+              const targetTop = firstMatch * ROW_HEIGHT;
+              this.scroller.scrollTop = targetTop;
+            }
+            
+            if (typeof this.scheduleRender === 'function') this.scheduleRender();
+          }
+        });
+      }
 
       // Merge provided options with class defaults and set instance-level
       // visual constants. This centralizes fonts, sizes, colours and other
@@ -187,6 +235,13 @@
         this.maskEnabled = (typeof cfg.maskEnabled === 'boolean') ? cfg.maskEnabled : this.maskEnabled;
         // snap-to-character scrolling preference
         this.snapEnabled = (typeof cfg.snapEnabled === 'boolean') ? cfg.snapEnabled : true;
+        // label tagging system
+        this.TAG_COLORS = cfg.TAG_COLORS || SealionViewer.DEFAULTS.TAG_COLORS;
+        this.TAG_NAMES = cfg.TAG_NAMES || SealionViewer.DEFAULTS.TAG_NAMES;
+        this.TAG_BACKGROUND_ALPHA = (typeof cfg.TAG_BACKGROUND_ALPHA === 'number') ? cfg.TAG_BACKGROUND_ALPHA : 0.25;
+        this.TAG_SEQ_BACKGROUND_ALPHA = (typeof cfg.TAG_SEQ_BACKGROUND_ALPHA === 'number') ? cfg.TAG_SEQ_BACKGROUND_ALPHA : 0.15;
+        this.TAG_TEXT_COLOR = (typeof cfg.TAG_TEXT_COLOR === 'boolean') ? cfg.TAG_TEXT_COLOR : true;
+        this.labelTags = new Map(); // Map of row index -> tag color index
       } catch (_) { }
 
       // Keep canvases sized when the container or scroller change size.
@@ -1253,7 +1308,7 @@
         const headerCanvas = this.headerCanvas || (opts && opts.headerCanvas) || (document.getElementById ? document.getElementById('header-canvas') : null);
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
-        const labelsOutlineCanvas = this.labelsOutlineCanvas || (opts && opts.labelsOutlineCanvas) || (document.getElementById ? document.getElementById('labels-outline-canvas') : null);
+        const labelFilterBox = this.labelFilterBox || (opts && opts.labelFilterBox) || (document.getElementById ? document.getElementById('label-filter-box') : null);
         const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
         const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
         const seqSpacer = this.seqSpacer || (opts && opts.seqSpacer) || (document.getElementById ? document.getElementById('seq-spacer') : null);
@@ -1295,7 +1350,7 @@
         if (headerCanvas) { headerCanvas.style.width = viewportWidth + 'px'; headerCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.style.width = hdrW + 'px'; overviewCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const cssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.style.width = cssWc + 'px'; consensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
-        if (labelsOutlineCanvas) { labelsOutlineCanvas.style.width = LABEL_WIDTH + 'px'; labelsOutlineCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
+        if (labelFilterBox) { labelFilterBox.style.width = LABEL_WIDTH + 'px'; }
         if (labelsHeaderCanvas) { labelsHeaderCanvas.style.width = LABEL_WIDTH + 'px'; labelsHeaderCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if (labelsConsensusCanvas) { labelsConsensusCanvas.style.width = LABEL_WIDTH + 'px'; labelsConsensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
 
@@ -1333,7 +1388,6 @@
         const headerCanvas = this.headerCanvas || (opts && opts.headerCanvas) || (document.getElementById ? document.getElementById('header-canvas') : null);
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
-        const labelsOutlineCanvas = this.labelsOutlineCanvas || (opts && opts.labelsOutlineCanvas) || (document.getElementById ? document.getElementById('labels-outline-canvas') : null);
         const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
         const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
 
@@ -1353,7 +1407,6 @@
         if (headerCanvas) { headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { headerCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.width = Math.max(1, Math.round(hdrCssW * pr)); overviewCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try { overviewCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.width = Math.max(1, Math.round(hdrCssWc * pr)); consensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { consensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
-        if (labelsOutlineCanvas) { labelsOutlineCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsOutlineCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try { labelsOutlineCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (labelsHeaderCanvas) { labelsHeaderCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { labelsHeaderCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (labelsConsensusCanvas) { labelsConsensusCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsConsensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { labelsConsensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
 
@@ -1797,6 +1850,10 @@
         const rowY = Math.round(rawRowY * pr) / pr;
         const rowH = Math.round(ROW_HEIGHT * pr) / pr;
         const label = (rows[i] && rows[i].label) ? rows[i].label : '';
+        
+        // Check if this row has a tag
+        const tagColor = this.getRowTagColor ? this.getRowTagColor(i) : null;
+        
         // background: selection takes precedence
         if (selectedRows.has(i)) {
           ctx.fillStyle = this.SEQ_SELECTED_ROW;
@@ -1806,6 +1863,17 @@
           ctx.fillStyle = this.SEQ_ODD_ROW;
         }
         ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
+        
+        // Apply tag background if present
+        if (tagColor && this.TAG_BACKGROUND_ALPHA > 0) {
+          // Parse hex color and apply alpha
+          const r = parseInt(tagColor.slice(1, 3), 16);
+          const g = parseInt(tagColor.slice(3, 5), 16);
+          const b = parseInt(tagColor.slice(5, 7), 16);
+          ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${this.TAG_BACKGROUND_ALPHA})`;
+          ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
+        }
+        
         // reference accent
         if (typeof refIndex === 'number' && i === refIndex) {
           try { ctx.fillStyle = REF_ACCENT; ctx.fillRect(0, rowY, 4, rowH); } catch (_) { }
@@ -1824,7 +1892,12 @@
         // draw label text
         ctx.font = FONT; // restore normal font
         ctx.textAlign = 'left';
-        ctx.fillStyle = this.LABELS_TEXT;
+        // Apply tag text color if enabled and tag is present
+        if (tagColor && this.TAG_TEXT_COLOR) {
+          ctx.fillStyle = tagColor;
+        } else {
+          ctx.fillStyle = this.LABELS_TEXT;
+        }
         const labelStartPos = (typeof this.LABEL_START_POS === 'number') ? this.LABEL_START_POS : 56;
         ctx.fillText(label, labelStartPos, y);
       }
@@ -1898,6 +1971,18 @@
         const rowY = Math.round(rawRowY * pr) / pr;
         const rowH = Math.round(ROW_HEIGHT * pr) / pr;
         ctx.fillRect(0, rowY, visible.viewW, rowH);
+        
+        // Apply tag background if present
+        const tagColor = this.getRowTagColor ? this.getRowTagColor(r) : null;
+        if (tagColor && this.TAG_SEQ_BACKGROUND_ALPHA > 0) {
+          // Parse hex color and apply alpha
+          const r_val = parseInt(tagColor.slice(1, 3), 16);
+          const g_val = parseInt(tagColor.slice(3, 5), 16);
+          const b_val = parseInt(tagColor.slice(5, 7), 16);
+          ctx.fillStyle = `rgba(${r_val}, ${g_val}, ${b_val}, ${this.TAG_SEQ_BACKGROUND_ALPHA})`;
+          ctx.fillRect(0, rowY, visible.viewW, rowH);
+        }
+        
         // left accent for reference row
         if (typeof refIndex === 'number' && r === refIndex) {
           try { ctx.save(); ctx.fillStyle = (opts && opts.REF_ACCENT) ? opts.REF_ACCENT : (window && window.REF_ACCENT) ? window.REF_ACCENT : '#ffcc00'; ctx.globalAlpha = 0.9; ctx.fillRect(0, rowY, 4, rowH); ctx.restore(); } catch (_) { }
@@ -2927,6 +3012,148 @@
       }
     }
 
+    // Tag selected labels with a specific color
+    tagSelectedLabels(tagIndex) {
+      try {
+        if (tagIndex < 0 || tagIndex >= this.TAG_COLORS.length) {
+          console.warn('Invalid tag index:', tagIndex);
+          return;
+        }
+        
+        if (!this.selectedRows || this.selectedRows.size === 0) {
+          console.info('No labels selected to tag');
+          return;
+        }
+        
+        // Tag all selected rows
+        for (const rowIdx of this.selectedRows) {
+          this.labelTags.set(rowIdx, tagIndex);
+        }
+        
+        console.info(`Tagged ${this.selectedRows.size} labels with ${this.TAG_NAMES[tagIndex]}`);
+        this.saveTags();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('tagSelectedLabels failed', e);
+      }
+    }
+
+    // Clear tags from selected labels
+    clearSelectedTags() {
+      try {
+        if (!this.selectedRows || this.selectedRows.size === 0) {
+          console.info('No labels selected to clear tags');
+          return;
+        }
+        
+        let clearedCount = 0;
+        for (const rowIdx of this.selectedRows) {
+          if (this.labelTags.has(rowIdx)) {
+            this.labelTags.delete(rowIdx);
+            clearedCount++;
+          }
+        }
+        
+        console.info(`Cleared tags from ${clearedCount} labels`);
+        this.saveTags();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('clearSelectedTags failed', e);
+      }
+    }
+
+    // Clear all tags
+    clearAllTags() {
+      try {
+        const count = this.labelTags.size;
+        this.labelTags.clear();
+        console.info(`Cleared all ${count} tags`);
+        this.saveTags();
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('clearAllTags failed', e);
+      }
+    }
+
+    // Get tag info for a row
+    getRowTag(rowIdx) {
+      return this.labelTags.has(rowIdx) ? this.labelTags.get(rowIdx) : null;
+    }
+
+    // Get tag color for a row (returns null if no tag)
+    getRowTagColor(rowIdx) {
+      const tagIdx = this.getRowTag(rowIdx);
+      return (tagIdx !== null && tagIdx >= 0 && tagIdx < this.TAG_COLORS.length) 
+        ? this.TAG_COLORS[tagIdx] 
+        : null;
+    }
+
+    // Save tags to localStorage
+    saveTags() {
+      try {
+        if (!this.alignment || this.alignment.length === 0) {
+          return;
+        }
+        
+        // Create a map of label -> tag index for persistence
+        const tagsByLabel = {};
+        for (const [rowIdx, tagIdx] of this.labelTags.entries()) {
+          const row = this.alignment[rowIdx];
+          if (row && row.label) {
+            tagsByLabel[row.label] = tagIdx;
+          }
+        }
+        
+        const key = 'sealion_label_tags';
+        localStorage.setItem(key, JSON.stringify(tagsByLabel));
+        console.info(`Saved ${Object.keys(tagsByLabel).length} tags to localStorage`);
+      } catch (e) {
+        console.warn('Failed to save tags:', e);
+      }
+    }
+
+    // Load tags from localStorage
+    loadTags() {
+      try {
+        if (!this.alignment || this.alignment.length === 0) {
+          return;
+        }
+        
+        const key = 'sealion_label_tags';
+        const stored = localStorage.getItem(key);
+        if (!stored) {
+          return;
+        }
+        
+        const tagsByLabel = JSON.parse(stored);
+        let loadedCount = 0;
+        
+        // Map labels back to current row indices
+        for (let rowIdx = 0; rowIdx < this.alignment.length; rowIdx++) {
+          const row = this.alignment[rowIdx];
+          if (row && row.label && tagsByLabel.hasOwnProperty(row.label)) {
+            this.labelTags.set(rowIdx, tagsByLabel[row.label]);
+            loadedCount++;
+          }
+        }
+        
+        if (loadedCount > 0) {
+          console.info(`Loaded ${loadedCount} tags from localStorage`);
+          if (typeof this.scheduleRender === 'function') {
+            this.scheduleRender();
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load tags:', e);
+      }
+    }
+
     // Expose class on window for easy staged consumption from existing code.
   }
 
@@ -2985,7 +3212,13 @@
     SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
     SEQ_RECT_SELECTION_END: 'rgba(0,0,255,0.8)',
     maskEnabled: true,
-    snapEnabled: true
+    snapEnabled: true,
+    // Label tagging system
+    TAG_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
+    TAG_NAMES: ['Red', 'Teal', 'Blue', 'Yellow', 'Purple', 'Lavender', 'Pink', 'Orange'],
+    TAG_BACKGROUND_ALPHA: 0.25,
+    TAG_SEQ_BACKGROUND_ALPHA: 0.15,
+    TAG_TEXT_COLOR: true
   };
 
   window.SealionViewer = SealionViewer;
