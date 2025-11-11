@@ -186,11 +186,10 @@
         this.LABEL_WIDTH = cfg.LABEL_WIDTH;
         this.ROW_HEIGHT = cfg.ROW_HEIGHT;
         this.ROW_PADDING = cfg.ROW_PADDING;
-        this.HEADER_HEIGHT = cfg.HEADER_HEIGHT;
-        this.OVERVIEW_HEIGHT = cfg.OVERVIEW_HEIGHT;
-        this.CONSENSUS_HEIGHT = cfg.CONSENSUS_HEIGHT;
         this.CONSENSUS_TOP_PAD = cfg.CONSENSUS_TOP_PAD;
         this.CONSENSUS_BOTTOM_PAD = cfg.CONSENSUS_BOTTOM_PAD;
+        this.OVERVIEW_TOP_PAD = cfg.OVERVIEW_TOP_PAD;
+        this.OVERVIEW_BOTTOM_PAD = cfg.OVERVIEW_BOTTOM_PAD;
         // layout/padding
         this.EXPANDED_RIGHT_PAD = cfg.EXPANDED_RIGHT_PAD;
         this.REDUCED_COL_WIDTH = cfg.REDUCED_COL_WIDTH;
@@ -1535,6 +1534,8 @@
       const maxSeqLen = (opts && Number.isFinite(opts.maxSeqLen)) ? opts.maxSeqLen : Math.max(0, (colOffsets.length - 1));
       const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
       const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
+      const OVERVIEW_TOP_PAD = (opts && typeof opts.OVERVIEW_TOP_PAD !== 'undefined') ? opts.OVERVIEW_TOP_PAD : (this.OVERVIEW_TOP_PAD !== undefined ? this.OVERVIEW_TOP_PAD : 4);
+      const OVERVIEW_BOTTOM_PAD = (opts && typeof opts.OVERVIEW_BOTTOM_PAD !== 'undefined') ? opts.OVERVIEW_BOTTOM_PAD : (this.OVERVIEW_BOTTOM_PAD !== undefined ? this.OVERVIEW_BOTTOM_PAD : 4);
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
       const refStr = (opts && opts.refStr) ? opts.refStr : null;
@@ -1589,10 +1590,9 @@
         const totalWidth = Math.max(1, rawTotal);
         const scale = cssW / totalWidth;
 
-        // draw compressed/uncompressed bars - fill most of the canvas vertically
-        const barMargin = 4; // small margin at top and bottom
-        const barH = Math.max(4, cssH - (barMargin * 2));
-        const barY = barMargin;
+        // draw compressed/uncompressed bars with padding at top and bottom
+        const barH = Math.max(4, cssH - (OVERVIEW_TOP_PAD + OVERVIEW_BOTTOM_PAD));
+        const barY = OVERVIEW_TOP_PAD;
         for (let c = 0; c < maxSeqLen; c++) {
           const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
           const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
@@ -1668,7 +1668,8 @@
 
       // Clear and draw cached content
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.drawImage(this._overviewCache, 0, 0);
+      // Draw cache image at full size (backing pixels to backing pixels via CSS coordinate scaling)
+      ctx.drawImage(this._overviewCache, 0, 0, cssW, cssH);
 
       // draw viewport rect (scaled) on top - this changes every frame during scroll
       const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
@@ -2772,7 +2773,7 @@
         //try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
         //try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
         try { this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsConsensus failed', e); }
-        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [] })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
+        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [], OVERVIEW_TOP_PAD: this.OVERVIEW_TOP_PAD, OVERVIEW_BOTTOM_PAD: this.OVERVIEW_BOTTOM_PAD })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
         try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
@@ -3656,11 +3657,10 @@
     LABEL_WIDTH: 260,
     ROW_HEIGHT: 20,
     ROW_PADDING: 6,
-    HEADER_HEIGHT: 30,
-    OVERVIEW_HEIGHT: 48,
-    CONSENSUS_HEIGHT: 20,
     CONSENSUS_TOP_PAD: 4,
     CONSENSUS_BOTTOM_PAD: 8,
+    OVERVIEW_TOP_PAD: 8,
+    OVERVIEW_BOTTOM_PAD: 8,
     EXPANDED_RIGHT_PAD: 2,
     REDUCED_COL_WIDTH: 1,
     HIDDEN_MARKER_WIDTH: 4,
