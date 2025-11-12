@@ -142,3 +142,19 @@ html, body { height:100%; margin:0; overflow:hidden; }
 /* Viewer-specific layout and canvas styles are in sealion.css */
 
 #init-status{ font-family:system-ui, -apple-system, sans-serif; font-size:13px; }
+
+/* File upload modal drop zone styles */
+.file-drop-zone {
+  transition: background-color 0.2s, border-color 0.2s;
+  cursor: pointer;
+}
+
+.file-drop-zone:hover {
+  background-color: rgba(13, 110, 253, 0.05);
+  border-color: #0d6efd !important;
+}
+
+.file-drop-zone.drag-over {
+  background-color: rgba(13, 110, 253, 0.1);
+  border-color: #0d6efd !important;
+}

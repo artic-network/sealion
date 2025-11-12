@@ -1314,6 +1314,256 @@
     });
   }
 
+  // File upload modal functionality
+  const openFileBtn = document.getElementById('open-file-btn');
+  const fileUploadModal = document.getElementById('fileUploadModal');
+  const fileDropZone = document.getElementById('file-drop-zone');
+  const fileUploadInput = document.getElementById('file-upload-input');
+  const fileSelectBtn = document.getElementById('file-select-btn');
+  const fileLoading = document.getElementById('file-loading');
+  const fileError = document.getElementById('file-error');
+  const fileErrorText = document.getElementById('file-error-text');
+  
+  let fileModal = null;
+  
+  if (openFileBtn && fileUploadModal) {
+    try {
+      fileModal = new bootstrap.Modal(fileUploadModal);
+      
+      // Function to parse FASTA file
+      function parseFasta(text) {
+        const sequences = [];
+        const lines = text.split('\n');
+        let currentLabel = null;
+        let currentSequence = '';
+        
+        for (let line of lines) {
+          line = line.trim();
+          if (line.startsWith('>')) {
+            // Save previous sequence if exists
+            if (currentLabel !== null) {
+              sequences.push({
+                label: currentLabel,
+                sequence: currentSequence.toUpperCase()
+              });
+            }
+            // Start new sequence
+            currentLabel = line.substring(1).trim();
+            currentSequence = '';
+          } else if (line.length > 0) {
+            currentSequence += line;
+          }
+        }
+        
+        // Save last sequence
+        if (currentLabel !== null) {
+          sequences.push({
+            label: currentLabel,
+            sequence: currentSequence.toUpperCase()
+          });
+        }
+        
+        return sequences;
+      }
+      
+      // Function to handle file upload
+      async function handleFileUpload(file) {
+        try {
+          // Validate file type
+          const validExtensions = ['.fasta', '.fa', '.fna', '.ffn', '.faa', '.frn'];
+          const fileName = file.name.toLowerCase();
+          const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+          
+          if (!isValid) {
+            fileErrorText.textContent = 'Invalid file type. Please select a FASTA file (.fasta, .fa, .fna, etc.)';
+            fileError.style.display = 'block';
+            return;
+          }
+          
+          // Show loading state
+          fileDropZone.style.display = 'none';
+          fileError.style.display = 'none';
+          fileLoading.style.display = 'block';
+          
+          // Read file
+          const text = await file.text();
+          
+          // Parse FASTA
+          const newAlignment = parseFasta(text);
+          
+          if (newAlignment.length === 0) {
+            throw new Error('No sequences found in file');
+          }
+          
+          console.log(`Loaded ${newAlignment.length} sequences from ${file.name}`);
+          
+          // Update global alignment variable
+          window.alignment = newAlignment;
+          
+          // Update viewer with new data
+          if (viewer && typeof viewer.setData === 'function') {
+            // Get max sequence length
+            const newMaxSeqLen = Math.max(...newAlignment.map(s => s.sequence.length));
+            
+            // Update global variables
+            window.maxSeqLen = newMaxSeqLen;
+            window.rowCount = newAlignment.length;
+            
+            // Reset mask string
+            if (window.refreshMaskStr && typeof window.refreshMaskStr === 'function') {
+              window.maskStr = window.refreshMaskStr();
+            } else {
+              window.maskStr = '1'.repeat(newMaxSeqLen);
+            }
+            
+            // Reset viewer state
+            viewer.alignment = newAlignment;
+            viewer.selectedRows.clear();
+            viewer.selectedCols.clear();
+            viewer.labelTags.clear();
+            viewer.siteBookmarks.clear();
+            
+            // Clear any existing reference
+            window.refRow = null;
+            
+            // Rebuild column offsets and update viewer
+            if (typeof viewer.buildColOffsetsFor === 'function') {
+              viewer.colOffsets = viewer.buildColOffsetsFor(viewer.maskEnabled, {
+                maxSeqLen: newMaxSeqLen,
+                CHAR_WIDTH: viewer.charWidth,
+                EXPANDED_RIGHT_PAD: viewer.EXPANDED_RIGHT_PAD || 2,
+                REDUCED_COL_WIDTH: viewer.REDUCED_COL_WIDTH || 1,
+                HIDDEN_MARKER_WIDTH: viewer.HIDDEN_MARKER_WIDTH || 4,
+                hideMode: viewer.hideMode || false,
+                maskStr: window.maskStr
+              });
+            }
+            
+            // Update canvas sizes
+            viewer.setCanvasCSSSizes();
+            viewer.resizeBackings();
+            
+            // Invalidate overview cache
+            if (viewer._overviewCacheInvalid !== undefined) {
+              viewer._overviewCacheInvalid = true;
+            }
+            
+            // Reset scroll position
+            if (viewer.scroller) {
+              viewer.scroller.scrollTop = 0;
+              viewer.scroller.scrollLeft = 0;
+            }
+            
+            // Render the new alignment
+            if (typeof viewer.scheduleRender === 'function') {
+              viewer.scheduleRender();
+            } else if (typeof viewer.drawAll === 'function') {
+              viewer.drawAll();
+            }
+            
+            console.info('File loaded successfully:', file.name);
+            
+            // Close modal
+            fileModal.hide();
+            
+          } else {
+            throw new Error('Viewer not available');
+          }
+          
+        } catch (error) {
+          console.error('Error loading file:', error);
+          fileErrorText.textContent = error.message || 'Failed to load file. Please check the file format.';
+          fileError.style.display = 'block';
+          fileLoading.style.display = 'none';
+          fileDropZone.style.display = 'block';
+        }
+      }
+      
+      // Open file button click handler
+      openFileBtn.addEventListener('click', () => {
+        try {
+          // Reset modal state
+          fileDropZone.style.display = 'block';
+          fileLoading.style.display = 'none';
+          fileError.style.display = 'none';
+          fileUploadInput.value = '';
+          
+          fileModal.show();
+        } catch (e) {
+          console.warn('Failed to open file upload modal', e);
+        }
+      });
+      
+      // Command-O keyboard shortcut
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'o') {
+          e.preventDefault();
+          openFileBtn.click();
+        }
+      });
+      
+      // File select button
+      if (fileSelectBtn && fileUploadInput) {
+        fileSelectBtn.addEventListener('click', () => {
+          fileUploadInput.click();
+        });
+      }
+      
+      // File input change handler
+      if (fileUploadInput) {
+        fileUploadInput.addEventListener('change', (e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleFileUpload(e.target.files[0]);
+          }
+        });
+      }
+      
+      // Drag and drop handlers
+      if (fileDropZone) {
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+          fileDropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }, false);
+        });
+        
+        // Highlight drop zone when dragging over
+        ['dragenter', 'dragover'].forEach(eventName => {
+          fileDropZone.addEventListener(eventName, () => {
+            fileDropZone.classList.add('drag-over');
+          }, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+          fileDropZone.addEventListener(eventName, () => {
+            fileDropZone.classList.remove('drag-over');
+          }, false);
+        });
+        
+        // Handle dropped files
+        fileDropZone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer.files;
+          if (files.length > 0) {
+            handleFileUpload(files[0]);
+          }
+        }, false);
+        
+        // Click on drop zone to select file
+        fileDropZone.addEventListener('click', (e) => {
+          // Don't trigger if clicking on the button or its children
+          if (e.target === fileSelectBtn || fileSelectBtn.contains(e.target)) {
+            return;
+          }
+          if (fileUploadInput) fileUploadInput.click();
+        });
+      }
+      
+    } catch (e) {
+      console.warn('Failed to initialize file upload modal', e);
+    }
+  }
+
   // Populate local maskStr from utils
   try { maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); } catch (_) { maskStr = '1'.repeat(maxSeqLen); }
 
