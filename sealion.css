@@ -90,8 +90,21 @@
   color: var(--placeholder-color);
   opacity: 1;
 }
-#labels-header-canvas{ width: var(--label-width); height: var(--header-height); display:block; flex-shrink: 0; }
-#labels-consensus-canvas{ width: var(--label-width); height: var(--consensus-height); display:block; flex-shrink: 0; }
+#labels-header-div{ 
+  width: var(--label-width); 
+  height: var(--header-height); 
+  display: block; 
+  flex-shrink: 0; 
+}
+#labels-consensus-div{ 
+  width: var(--label-width); 
+  height: var(--consensus-height); 
+  display: flex; 
+  flex-shrink: 0; 
+  align-items: center; 
+  justify-content: flex-end; 
+  padding-right: 8px; 
+}
 #left-inner{ flex: 1; min-height: 0; position: relative; }
 
 /* draggable divider at right edge of labels column to resize label width - now extends full height */

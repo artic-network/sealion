@@ -227,6 +227,15 @@
         viewer.loadCustomNames();
       }
 
+      // Load saved nucleotide color scheme preference from localStorage
+      try {
+        if (typeof viewer.loadNucleotideColorScheme === 'function') {
+          viewer.loadNucleotideColorScheme();
+        }
+      } catch (e) {
+        console.warn('Failed to load nucleotide color scheme preference:', e);
+      }
+
       // Load saved tags from localStorage
       if (typeof viewer.loadTags === 'function') {
         viewer.loadTags();
@@ -239,6 +248,44 @@
 
       // Update UI with custom names
       updateTagAndBookmarkNames();
+
+      // Populate labels-consensus-div with UI controls
+      try {
+        const labelsConsensusDiv = document.getElementById('labels-consensus-div') || (viewer && viewer.labelsConsensusDiv);
+        if (labelsConsensusDiv && labelsConsensusDiv.children.length === 0) {
+          // Add dropdown button group
+          const btnGroup = document.createElement('div');
+          btnGroup.className = 'btn-group';
+          btnGroup.role = 'group';
+          
+          const dropdownBtn = document.createElement('button');
+          dropdownBtn.className = 'btn btn-sm btn-outline-secondary dropdown-toggle';
+          dropdownBtn.type = 'button';
+          dropdownBtn.setAttribute('data-bs-toggle', 'dropdown');
+          dropdownBtn.setAttribute('aria-expanded', 'false');
+          dropdownBtn.style.padding = '0.125rem 0.5rem';
+          dropdownBtn.style.fontSize = '0.75rem';
+          dropdownBtn.style.lineHeight = '1.2';
+          dropdownBtn.textContent = 'Consensus';
+          
+          const dropdownMenu = document.createElement('ul');
+          dropdownMenu.className = 'dropdown-menu';
+          
+          const menuItem = document.createElement('li');
+          const menuButton = document.createElement('button');
+          menuButton.className = 'dropdown-item';
+          menuButton.type = 'button';
+          menuButton.textContent = 'Consensus';
+          
+          menuItem.appendChild(menuButton);
+          dropdownMenu.appendChild(menuItem);
+          btnGroup.appendChild(dropdownBtn);
+          btnGroup.appendChild(dropdownMenu);
+          labelsConsensusDiv.appendChild(btnGroup);
+        }
+      } catch (e) {
+        console.warn('Failed to populate labels-consensus-div:', e);
+      }
 
       // Step 5: Attach interaction handlers
       try {
@@ -457,6 +504,18 @@
       viewer.scheduleRender();
     });
   }
+
+  // Nucleotide color scheme buttons
+  const nucleotideColorSchemeBtns = document.querySelectorAll('.nucleotide-color-scheme-btn');
+  nucleotideColorSchemeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const scheme = btn.getAttribute('data-scheme');
+      if (viewer && typeof viewer.setNucleotideColorScheme === 'function') {
+        viewer.setNucleotideColorScheme(scheme);
+        console.info(`Nucleotide color scheme changed to: ${scheme}`);
+      }
+    });
+  });
 
   // Sort by original order button
   const sortOriginalBtn = document.getElementById('sort-original-btn');

@@ -57,13 +57,23 @@
           labelFilter.appendChild(labelFilterBox);
         }
 
-        // Label canvas for header
-        let labelsHeaderCanvas = q('#labels-header-canvas');
-        if (!labelsHeaderCanvas) { labelsHeaderCanvas = document.createElement('canvas'); labelsHeaderCanvas.id = 'labels-header-canvas'; labelsHeaderCanvas.className = 'labels-header-canvas'; labels.appendChild(labelsHeaderCanvas); }
+        // Label div for header (UI elements added by script.js)
+        let labelsHeaderDiv = q('#labels-header-div');
+        if (!labelsHeaderDiv) {
+          labelsHeaderDiv = document.createElement('div');
+          labelsHeaderDiv.id = 'labels-header-div';
+          labelsHeaderDiv.className = 'labels-header-div';
+          labels.appendChild(labelsHeaderDiv);
+        }
 
-        // Label canvas for consensus
-        let labelsConsensusCanvas = q('#labels-consensus-canvas');
-        if (!labelsConsensusCanvas) { labelsConsensusCanvas = document.createElement('canvas'); labelsConsensusCanvas.id = 'labels-consensus-canvas'; labelsConsensusCanvas.className = 'labels-consensus-canvas'; labels.appendChild(labelsConsensusCanvas); }
+        // Label div for consensus controls (UI elements added by script.js)
+        let labelsConsensusDiv = q('#labels-consensus-div');
+        if (!labelsConsensusDiv) {
+          labelsConsensusDiv = document.createElement('div');
+          labelsConsensusDiv.id = 'labels-consensus-div';
+          labelsConsensusDiv.className = 'labels-consensus-div';
+          labels.appendChild(labelsConsensusDiv);
+        }
 
         // Inner container for main labels canvas
         let leftInner = q('#left-inner');
@@ -103,8 +113,8 @@
 
         // persist references onto the instance for later helpers
         this.labelFilterBox = labelFilterBox;
-        this.labelsHeaderCanvas = labelsHeaderCanvas;
-        this.labelsConsensusCanvas = labelsConsensusCanvas;
+        this.labelsHeaderDiv = labelsHeaderDiv;
+        this.labelsConsensusDiv = labelsConsensusDiv;
         this.overviewCanvas = overviewCanvas;
         this.headerCanvas = headerCanvas;
         this.consensusCanvas = consensusCanvas;
@@ -372,7 +382,7 @@
       try { this.labelCanvas = labelCanvas; } catch (_) { }
       try { this.consensusCanvas = consensusCanvas; } catch (_) { }
       try { this.overviewCanvas = overviewCanvas; } catch (_) { }
-      try { this.labelsHeaderCanvas = (opts && opts.labelsHeaderCanvas) ? opts.labelsHeaderCanvas : null; } catch (_) { }
+      try { this.labelsHeaderDiv = (opts && opts.labelsHeaderDiv) ? opts.labelsHeaderDiv : null; } catch (_) { }
       try { this.seqSpacer = (opts && opts.seqSpacer) ? opts.seqSpacer : null; } catch (_) { }
       try { this.leftSpacer = (opts && opts.leftSpacer) ? opts.leftSpacer : null; } catch (_) { }
       try { this.leftScroll = (opts && opts.leftScroll) ? opts.leftScroll : null; } catch (_) { }
@@ -1322,7 +1332,7 @@
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
         const labelFilterBox = this.labelFilterBox || (opts && opts.labelFilterBox) || (document.getElementById ? document.getElementById('label-filter-box') : null);
-        const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
+        const labelsHeaderDiv = this.labelsHeaderDiv || (opts && opts.labelsHeaderDiv) || (document.getElementById ? document.getElementById('labels-header-div') : null);
         const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
         const seqSpacer = this.seqSpacer || (opts && opts.seqSpacer) || (document.getElementById ? document.getElementById('seq-spacer') : null);
         const leftSpacer = this.leftSpacer || (opts && opts.leftSpacer) || (document.getElementById ? document.getElementById('left-spacer') : null);
@@ -1364,8 +1374,9 @@
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.style.width = hdrW + 'px'; overviewCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const cssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.style.width = cssWc + 'px'; consensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
         if (labelFilterBox) { labelFilterBox.style.width = LABEL_WIDTH + 'px'; }
-        if (labelsHeaderCanvas) { labelsHeaderCanvas.style.width = LABEL_WIDTH + 'px'; labelsHeaderCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
-        if (labelsConsensusCanvas) { labelsConsensusCanvas.style.width = LABEL_WIDTH + 'px'; labelsConsensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
+        if (labelsHeaderDiv) { labelsHeaderDiv.style.width = LABEL_WIDTH + 'px'; labelsHeaderDiv.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
+        const labelsConsensusDiv = this.labelsConsensusDiv || (opts && opts.labelsConsensusDiv) || (document.getElementById ? document.getElementById('labels-consensus-div') : null);
+        if (labelsConsensusDiv) { labelsConsensusDiv.style.width = LABEL_WIDTH + 'px'; labelsConsensusDiv.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
 
         // Update CSS custom properties for dynamic heights
         const overviewHeight = (window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48;
@@ -1401,7 +1412,6 @@
         const headerCanvas = this.headerCanvas || (opts && opts.headerCanvas) || (document.getElementById ? document.getElementById('header-canvas') : null);
         const overviewCanvas = this.overviewCanvas || (opts && opts.overviewCanvas) || (document.getElementById ? document.getElementById('overview-canvas') : null);
         const consensusCanvas = this.consensusCanvas || (opts && opts.consensusCanvas) || (document.getElementById ? document.getElementById('consensus-canvas') : null);
-        const labelsHeaderCanvas = this.labelsHeaderCanvas || (opts && opts.labelsHeaderCanvas) || (document.getElementById ? document.getElementById('labels-header-canvas') : null);
         const labelsConsensusCanvas = this.labelsConsensusCanvas || (opts && opts.labelsConsensusCanvas) || (document.getElementById ? document.getElementById('labels-consensus-canvas') : null);
 
         const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
@@ -1420,8 +1430,8 @@
         if (headerCanvas) { headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { headerCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.width = Math.max(1, Math.round(hdrCssW * pr)); overviewCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try { overviewCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.width = Math.max(1, Math.round(hdrCssWc * pr)); consensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { consensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
-        if (labelsHeaderCanvas) { labelsHeaderCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { labelsHeaderCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
-        if (labelsConsensusCanvas) { labelsConsensusCanvas.width = Math.max(1, Math.round(backingLabelWidth * pr)); labelsConsensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { labelsConsensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
+        // labelsHeaderDiv is now a div, not a canvas, so no backing resize needed
+        // labelsConsensusDiv is now a div, not a canvas, so no backing resize needed
 
         // Invalidate overview cache when canvas size changes
         this.invalidateOverviewCache();
@@ -1441,7 +1451,7 @@
         const labelCanvas = this.labelCanvas || document.getElementById('labels-canvas');
         const seqCanvas = this.seqCanvas || document.getElementById('seq-canvas');
         const headerCanvas = this.headerCanvas || document.getElementById('header-canvas');
-        const labelsHeaderCanvas = this.labelsHeaderCanvas || document.getElementById('labels-header-canvas');
+        const labelsHeaderDiv = this.labelsHeaderDiv || document.getElementById('labels-header-div');
         const seqSpacer = this.seqSpacer || document.getElementById('seq-spacer');
         const leftSpacer = this.leftSpacer || document.getElementById('left-spacer');
 
@@ -1451,7 +1461,7 @@
         if (seqCanvas) seqCanvas.style.height = viewportHeight + 'px';
         if (seqCanvas) seqCanvas.style.width = viewportWidth + 'px';
         if (headerCanvas) headerCanvas.style.width = viewportWidth + 'px';
-        if (labelsHeaderCanvas) labelsHeaderCanvas.style.height = Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30)) + 'px';
+        if (labelsHeaderDiv) labelsHeaderDiv.style.height = Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30)) + 'px';
         if (seqSpacer) seqSpacer.style.height = ((this.alignment && this.alignment.length) ? this.alignment.length * ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20) : 0) + 'px';
         if (leftSpacer) leftSpacer.style.height = ((this.alignment && this.alignment.length) ? this.alignment.length * ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20) : 0) + 'px';
 
@@ -1469,13 +1479,11 @@
         if (seqCanvas) seqCanvas.height = Math.max(1, Math.round(viewportHeight * pr));
         if (headerCanvas) headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr));
         if (headerCanvas) headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr));
-        if (labelsHeaderCanvas) labelsHeaderCanvas.width = Math.max(1, Math.round(((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260) * pr));
-        if (labelsHeaderCanvas) labelsHeaderCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr));
+        // labelsHeaderDiv is now a div, not a canvas, so no backing resize needed
 
         try { if (labelCanvas) labelCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { }
         try { if (seqCanvas) seqCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { }
         try { if (headerCanvas) headerCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { }
-        try { if (labelsHeaderCanvas) labelsHeaderCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { }
 
         // ensure scrollTop/clamp is maintained by the app
         try { if (typeof window.clampScrollPositions === 'function') window.clampScrollPositions(); } catch (_) { }
@@ -2766,13 +2774,15 @@
           maskStr: maskStr,
           maskEnabled: !!this.maskEnabled,
           hideMode: !!this.hideMode,
-          HIDDEN_MARKER_COLOR: this.HIDDEN_MARKER_COLOR
+          HIDDEN_MARKER_COLOR: this.HIDDEN_MARKER_COLOR,
+          BASE_COLORS: this.BASE_COLORS,
+          DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR
         };
 
         // draw headers/overview/consensus/labels/sequences in safe guards
         //try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
         //try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
-        try { this.drawLabelsConsensus(this.labelsConsensusCanvas, vis, { LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsConsensus failed', e); }
+        // labelsConsensusDiv is now a UI container, not a canvas to draw on
         try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [], OVERVIEW_TOP_PAD: this.OVERVIEW_TOP_PAD, OVERVIEW_BOTTOM_PAD: this.OVERVIEW_BOTTOM_PAD })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
         try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
@@ -3643,6 +3653,46 @@
       }
     }
 
+    // Set nucleotide color scheme
+    setNucleotideColorScheme(schemeName) {
+      try {
+        const schemes = SealionViewer.NUCLEOTIDE_COLOR_SCHEMES;
+        if (!schemes[schemeName]) {
+          console.warn('Unknown nucleotide color scheme:', schemeName);
+          return;
+        }
+        
+        this.nucleotideColorScheme = schemeName;
+        this.BASE_COLORS = { ...schemes[schemeName].colors };
+        
+        // Save preference to localStorage
+        try {
+          localStorage.setItem('sealion_nucleotide_color_scheme', schemeName);
+        } catch (e) {
+          console.warn('Failed to save nucleotide color scheme preference:', e);
+        }
+        
+        console.info('Nucleotide color scheme set to:', schemes[schemeName].name);
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('setNucleotideColorScheme failed', e);
+      }
+    }
+
+    // Load nucleotide color scheme from localStorage
+    loadNucleotideColorScheme() {
+      try {
+        const stored = localStorage.getItem('sealion_nucleotide_color_scheme');
+        if (stored && SealionViewer.NUCLEOTIDE_COLOR_SCHEMES[stored]) {
+          this.setNucleotideColorScheme(stored);
+        }
+      } catch (e) {
+        console.warn('Failed to load nucleotide color scheme:', e);
+      }
+    }
+
     // Expose class on window for easy staged consumption from existing code.
   }
 
@@ -3673,6 +3723,8 @@
     DEFAULT_BASE_COLOR: '#666',
     PALE_REF_COLOR: '#e6e6e6',
     REF_ACCENT: '#2b8cff',
+    // Nucleotide color scheme (default is 'default')
+    nucleotideColorScheme: 'default',
     // Canvas background colors - Light mode
     OVERVIEW_BG: '#f7f7f7',
     OVERVIEW_EXPANDED_COL: '#ddd',
@@ -3695,7 +3747,7 @@
     LABEL_START_POS: 56,
     SEQ_SELECTED_ROW: 'rgba(207, 232, 255, 0.5)',
     SEQ_EVEN_ROW: '#fff',
-    SEQ_ODD_ROW: '#fafafa',
+    SEQ_ODD_ROW: '#fff',
     SEQ_COL_SELECTION: '#ffd54d',
     //SEQ_COL_SELECTION: 'rgba(0,120,200,0.9)',
     SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
@@ -3724,7 +3776,7 @@
     OVERVIEW_EXPANDED_COL: '#404040',
     OVERVIEW_COLLAPSED_COL: '#666',
     OVERVIEW_VIEWPORT: 'rgba(91,163,255,0.9)',
-    OVERVIEW_DIFF_COL: '#ff6b6b',
+    OVERVIEW_DIFF_COL: '#e4a0a0ff',
     HEADER_BG: '#252525',
     HEADER_TEXT: '#d4d4d4',
     HEADER_STROKE: '#888',
@@ -3737,10 +3789,26 @@
     INDEX_COLOR: '#888888',
     SEQ_SELECTED_ROW: 'rgba(91, 163, 255, 0.3)',
     SEQ_EVEN_ROW: '#1e1e1e',
-    SEQ_ODD_ROW: '#252525',
+    SEQ_ODD_ROW: '#1e1e1e',
     SEQ_COL_SELECTION: '#6b5b00',
     SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
     SEQ_RECT_SELECTION_END: 'rgba(91,163,255,0.8)'
+  };
+
+  // Nucleotide color schemes
+  SealionViewer.NUCLEOTIDE_COLOR_SCHEMES = {
+    'default': {
+      name: 'Default',
+      colors: { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' }
+    },
+    'wes': {
+      name: 'Wes Anderson',
+      colors: { 'A': '#F4B942', 'C': '#DD7373', 'G': '#0B775E', 'T': '#35274A' }
+    },
+    'verity': {
+      name: 'Verity',
+      colors: { 'A': '#FF1493', 'C': '#FF69B4', 'G': '#DB7093', 'T': '#C71585' }
+    }
   };
 
   window.SealionViewer = SealionViewer;
