@@ -1397,8 +1397,16 @@
           
           console.log(`Loaded ${newAlignment.length} sequences from ${file.name}`);
           
+          // Wrap the parsed sequences in an Alignment class instance
+          let alignmentInstance;
+          try {
+            alignmentInstance = new Alignment(newAlignment);
+          } catch (e) {
+            throw new Error('Failed to create Alignment instance: ' + e.message);
+          }
+          
           // Update global alignment variable
-          window.alignment = newAlignment;
+          window.alignment = alignmentInstance;
           
           // Update viewer with new data
           if (viewer && typeof viewer.setData === 'function') {
@@ -1417,7 +1425,7 @@
             }
             
             // Reset viewer state
-            viewer.alignment = newAlignment;
+            viewer.alignment = alignmentInstance;
             viewer.selectedRows.clear();
             viewer.selectedCols.clear();
             viewer.labelTags.clear();
@@ -1452,6 +1460,21 @@
             if (viewer.scroller) {
               viewer.scroller.scrollTop = 0;
               viewer.scroller.scrollLeft = 0;
+            }
+            
+            // Recompute consensus sequence for the new alignment
+            try {
+              const cons = viewer.alignment.computeConsensusSequence();
+              window.consensusSequence = cons;
+              if (cons) {
+                window.reference = String(cons);
+                if (window.refreshRefStr && typeof window.refreshRefStr === 'function') {
+                  window.refreshRefStr();
+                }
+                console.info('Recomputed consensus for new alignment');
+              }
+            } catch (e) {
+              console.warn('Failed to compute consensus for new alignment:', e);
             }
             
             // Render the new alignment
