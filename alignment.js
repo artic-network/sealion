@@ -219,8 +219,8 @@ class Alignment {
     }
     
     this._currentOrder = this._sequences.slice().sort((a, b) => {
-      const aTag = labelTags.get(a.originalIndex);
-      const bTag = labelTags.get(b.originalIndex);
+      const aTag = labelTags.get(a.label);
+      const bTag = labelTags.get(b.label);
       
       // Both tagged: sort by tag index
       if (aTag !== undefined && bTag !== undefined) {
@@ -344,6 +344,66 @@ class Alignment {
     }
 
     return 'custom';
+  }
+
+  // Check if sequences are currently in original order
+  isInOriginalOrder() {
+    return this._currentOrder.every((s, i) => s.originalIndex === i);
+  }
+
+  // Move sequences from sourceIndices to insertBeforeIndex
+  // This updates the originalIndex values to reflect the new order
+  moveSequences(sourceIndices, insertBeforeIndex) {
+    if (!this.isInOriginalOrder()) {
+      console.warn('Cannot drag-drop sequences unless in original order');
+      return false;
+    }
+
+    // Sort source indices to maintain relative order
+    const sortedSources = [...sourceIndices].sort((a, b) => a - b);
+    
+    // Extract the sequences to move
+    const toMove = sortedSources.map(i => this._currentOrder[i]);
+    
+    // Remove moved sequences from current order
+    const remaining = this._currentOrder.filter((_, i) => !sourceIndices.includes(i));
+    
+    // Adjust insert position if needed (accounts for removed items before insert point)
+    let adjustedInsertPos = insertBeforeIndex;
+    for (const srcIdx of sortedSources) {
+      if (srcIdx < insertBeforeIndex) {
+        adjustedInsertPos--;
+      }
+    }
+    
+    // Insert at the target position
+    remaining.splice(adjustedInsertPos, 0, ...toMove);
+    
+    // Update originalIndex for all sequences to reflect new order
+    remaining.forEach((seq, newIdx) => {
+      seq.originalIndex = newIdx;
+    });
+    
+    // Update _sequences array to match
+    this._sequences = remaining.slice();
+    this._currentOrder = remaining.slice();
+    
+    this._invalidateCache();
+    return true;
+  }
+
+  // Fix current order: update originalIndex values to match current order
+  // This makes the current ordering become the "original" order
+  fixCurrentOrder() {
+    // Update originalIndex for all sequences to reflect current order
+    this._currentOrder.forEach((seq, newIdx) => {
+      seq.originalIndex = newIdx;
+    });
+    
+    // Update _sequences array to match
+    this._sequences = this._currentOrder.slice();
+    
+    this._invalidateCache();
   }
 
   // Export current order as plain array (for compatibility)

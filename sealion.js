@@ -251,7 +251,7 @@
         this.TAG_BACKGROUND_ALPHA = (typeof cfg.TAG_BACKGROUND_ALPHA === 'number') ? cfg.TAG_BACKGROUND_ALPHA : 0.25;
         this.TAG_SEQ_BACKGROUND_ALPHA = (typeof cfg.TAG_SEQ_BACKGROUND_ALPHA === 'number') ? cfg.TAG_SEQ_BACKGROUND_ALPHA : 0.15;
         this.TAG_TEXT_COLOR = (typeof cfg.TAG_TEXT_COLOR === 'boolean') ? cfg.TAG_TEXT_COLOR : true;
-        this.labelTags = new Map(); // Map of row index -> tag color index
+        this.labelTags = new Map(); // Map of label string -> tag color index
         // site bookmark system
         this.BOOKMARK_COLORS = cfg.BOOKMARK_COLORS || SealionViewer.DEFAULTS.BOOKMARK_COLORS;
         this.BOOKMARK_NAMES = cfg.BOOKMARK_NAMES || SealionViewer.DEFAULTS.BOOKMARK_NAMES;
@@ -841,11 +841,30 @@
 
       // Label canvas interactions: row selection
       if (labelCanvas) {
+        // Drag-and-drop state for sequence reordering
+        let dragState = {
+          isDragging: false,
+          draggedRows: [],
+          dragStartRow: null,
+          dropIndicatorRow: null,
+          dragStartTime: 0,
+          dragStartY: 0
+        };
+
         labelCanvas.addEventListener('mousedown', (e) => {
           if (e.button !== 0) return;
           const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedCols.clear(); } catch (_) { }
+          
+          // Store potential drag start (for drag-and-drop) - only if Option+Command pressed
+          if (e.altKey && e.metaKey) {
+            dragState.dragStartRow = row;
+            dragState.dragStartY = e.clientY;
+            dragState.dragStartTime = Date.now();
+          } else {
+            dragState.dragStartRow = null;
+          }
           
           if (e.shiftKey && this.selectedRows.size > 0) {
             // Shift-click: expand selection to include this row
@@ -876,18 +895,109 @@
         });
 
         window.addEventListener('mousemove', (e) => {
-          if (!this.isSelecting) return;
-          const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          if (this.selectionMode === 'replace') { try { this.setSelectionToRange(this.selectionOrigin, row); } catch (_) { } }
-          else if (this.selectionMode === 'add') { try { this.addRangeToSelection(this.selectionOrigin, row); } catch (_) { } }
-          this.scheduleRender();
+          // Check if we should start dragging (for drag-and-drop)
+          if (!dragState.isDragging && dragState.dragStartRow !== null) {
+            // Only allow drag if in original order and not shift/meta clicking
+            const canDrag = this.alignment && this.alignment.isInOriginalOrder && this.alignment.isInOriginalOrder();
+            if (!canDrag) {
+              dragState.dragStartRow = null;
+            } else {
+              const distanceY = Math.abs(e.clientY - dragState.dragStartY);
+              
+              // Start drag if moved 5px
+              if (distanceY > 5) {
+                // Cancel selection mode and start dragging
+                this.isSelecting = false;
+                dragState.isDragging = true;
+                
+                // Get the rows to drag (either selected rows or just the clicked row)
+                if (this.selectedRows.has(dragState.dragStartRow)) {
+                  dragState.draggedRows = Array.from(this.selectedRows).sort((a, b) => a - b);
+                } else {
+                  dragState.draggedRows = [dragState.dragStartRow];
+                }
+                
+                // Change cursor to indicate dragging
+                try { labelCanvas.style.cursor = 'grabbing'; } catch (_) { }
+              }
+            }
+          }
+
+          // Handle drag-and-drop
+          if (dragState.isDragging) {
+            const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
+            
+            // Determine drop position (before which row to insert)
+            let dropRow = row;
+            
+            // Don't allow dropping in the middle of the dragged selection
+            const minDragged = Math.min(...dragState.draggedRows);
+            const maxDragged = Math.max(...dragState.draggedRows);
+            
+            // Clamp to valid range
+            const maxRow = this.alignment ? this.alignment.length : 0;
+            dropRow = Math.max(0, Math.min(maxRow, dropRow));
+            
+            if (dropRow !== dragState.dropIndicatorRow) {
+              dragState.dropIndicatorRow = dropRow;
+              this.scheduleRender();
+            }
+          } 
+          // Handle selection
+          else if (this.isSelecting) {
+            const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
+            if (this.selectionMode === 'replace') { try { this.setSelectionToRange(this.selectionOrigin, row); } catch (_) { } }
+            else if (this.selectionMode === 'add') { try { this.addRangeToSelection(this.selectionOrigin, row); } catch (_) { } }
+            this.scheduleRender();
+          }
         });
 
         window.addEventListener('mouseup', (e) => {
-          if (!this.isSelecting) return;
-          this.isSelecting = false;
-          const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          this.anchorRow = row; this.scheduleRender();
+          if (dragState.isDragging) {
+            // Perform the drop
+            const dropRow = dragState.dropIndicatorRow;
+            
+            if (dropRow !== null && this.alignment && this.alignment.moveSequences) {
+              const success = this.alignment.moveSequences(dragState.draggedRows, dropRow);
+              
+              if (success) {
+                // Update selection to the new positions
+                const numMoved = dragState.draggedRows.length;
+                this.selectedRows.clear();
+                
+                // Calculate new positions
+                let newStartPos = dropRow;
+                // Adjust if we moved items from before the drop point
+                for (const srcIdx of dragState.draggedRows) {
+                  if (srcIdx < dropRow) {
+                    newStartPos--;
+                  }
+                }
+                
+                for (let i = 0; i < numMoved; i++) {
+                  this.selectedRows.add(newStartPos + i);
+                }
+                
+                this.scheduleRender();
+              }
+            }
+            
+            // Reset drag state
+            dragState.isDragging = false;
+            dragState.draggedRows = [];
+            dragState.dragStartRow = null;
+            dragState.dropIndicatorRow = null;
+            try { labelCanvas.style.cursor = ''; } catch (_) { }
+            this.scheduleRender();
+          } else if (this.isSelecting) {
+            this.isSelecting = false;
+            const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
+            this.anchorRow = row; 
+            this.scheduleRender();
+          }
+          
+          // Always clear drag start on mouseup
+          dragState.dragStartRow = null;
         });
 
         labelCanvas.addEventListener('wheel', (e) => {
@@ -897,11 +1007,59 @@
           this.scheduleRender();
           e.preventDefault();
         }, { passive: false });
+
+        // Store drag state on instance for access in rendering
+        try { this.labelDragState = dragState; } catch (_) { }
       }
+
 
       // Keyboard handlers and scroller snapping/paging
       const onKeyDown = (ke) => {
         try {
+          // Command+Up/Down: Move selected sequences up or down
+          if (ke.metaKey && !ke.altKey && (ke.key === 'ArrowUp' || ke.key === 'ArrowDown')) {
+            try { ke.preventDefault(); ke.stopImmediatePropagation(); } catch (_) { }
+            
+            // Check if we can reorder (must be in original order)
+            const canReorder = this.alignment && this.alignment.isInOriginalOrder && this.alignment.isInOriginalOrder();
+            if (!canReorder || this.selectedRows.size === 0) return;
+            
+            const selectedIndices = Array.from(this.selectedRows).sort((a, b) => a - b);
+            const minSelected = selectedIndices[0];
+            const maxSelected = selectedIndices[selectedIndices.length - 1];
+            const totalRows = this.alignment ? this.alignment.length : 0;
+            
+            if (ke.key === 'ArrowUp') {
+              // Move up: insert before position minSelected - 1
+              if (minSelected > 0) {
+                const newPos = minSelected - 1;
+                if (this.alignment.moveSequences(selectedIndices, newPos)) {
+                  // Update selection to new positions
+                  this.selectedRows.clear();
+                  for (let i = 0; i < selectedIndices.length; i++) {
+                    this.selectedRows.add(newPos + i);
+                  }
+                  this.scheduleRender();
+                }
+              }
+            } else if (ke.key === 'ArrowDown') {
+              // Move down: insert before position maxSelected + 2
+              if (maxSelected < totalRows - 1) {
+                const newPos = maxSelected + 2;
+                if (this.alignment.moveSequences(selectedIndices, newPos)) {
+                  // Update selection to new positions
+                  this.selectedRows.clear();
+                  const insertPos = newPos - selectedIndices.length;
+                  for (let i = 0; i < selectedIndices.length; i++) {
+                    this.selectedRows.add(insertPos + i);
+                  }
+                  this.scheduleRender();
+                }
+              }
+            }
+            return;
+          }
+          
           // Command-A: select all columns
           if (ke.metaKey && (ke.key === 'a' || ke.code === 'KeyA')) {
             try { ke.preventDefault(); ke.stopImmediatePropagation(); } catch (_) { }
@@ -2062,6 +2220,40 @@
         const labelStartPos = (typeof this.LABEL_START_POS === 'number') ? this.LABEL_START_POS : 56;
         ctx.fillText(label, labelStartPos, y);
       }
+
+      // Draw drop indicator if dragging
+      if (this.labelDragState && this.labelDragState.isDragging && this.labelDragState.dropIndicatorRow !== null) {
+        const dropRow = this.labelDragState.dropIndicatorRow;
+        const dropY = (dropRow * ROW_HEIGHT) - scrollTop;
+        
+        // Only draw if in visible range
+        if (dropY >= -ROW_HEIGHT && dropY <= cssH + ROW_HEIGHT) {
+          ctx.strokeStyle = '#007bff';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(dropY));
+          ctx.lineTo(LABEL_WIDTH, Math.round(dropY));
+          ctx.stroke();
+          
+          // Draw arrow indicators on both ends
+          const arrowSize = 6;
+          ctx.fillStyle = '#007bff';
+          // Left arrow
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(dropY));
+          ctx.lineTo(arrowSize, Math.round(dropY - arrowSize));
+          ctx.lineTo(arrowSize, Math.round(dropY + arrowSize));
+          ctx.closePath();
+          ctx.fill();
+          // Right arrow
+          ctx.beginPath();
+          ctx.moveTo(LABEL_WIDTH, Math.round(dropY));
+          ctx.lineTo(LABEL_WIDTH - arrowSize, Math.round(dropY - arrowSize));
+          ctx.lineTo(LABEL_WIDTH - arrowSize, Math.round(dropY + arrowSize));
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
     }
 
     // Draw sequences viewport into provided canvas (backing is viewport-sized).
@@ -2755,6 +2947,16 @@
     // this with the real drawing functions ported from `script.js`.
     drawAll() {
       try {
+        // Update label canvas cursor based on whether drag-drop is allowed
+        if (this.labelCanvas) {
+          const canDrag = this.alignment && this.alignment.isInOriginalOrder && this.alignment.isInOriginalOrder();
+          if (canDrag) {
+            this.labelCanvas.classList.add('draggable');
+          } else {
+            this.labelCanvas.classList.remove('draggable');
+          }
+        }
+
         // compute visible region using the viewer's scroller and instance settings
         const vis = this.computeVisible(this.scroller, { ROW_HEIGHT: this.ROW_HEIGHT, BUFFER_ROWS: this.BUFFER_ROWS, BUFFER_COLS: this.BUFFER_COLS, CHAR_WIDTH: this.charWidth, maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (this.alignment ? Math.max(0, ...this.alignment.map(r => r.sequence.length)) : 0), rowCount: (this.alignment ? this.alignment.length : 0), maskEnabled: !!this.maskEnabled });
 
@@ -3305,9 +3507,12 @@
           return;
         }
         
-        // Tag all selected rows
+        // Tag all selected rows by their label
         for (const rowIdx of this.selectedRows) {
-          this.labelTags.set(rowIdx, tagIndex);
+          const row = this.alignment[rowIdx];
+          if (row && row.label) {
+            this.labelTags.set(row.label, tagIndex);
+          }
         }
         
         console.info(`Tagged ${this.selectedRows.size} labels with ${this.TAG_NAMES[tagIndex]}`);
@@ -3330,8 +3535,9 @@
         
         let clearedCount = 0;
         for (const rowIdx of this.selectedRows) {
-          if (this.labelTags.has(rowIdx)) {
-            this.labelTags.delete(rowIdx);
+          const row = this.alignment[rowIdx];
+          if (row && row.label && this.labelTags.has(row.label)) {
+            this.labelTags.delete(row.label);
             clearedCount++;
           }
         }
@@ -3363,7 +3569,9 @@
 
     // Get tag info for a row
     getRowTag(rowIdx) {
-      return this.labelTags.has(rowIdx) ? this.labelTags.get(rowIdx) : null;
+      const row = this.alignment[rowIdx];
+      if (!row || !row.label) return null;
+      return this.labelTags.has(row.label) ? this.labelTags.get(row.label) : null;
     }
 
     // Get tag color for a row (returns null if no tag)
@@ -3381,14 +3589,8 @@
           return;
         }
         
-        // Create a map of label -> tag index for persistence
-        const tagsByLabel = {};
-        for (const [rowIdx, tagIdx] of this.labelTags.entries()) {
-          const row = this.alignment[rowIdx];
-          if (row && row.label) {
-            tagsByLabel[row.label] = tagIdx;
-          }
-        }
+        // labelTags is already a map of label -> tag index, so just convert to object
+        const tagsByLabel = Object.fromEntries(this.labelTags);
         
         const key = 'sealion_label_tags';
         localStorage.setItem(key, JSON.stringify(tagsByLabel));
@@ -3412,22 +3614,16 @@
         }
         
         const tagsByLabel = JSON.parse(stored);
-        let loadedCount = 0;
         
-        // Map labels back to current row indices
-        for (let rowIdx = 0; rowIdx < this.alignment.length; rowIdx++) {
-          const row = this.alignment[rowIdx];
-          if (row && row.label && tagsByLabel.hasOwnProperty(row.label)) {
-            this.labelTags.set(rowIdx, tagsByLabel[row.label]);
-            loadedCount++;
-          }
+        // Clear existing tags and load from stored data
+        this.labelTags.clear();
+        for (const [label, tagIdx] of Object.entries(tagsByLabel)) {
+          this.labelTags.set(label, tagIdx);
         }
         
-        if (loadedCount > 0) {
-          console.info(`Loaded ${loadedCount} tags from localStorage`);
-          if (typeof this.scheduleRender === 'function') {
-            this.scheduleRender();
-          }
+        console.info(`Loaded ${this.labelTags.size} tags from localStorage`);
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
         }
       } catch (e) {
         console.warn('Failed to load tags:', e);

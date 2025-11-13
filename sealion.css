@@ -160,5 +160,15 @@
   background-color: var(--editable-focus-bg);
 }
 
+/* Drag-and-drop cursor for label canvas */
+#labels-canvas.draggable {
+  cursor: grab;
+}
+
+#labels-canvas.draggable:active {
+  cursor: grabbing;
+}
+
 /* debug HUD removed; use console for diagnostics */
+
 

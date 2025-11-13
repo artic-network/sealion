@@ -660,6 +660,17 @@
     });
   }
 
+  // Fix current order button
+  const fixOrderBtn = document.getElementById('fix-order-btn');
+  if (fixOrderBtn) {
+    fixOrderBtn.addEventListener('click', () => {
+      if (!viewer || !viewer.alignment) return;
+      viewer.alignment.fixCurrentOrder();
+      viewer.cancelRender();
+      viewer.scheduleRender();
+    });
+  }
+
 
 
   // Wire up the new apply buttons
