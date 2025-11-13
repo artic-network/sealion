@@ -2,6 +2,41 @@
 
 Sealion is an interactive alignment viewer for visualizing and analyzing nucleotide sequence alignments.
 
+## Keyboard Shortcuts Reference
+
+| Shortcut | macOS | Windows/Linux | Action |
+|----------|-------|---------------|--------|
+| **Navigation** ||||
+| Arrow keys | ← → ↑ ↓ | ← → ↑ ↓ | Move one column/row at a time |
+| Alt + Arrow keys | ⌥ + ← → ↑ ↓ | Alt + ← → ↑ ↓ | Page scroll (viewport width/height) |
+| Shift + Left/Right | ⇧ + ← → | Shift + ← → | Jump to leftmost/rightmost extent |
+| Shift + Up/Down | ⇧ + ↑ ↓ | Shift + ↑ ↓ | Jump to top/bottom extent |
+| **Difference Navigation** ||||
+| Next difference | ⌘ + → | Ctrl + → | Jump to next difference from reference |
+| Previous difference | ⌘ + ← | Ctrl + ← | Jump to previous difference from reference |
+| **View Controls** ||||
+| Toggle color differences | ⌘ + D | Ctrl + D | Show only differences from reference |
+| Toggle hide mode | ⌘ + H | Ctrl + H | Hide collapsed regions with markers |
+| Reset font size | ⌘ + 0 | Ctrl + 0 | Reset to default font size |
+| Increase font size | ⌥⌘ + = | Alt+Ctrl + = | Increase font size |
+| Decrease font size | ⌥⌘ + - | Alt+Ctrl + - | Decrease font size |
+| **Column Operations** ||||
+| Collapse columns | ⌘ + - | Ctrl + - | Collapse selected columns |
+| Expand columns | ⌘ + = | Ctrl + = | Expand selected columns |
+| **Selection** ||||
+| Select all columns | ⌘ + A | Ctrl + A | Select all alignment columns |
+| Multi-select | ⌘ + click | Ctrl + click | Add/remove sequences or columns |
+| **Sequence Reordering** ||||
+| Move sequences up | ⌘ + ↑ | Ctrl + ↑ | Move selected sequences up one position |
+| Move sequences down | ⌘ + ↓ | Ctrl + ↓ | Move selected sequences down one position |
+| Drag sequences | ⌥⌘ + drag label | Alt+Ctrl + drag label | Drag sequences to new position |
+| **Search** ||||
+| Next search match | ⌘ + G | Ctrl + G | Go to next search match |
+| Execute search | Enter | Enter | Perform search or go to next match |
+| Previous search match | ⇧ + Enter | Shift + Enter | Go to previous search match |
+| **Other** ||||
+| Pan view | Space + drag | Space + drag | Click and drag to pan the view |
+
 ## Overview
 
 The interface consists of:

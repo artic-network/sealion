@@ -1284,38 +1284,52 @@
             const response = await fetch('instructions.md');
             const markdown = await response.text();
 
-            // Convert markdown to HTML (basic conversion)
-            let html = markdown
-              // Headers
-              .replace(/^### (.*$)/gim, '<h4>$1</h4>')
-              .replace(/^## (.*$)/gim, '<h3>$1</h3>')
-              .replace(/^# (.*$)/gim, '<h2>$1</h2>')
-              // Bold
-              .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-              // Italic
-              .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-              // Code inline
-              .replace(/`([^`]+)`/gim, '<code>$1</code>')
-              // Lists
-              .replace(/^\- (.*$)/gim, '<li>$1</li>')
-              .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
-              // Paragraphs
-              .replace(/\n\n/g, '</p><p>')
-              // Line breaks
-              .replace(/\n/g, '<br>');
+            // Use marked.js to convert markdown to HTML if available
+            if (typeof marked !== 'undefined') {
+              // Configure marked for GFM (GitHub Flavored Markdown) with tables
+              marked.setOptions({
+                gfm: true,
+                breaks: true,
+                headerIds: true,
+                mangle: false
+              });
+              
+              const html = marked.parse(markdown);
+              helpContent.innerHTML = html;
+            } else {
+              // Fallback to basic conversion if marked.js is not available
+              let html = markdown
+                // Headers
+                .replace(/^### (.*$)/gim, '<h4>$1</h4>')
+                .replace(/^## (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^# (.*$)/gim, '<h2>$1</h2>')
+                // Bold
+                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+                // Italic
+                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+                // Code inline
+                .replace(/`([^`]+)`/gim, '<code>$1</code>')
+                // Lists
+                .replace(/^\- (.*$)/gim, '<li>$1</li>')
+                .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
+                // Paragraphs
+                .replace(/\n\n/g, '</p><p>')
+                // Line breaks
+                .replace(/\n/g, '<br>');
 
-            // Wrap in paragraph tags
-            html = '<p>' + html + '</p>';
+              // Wrap in paragraph tags
+              html = '<p>' + html + '</p>';
 
-            // Clean up list formatting
-            html = html.replace(/(<li>.*?<\/li>)/gis, (match) => {
-              return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
-            });
+              // Clean up list formatting
+              html = html.replace(/(<li>.*?<\/li>)/gis, (match) => {
+                return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
+              });
 
-            // Clean up consecutive ul tags
-            html = html.replace(/<\/ul><ul>/g, '');
+              // Clean up consecutive ul tags
+              html = html.replace(/<\/ul><ul>/g, '');
 
-            helpContent.innerHTML = html;
+              helpContent.innerHTML = html;
+            }
           } catch (e) {
             helpContent.innerHTML = '<div class="alert alert-warning">Failed to load help content. Please see instructions.md in the repository.</div>';
             console.error('Failed to load help content', e);
