@@ -1095,8 +1095,71 @@
         }
       } catch (err) { console.warn('Cmd+H failed', err); }
     }
+    // Opt+Cmd+C (or Alt+Ctrl+C) to copy just the labels
+    if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 'c' || e.key === 'C')) {
+      const activeElement = document.activeElement;
+      const isFilterBox = activeElement && activeElement.id === 'label-filter-box';
+      const isTextInput = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' || 
+        activeElement.isContentEditable
+      );
+      
+      // Check if text is selected in the filter box
+      let filterBoxTextSelected = false;
+      if (isFilterBox && activeElement.selectionStart !== undefined && activeElement.selectionEnd !== undefined) {
+        filterBoxTextSelected = activeElement.selectionStart !== activeElement.selectionEnd;
+      }
+      
+      if ((!isTextInput || (isFilterBox && !filterBoxTextSelected)) && viewer && viewer.alignment) {
+        e.preventDefault();
+        
+        try {
+          const selectedRows = viewer.getSelectedRows ? viewer.getSelectedRows() : new Set();
+          
+          // If no rows selected, use all sequences
+          const rowIndices = selectedRows.size > 0 
+            ? Array.from(selectedRows).sort((a, b) => a - b)
+            : Array.from({ length: viewer.alignment.length }, (_, i) => i);
+          
+          if (rowIndices.length === 0) {
+            console.info('No sequences available');
+            return;
+          }
+          
+          // Build label text (one per line)
+          const labelText = rowIndices.map(rowIdx => {
+            const seq = viewer.alignment[rowIdx];
+            return seq ? (seq.label || seq.name || `sequence_${rowIdx}`) : '';
+          }).join('\n');
+          
+          // Copy to clipboard
+          navigator.clipboard.writeText(labelText).then(() => {
+            console.info(`Copied ${rowIndices.length} label(s) to clipboard`);
+          }).catch(err => {
+            console.error('Failed to copy labels to clipboard:', err);
+            // Fallback: try using execCommand
+            const textArea = document.createElement('textarea');
+            textArea.value = labelText;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+              document.execCommand('copy');
+              console.info(`Copied ${rowIndices.length} label(s) to clipboard (fallback method)`);
+            } catch (fallbackErr) {
+              console.error('Fallback copy also failed:', fallbackErr);
+            }
+            document.body.removeChild(textArea);
+          });
+        } catch (err) {
+          console.error('Opt+Cmd+C copy labels failed:', err);
+        }
+      }
+    }
     // Cmd+C (or Ctrl+C) to copy selection as FASTA
-    if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
       // Only handle if we're not in a text input field, UNLESS it's the filter box
       // and the filter box text itself is not selected
       const activeElement = document.activeElement;

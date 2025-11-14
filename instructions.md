@@ -27,6 +27,7 @@ Sealion is an interactive alignment viewer for visualizing and analyzing nucleot
 | Select all columns | ⌘ + A | Ctrl + A | Select all alignment columns |
 | Multi-select | ⌘ + click | Ctrl + click | Add/remove sequences or columns |
 | Copy selection | ⌘ + C | Ctrl + C | Copy selected sequences/region as FASTA to clipboard |
+| Copy labels only | ⌥⌘ + C | Alt+Ctrl + C | Copy selected sequence labels as plain text (one per line) |
 | **Sequence Reordering** ||||
 | Move sequences up | ⌘ + ↑ | Ctrl + ↑ | Move selected sequences up one position |
 | Move sequences down | ⌘ + ↓ | Ctrl + ↓ | Move selected sequences down one position |
@@ -211,6 +212,11 @@ Use the search box to find sequences by label name:
   - If both rows and columns are selected, copies only the selected positions from the selected sequences
   - Output is formatted as standard FASTA with sequence labels (each sequence on a single line)
   - Works in conjunction with row selection, column selection, or rectangle selection
+
+- **Opt+Cmd+C** (Alt+Ctrl+C) - Copy only the sequence labels as plain text
+  - Copies one label per line
+  - Useful for exporting sequence names for further analysis or filtering
+  - Works with row selection or filter box results
 
 ## Tips and Tricks
 
