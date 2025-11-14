@@ -1095,8 +1095,8 @@
         }
       } catch (err) { console.warn('Cmd+H failed', err); }
     }
-    // Opt+Cmd+C (or Alt+Ctrl+C) to copy just the labels
-    if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === 'c' || e.key === 'C')) {
+    // Shift+Cmd+C (or Shift+Ctrl+C) to copy just the labels
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'c' || e.key === 'C')) {
       const activeElement = document.activeElement;
       const isFilterBox = activeElement && activeElement.id === 'label-filter-box';
       const isTextInput = activeElement && (
@@ -1154,12 +1154,12 @@
             document.body.removeChild(textArea);
           });
         } catch (err) {
-          console.error('Opt+Cmd+C copy labels failed:', err);
+          console.error('Shift+Cmd+C copy labels failed:', err);
         }
       }
     }
     // Cmd+C (or Ctrl+C) to copy selection as FASTA
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'c' || e.key === 'C')) {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'c' || e.key === 'C')) {
       // Only handle if we're not in a text input field, UNLESS it's the filter box
       // and the filter box text itself is not selected
       const activeElement = document.activeElement;
