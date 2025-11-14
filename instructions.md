@@ -12,8 +12,8 @@ Sealion is an interactive alignment viewer for visualizing and analyzing nucleot
 | Shift + Left/Right | ⇧ + ← → | Shift + ← → | Jump to leftmost/rightmost extent |
 | Shift + Up/Down | ⇧ + ↑ ↓ | Shift + ↑ ↓ | Jump to top/bottom extent |
 | **Difference Navigation** ||||
-| Next difference | ⌘ + → | Ctrl + → | Jump to next difference from reference |
-| Previous difference | ⌘ + ← | Ctrl + ← | Jump to previous difference from reference |
+| Next difference | ⌘ + > | Ctrl + > | Jump to next difference from reference |
+| Previous difference | ⌘ + < | Ctrl + < | Jump to previous difference from reference |
 | **View Controls** ||||
 | Toggle color differences | ⌘ + D | Ctrl + D | Show only differences from reference |
 | Toggle hide mode | ⌘ + H | Ctrl + H | Hide collapsed regions with markers |
@@ -26,6 +26,7 @@ Sealion is an interactive alignment viewer for visualizing and analyzing nucleot
 | **Selection** ||||
 | Select all columns | ⌘ + A | Ctrl + A | Select all alignment columns |
 | Multi-select | ⌘ + click | Ctrl + click | Add/remove sequences or columns |
+| Copy selection | ⌘ + C | Ctrl + C | Copy selected sequences/region as FASTA to clipboard |
 | **Sequence Reordering** ||||
 | Move sequences up | ⌘ + ↑ | Ctrl + ↑ | Move selected sequences up one position |
 | Move sequences down | ⌘ + ↓ | Ctrl + ↓ | Move selected sequences down one position |
@@ -49,13 +50,15 @@ The interface consists of:
 
 ### Mouse Controls
 
-- **Click and drag** - Pan the alignment view
+- **Click and drag on canvas** - Rectangle selection of nucleotides
+- **Double-click on canvas** - Select horizontal run of same character type (gaps, Ns, or nucleotides), then drag vertically to extend to other sequences
+- **Space + drag** - Pan the alignment view
 - **Scroll wheel** - Vertical scrolling through sequences
 - **Shift + scroll wheel** - Horizontal scrolling through positions
 - **Click on label** - Select a sequence
 - **Cmd+click (Ctrl+click)** - Add/remove sequences from selection
 - **Click on header** - Select a column
-- **Click and drag on canvas** - Rectangle selection of cells
+- **Option+Command+drag label** (Alt+Ctrl+drag) - Drag sequences to reorder
 - **Drag label divider** - Resize the label column width
 
 ### Keyboard Shortcuts
@@ -72,8 +75,8 @@ The interface consists of:
 - **Cmd+H** (Ctrl+H) - Toggle hide mode (collapsed regions hidden with markers)
 
 #### Difference Navigation
-- **Cmd+Left** (Ctrl+Left) - Jump to previous difference from reference
-- **Cmd+Right** (Ctrl+Right) - Jump to next difference from reference
+- **Cmd+<** (Ctrl+<) - Jump to previous difference from reference
+- **Cmd+>** (Ctrl+>) - Jump to next difference from reference
   - Selects the column and centers it horizontally
   - When rows are selected, only checks those sequences for differences
   - When no rows selected, checks all sequences and scrolls to first difference
@@ -123,8 +126,8 @@ Use the dropdown menu to quickly collapse common patterns:
 
 Quickly jump between sites that differ from the reference sequence:
 
-- **Previous difference** <i class="bi bi-arrow-left-circle"></i> - Jump to the previous column with a difference (Cmd+Left)
-- **Next difference** <i class="bi bi-arrow-right-circle"></i> - Jump to the next column with a difference (Cmd+Right)
+- **Previous difference** <i class="bi bi-arrow-left-circle"></i> - Jump to the previous column with a difference (Cmd+<)
+- **Next difference** <i class="bi bi-arrow-right-circle"></i> - Jump to the next column with a difference (Cmd+>)
 
 When navigating differences:
 - The column with the difference is selected and centered horizontally
@@ -193,7 +196,21 @@ Use the search box to find sequences by label name:
 ### Rectangle Selection
 
 - **Click and drag** on the alignment canvas to select a rectangular region
-- Useful for selecting multiple sequences and positions at once
+- **Shift+click** to extend the existing rectangle to include the clicked point
+- **Double-click and drag** vertically to select same-type character runs across multiple sequences
+  - Double-clicking on a character selects that character and extends horizontally to include all adjacent characters of the same type
+  - Character types: gaps (`-`), ambiguous bases (`N`), nucleotides (`A`, `C`, `G`, `T`, `U`), or other characters
+  - After double-clicking, dragging vertically extends the selection to other sequences while keeping the same column range
+  - Useful for selecting conserved gap regions, runs of ambiguous bases, or nucleotide stretches across multiple sequences
+
+### Copying Selections
+
+- **Cmd+C** (Ctrl+C) - Copy the selected region to clipboard as FASTA format
+  - If only rows (sequences) are selected, copies the entire sequences
+  - If only columns are selected, copies those positions from all sequences
+  - If both rows and columns are selected, copies only the selected positions from the selected sequences
+  - Output is formatted as standard FASTA with sequence labels (each sequence on a single line)
+  - Works in conjunction with row selection, column selection, or rectangle selection
 
 ## Tips and Tricks
 
@@ -201,7 +218,7 @@ Use the search box to find sequences by label name:
 
 2. **Compare to reference**: Set a sequence as reference and use "Colour differences only" (Cmd+D) to quickly spot variations
 
-3. **Navigate differences efficiently**: Select specific sequences of interest, then use Cmd+Left/Right to jump between their differences while keeping them in view
+3. **Navigate differences efficiently**: Select specific sequences of interest, then use Cmd+< and Cmd+> to jump between their differences while keeping them in view
 
 4. **Find outliers**: Sort by selected column to group sequences with the same nucleotide at a position of interest
 

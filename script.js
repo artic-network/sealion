@@ -1095,8 +1095,104 @@
         }
       } catch (err) { console.warn('Cmd+H failed', err); }
     }
-    // Cmd+Right (or Ctrl+Right) to jump to next difference
-    if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowRight') {
+    // Cmd+C (or Ctrl+C) to copy selection as FASTA
+    if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C')) {
+      // Only handle if we're not in a text input field, UNLESS it's the filter box
+      // and the filter box text itself is not selected
+      const activeElement = document.activeElement;
+      const isFilterBox = activeElement && activeElement.id === 'label-filter-box';
+      const isTextInput = activeElement && (
+        activeElement.tagName === 'INPUT' || 
+        activeElement.tagName === 'TEXTAREA' || 
+        activeElement.isContentEditable
+      );
+      
+      // Check if text is selected in the filter box
+      let filterBoxTextSelected = false;
+      if (isFilterBox && activeElement.selectionStart !== undefined && activeElement.selectionEnd !== undefined) {
+        filterBoxTextSelected = activeElement.selectionStart !== activeElement.selectionEnd;
+      }
+      
+      // Allow copy when:
+      // - Not in a text input, OR
+      // - In filter box but no text is selected (so copy sequences instead)
+      if ((!isTextInput || (isFilterBox && !filterBoxTextSelected)) && viewer && viewer.alignment) {
+        e.preventDefault();
+        
+        try {
+          const selectedRows = viewer.getSelectedRows ? viewer.getSelectedRows() : new Set();
+          const selectedCols = viewer.getSelectedCols ? viewer.getSelectedCols() : new Set();
+          
+          // If only columns are selected (no rows), use all sequences
+          const rowIndices = selectedRows.size > 0 
+            ? Array.from(selectedRows).sort((a, b) => a - b)
+            : Array.from({ length: viewer.alignment.length }, (_, i) => i);
+          
+          if (rowIndices.length === 0) {
+            console.info('No sequences available');
+            return;
+          }
+          
+          // Get sorted column indices if any are selected
+          const colIndices = selectedCols.size > 0 
+            ? Array.from(selectedCols).sort((a, b) => a - b)
+            : null;
+          
+          // Build FASTA text
+          let fastaText = '';
+          for (const rowIdx of rowIndices) {
+            const seq = viewer.alignment[rowIdx];
+            if (!seq) continue;
+            
+            // Get label
+            const label = seq.label || seq.name || `sequence_${rowIdx}`;
+            fastaText += `>${label}\n`;
+            
+            // Get sequence - either selected columns or full sequence
+            let sequence;
+            if (colIndices && colIndices.length > 0) {
+              // Extract only selected columns
+              sequence = colIndices.map(colIdx => {
+                return (seq.sequence && seq.sequence[colIdx]) ? seq.sequence[colIdx] : '';
+              }).join('');
+            } else {
+              // Use full sequence
+              sequence = seq.sequence || '';
+            }
+            
+            // Add sequence as single line (no wrapping)
+            fastaText += sequence + '\n';
+          }
+          
+          // Copy to clipboard
+          navigator.clipboard.writeText(fastaText).then(() => {
+            const rowCount = rowIndices.length;
+            const colCount = colIndices ? colIndices.length : (viewer.alignment[0]?.sequence?.length || 0);
+            console.info(`Copied ${rowCount} sequence(s) with ${colCount} position(s) to clipboard as FASTA`);
+          }).catch(err => {
+            console.error('Failed to copy to clipboard:', err);
+            // Fallback: try using execCommand
+            const textArea = document.createElement('textarea');
+            textArea.value = fastaText;
+            textArea.style.position = 'fixed';
+            textArea.style.left = '-999999px';
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+              document.execCommand('copy');
+              console.info(`Copied ${rowIndices.length} sequence(s) to clipboard as FASTA (fallback method)`);
+            } catch (fallbackErr) {
+              console.error('Fallback copy also failed:', fallbackErr);
+            }
+            document.body.removeChild(textArea);
+          });
+        } catch (err) {
+          console.error('Cmd+C copy failed:', err);
+        }
+      }
+    }
+    // Cmd+> (or Ctrl+>) to jump to next difference
+    if ((e.metaKey || e.ctrlKey) && (e.key === '>' || e.key === '.')) {
       e.preventDefault();
       try {
         if (!viewer || !viewer.alignment) return;
@@ -1108,10 +1204,10 @@
         if (typeof viewer.jumpToNextDifference === 'function') {
           viewer.jumpToNextDifference(refStr);
         }
-      } catch (err) { console.warn('Cmd+Right failed', err); }
+      } catch (err) { console.warn('Cmd+> failed', err); }
     }
-    // Cmd+Left (or Ctrl+Left) to jump to previous difference
-    if ((e.metaKey || e.ctrlKey) && e.key === 'ArrowLeft') {
+    // Cmd+< (or Ctrl+<) to jump to previous difference
+    if ((e.metaKey || e.ctrlKey) && (e.key === '<' || e.key === ',')) {
       e.preventDefault();
       try {
         if (!viewer || !viewer.alignment) return;
@@ -1123,7 +1219,7 @@
         if (typeof viewer.jumpToPreviousDifference === 'function') {
           viewer.jumpToPreviousDifference(refStr);
         }
-      } catch (err) { console.warn('Cmd+Left failed', err); }
+      } catch (err) { console.warn('Cmd+< failed', err); }
     }
     // Shift+Left to scroll to leftmost extent
     if (e.shiftKey && e.key === 'ArrowLeft' && !e.metaKey && !e.ctrlKey && !e.altKey) {

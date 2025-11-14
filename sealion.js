@@ -684,6 +684,12 @@
 
       // Sequence canvas interactions (select columns, rows, rect selection)
       if (seqCanvas) {
+        // Track clicks for double-click detection
+        let lastClickTime = 0;
+        let lastClickRow = -1;
+        let lastClickCol = -1;
+        const DOUBLE_CLICK_THRESHOLD = 500; // ms
+        
         seqCanvas.addEventListener('wheel', (e) => {
           if (!scroller) return;
           scroller.scrollTop += e.deltaY;
@@ -708,27 +714,123 @@
           const alt = !!e.altKey;
           const meta = !!e.metaKey;
 
-          if (alt && meta) {
-            // Rectangle selection
-            try { this.clearRectSelection(); } catch (_) { }
+          if (!alt && !meta) {
+            // Rectangle selection (default drag behavior)
             const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
             const col = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-            if (e.shiftKey) {
-              if (this.rectStartRow !== null && this.rectEndRow !== null && this.rectStartCol !== null && this.rectEndCol !== null) {
-                this.rectOriginal = { rlo: Math.max(0, Math.min(this.rectStartRow, this.rectEndRow)), rhi: Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(this.rectStartRow, this.rectEndRow)), clo: Math.max(0, Math.min(this.rectStartCol, this.rectEndCol)), chi: Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(this.rectStartCol, this.rectEndCol), Math.max(this.rectStartCol, this.rectEndCol)) };
+            
+            // Detect double-click by checking if this click is at the same position within threshold
+            const now = Date.now();
+            const isDoubleClick = (now - lastClickTime < DOUBLE_CLICK_THRESHOLD) && 
+                                  (row === lastClickRow) && 
+                                  (col === lastClickCol);
+            
+            // Update last click tracking
+            lastClickTime = now;
+            lastClickRow = row;
+            lastClickCol = col;
+            
+            if (isDoubleClick) {
+              // Double-click detected: smart character type selection
+              if (!this.alignment || row < 0 || row >= this.alignment.length) return;
+              
+              const seq = this.alignment[row];
+              if (!seq || !seq.sequence || col < 0 || col >= seq.sequence.length) return;
+              
+              const clickedChar = seq.sequence[col].toUpperCase();
+              
+              // Determine character type
+              let charType;
+              if (clickedChar === '-') {
+                charType = 'gap';
+              } else if (clickedChar === 'N') {
+                charType = 'ambiguous';
+              } else if ('ACGT'.includes(clickedChar)) {
+                charType = 'nucleotide';
               } else {
-                this.rectOriginal = { rlo: row, rhi: row, clo: col, chi: col };
+                charType = 'other';
               }
-              this.rectStartRow = this.rectOriginal.rlo; this.rectStartCol = this.rectOriginal.clo;
-              this.rectEndRow = row; this.rectEndCol = col;
-            } else {
-              this.rectOriginal = null;
-              this.rectStartRow = row; this.rectEndRow = row; this.rectStartCol = col; this.rectEndCol = col;
+              
+              // Find the horizontal extent of same character type
+              let startCol = col;
+              let endCol = col;
+              
+              // Expand left
+              while (startCol > 0) {
+                const prevChar = seq.sequence[startCol - 1].toUpperCase();
+                let prevType;
+                if (prevChar === '-') prevType = 'gap';
+                else if (prevChar === 'N') prevType = 'ambiguous';
+                else if ('ACGT'.includes(prevChar)) prevType = 'nucleotide';
+                else prevType = 'other';
+                
+                if (prevType !== charType) break;
+                startCol--;
+              }
+              
+              // Expand right
+              while (endCol < seq.sequence.length - 1) {
+                const nextChar = seq.sequence[endCol + 1].toUpperCase();
+                let nextType;
+                if (nextChar === '-') nextType = 'gap';
+                else if (nextChar === 'N') nextType = 'ambiguous';
+                else if ('ACGT'.includes(nextChar)) nextType = 'nucleotide';
+                else nextType = 'other';
+                
+                if (nextType !== charType) break;
+                endCol++;
+              }
+              
+              // Set up rectangle selection with this horizontal range
+              try { this.clearRectSelection(); } catch (_) { }
+              this.rectStartRow = row;
+              this.rectEndRow = row;
+              this.rectStartCol = startCol;
+              this.rectEndCol = endCol;
+              
+              // Store the locked column range for double-click mode
+              this.dblClickColStart = startCol;
+              this.dblClickColEnd = endCol;
+              
+              // Finalize the selection immediately so it appears on mousedown
+              try { this.finalizeRectSelection(row, row, startCol, endCol, null); } catch (_) { }
+              
+              this.anchorRow = row;
+              this.anchorCol = endCol;
+              
+              // Enable rect selecting mode so dragging will extend vertically
+              this.isRectSelecting = true;
+              
+              this.scheduleRender();
+              e.preventDefault();
+              return;
             }
+            
+            // Clear double-click mode on new selection
+            this.dblClickColStart = undefined;
+            this.dblClickColEnd = undefined;
+            
+            if (e.shiftKey && this.rectStartRow !== null && this.rectStartCol !== null) {
+              // Shift+click: extend the existing rectangle to include the clicked point
+              // Keep the original start point, update the end point
+              this.rectEndRow = row;
+              this.rectEndCol = col;
+            } else {
+              // New rectangle selection
+              try { this.clearRectSelection(); } catch (_) { }
+              this.rectStartRow = row;
+              this.rectStartCol = col;
+              this.rectEndRow = row;
+              this.rectEndCol = col;
+            }
+            
             this.isRectSelecting = true;
-            this.anchorRow = this.rectStartRow; this.anchorCol = this.rectStartCol;
+            this.anchorRow = this.rectStartRow;
+            this.anchorCol = this.rectStartCol;
+            
             // compute live selected sets
-            this.selectedRows.clear(); this.selectedCols.clear();
+            this.selectedRows.clear();
+            this.selectedCols.clear();
             const rlo0 = Math.max(0, Math.min(this.rectStartRow, this.rectEndRow));
             const rhi0 = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(this.rectStartRow, this.rectEndRow));
             const clo0 = Math.max(0, Math.min(this.rectStartCol, this.rectEndCol));
@@ -820,7 +922,15 @@
           }
           if (!this.isRectSelecting) return;
           this.rectEndRow = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
+          
+          // If in double-click mode, keep the column range locked
+          if (this.dblClickColStart !== undefined && this.dblClickColEnd !== undefined) {
+            this.rectStartCol = this.dblClickColStart;
+            this.rectEndCol = this.dblClickColEnd;
+          } else {
+            this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
+          }
+          
           try { this.updateRectSelection(this.rectStartRow, this.rectEndRow, this.rectStartCol, this.rectEndCol, this.rectOriginal); } catch (_) { }
           this.scheduleRender();
         });
@@ -830,7 +940,18 @@
           if (!this.isRectSelecting) return;
           this.isRectSelecting = false;
           this.rectEndRow = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
+          
+          // If in double-click mode, keep the column range locked
+          if (this.dblClickColStart !== undefined && this.dblClickColEnd !== undefined) {
+            this.rectStartCol = this.dblClickColStart;
+            this.rectEndCol = this.dblClickColEnd;
+            // Clear double-click mode
+            this.dblClickColStart = undefined;
+            this.dblClickColEnd = undefined;
+          } else {
+            this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
+          }
+          
           try { this.finalizeRectSelection(this.rectStartRow, this.rectEndRow, this.rectStartCol, this.rectEndCol, this.rectOriginal); } catch (_) { }
           this.anchorRow = Math.max(this.rectStartRow, this.rectEndRow);
           this.anchorCol = Math.max(this.rectStartCol, this.rectEndCol);
