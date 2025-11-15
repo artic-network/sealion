@@ -594,10 +594,11 @@ if (typeof window !== 'undefined') {
   window.Alignment = Alignment;
 }
 
+// NOTE: Auto-instantiation disabled - data is loaded on demand via user choice
 // Instantiate the global alignment object from the ebov_alignment data
 // This assumes ebov.js has been loaded first (which provides ebov_alignment)
-if (typeof window !== 'undefined' && typeof window.ebov_alignment !== 'undefined') {
-  window.alignment = new Alignment(window.ebov_alignment);
-} else {
-  console.warn('Alignment: ebov_alignment data not found. Make sure ebov.js is loaded before alignment.js');
-}
+// if (typeof window !== 'undefined' && typeof window.ebov_alignment !== 'undefined') {
+//   window.alignment = new Alignment(window.ebov_alignment);
+// } else {
+//   console.warn('Alignment: ebov_alignment data not found. Make sure ebov.js is loaded before alignment.js');
+// }

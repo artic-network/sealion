@@ -186,22 +186,66 @@
       setStatus('Loading viewer...');
       await waitForViewerClass();
 
-      // Step 2: Create empty viewer instance
+      // Step 2: Create empty viewer instance (no data yet - will be loaded by user choice)
       setStatus('Creating viewer...');
       viewer = new window.SealionViewer('#sealion', null, window.SealionViewer.DEFAULTS);
       try { window.viewer = viewer; } catch (_) { }
-      console.info('SealionViewer created (no data yet)');
+      console.info('SealionViewer created (no data - waiting for user to load)');
 
-      // Step 3: Wait for alignment data
-      setStatus('Loading alignment data...');
-      alignment = await waitForAlignment();
-      try { window.alignment = alignment; } catch (_) { }
-      console.info('Alignment data loaded');
+      // Step 3: Show file upload modal immediately for user to choose data source
+      setStatus(null); // Clear status
+      if (fileModal) {
+        // Reset modal state
+        fileDropZone.style.display = 'block';
+        fileLoading.style.display = 'none';
+        fileError.style.display = 'none';
+        if (fileUploadInput) fileUploadInput.value = '';
+        
+        fileModal.show();
+        console.info('Showing file upload modal - waiting for user data choice');
+      } else {
+        console.warn('File modal not available, falling back to waiting for alignment');
+        // Fallback to old behavior if modal not available
+        alignment = await waitForAlignment();
+        try { window.alignment = alignment; } catch (_) { }
+        console.info('Alignment data loaded');
+        viewer.setData(alignment);
+        console.info('Viewer data set');
+      }
 
-      // Step 4: Set data on viewer
+      // NOTE: The rest of initialization (dark mode, custom names, etc.)
+      // is deferred until after data is loaded via loadDataIntoViewer()
+
+    } catch (e) {
+      console.error('Failed to initialize viewer:', e);
+      setStatus('Failed to load viewer: ' + e.message);
+    }
+  }
+
+  // Helper function to complete viewer setup after data is loaded
+  function loadDataIntoViewer(alignmentInstance) {
+    try {
+      // Set data on viewer
       setStatus('Initializing alignment view...');
-      viewer.setData(alignment);
+      viewer.setData(alignmentInstance);
       console.info('Viewer data set');
+
+      // Update global alignment reference
+      alignment = alignmentInstance;
+      try { window.alignment = alignmentInstance; } catch (_) { }
+
+      // Get data dimensions
+      const maxSeqLen = alignmentInstance.getMaxSeqLen();
+      const rowCount = alignmentInstance.getSequenceCount();
+      window.maxSeqLen = maxSeqLen;
+      window.rowCount = rowCount;
+
+      // Reset mask string
+      if (window.refreshMaskStr && typeof window.refreshMaskStr === 'function') {
+        window.maskStr = window.refreshMaskStr();
+      } else {
+        window.maskStr = '1'.repeat(maxSeqLen);
+      }
 
       // Load saved dark mode preference from localStorage
       try {
@@ -287,7 +331,7 @@
         console.warn('Failed to populate labels-consensus-div:', e);
       }
 
-      // Step 5: Attach interaction handlers
+      // Attach interaction handlers
       try {
         // Query DOM for canvases created by viewer
         const realHeaderCanvas = document.getElementById('header-canvas') || (viewer && viewer.headerCanvas) || null;
@@ -300,9 +344,6 @@
         const realLeftSpacer = document.getElementById('left-spacer') || (viewer && viewer.leftSpacer) || leftSpacer || null;
         const realLeftScroll = document.getElementById('left-scroll') || (viewer && viewer.leftScroll) || leftScroll || null;
         const realLabelDivider = document.getElementById('label-divider') || (viewer && viewer.labelDivider) || null;
-
-        const maxSeqLen = alignment.getMaxSeqLen();
-        const rowCount = alignment.getSequenceCount();
 
         viewer.attachInteractionHandlers({
           headerCanvas: realHeaderCanvas,
@@ -331,7 +372,7 @@
         console.error('Failed to attach interaction handlers to SealionViewer', e);
       }
 
-      // Step 6: Set up initial reference (consensus)
+      // Set up initial reference (consensus)
       setStatus('Computing consensus...');
       try {
         if (viewer && viewer.alignment) {
@@ -345,19 +386,19 @@
         }
       } catch (e) { console.warn('Failed to compute consensus', e); }
 
-      // Step 7: Complete initialization
+      // Complete initialization
       setStatus('Rendering...');
       viewer.scheduleRender();
 
       // Wait a moment for first render then hide status
       setTimeout(() => {
         setStatus(null);
-        console.info('Initialization complete');
+        console.info('Data loaded and viewer initialized');
       }, 100);
 
     } catch (e) {
-      console.error('Initialization failed', e);
-      setStatus('ERROR: Initialization failed - see console');
+      console.error('Failed to load data into viewer:', e);
+      setStatus('ERROR: Failed to load data - see console');
     }
   }
 
@@ -1498,6 +1539,85 @@
     });
   }
 
+  // About button functionality
+  const aboutBtn = document.getElementById('about-btn');
+  if (aboutBtn) {
+    aboutBtn.addEventListener('click', async () => {
+      try {
+        const aboutModal = document.getElementById('aboutModal');
+        const aboutContent = document.getElementById('about-content');
+
+        if (!aboutModal || !aboutContent) return;
+
+        // Show the modal
+        const modal = new bootstrap.Modal(aboutModal);
+        modal.show();
+
+        // Load the markdown content if not already loaded
+        if (aboutContent.querySelector('.spinner-border')) {
+          try {
+            const response = await fetch('about.md');
+            const markdown = await response.text();
+
+            // Use marked.js to convert markdown to HTML if available
+            if (typeof marked !== 'undefined') {
+              // Configure marked for GFM (GitHub Flavored Markdown)
+              marked.setOptions({
+                gfm: true,
+                breaks: true,
+                headerIds: true,
+                mangle: false
+              });
+              
+              const html = marked.parse(markdown);
+              aboutContent.innerHTML = html;
+            } else {
+              // Fallback to basic conversion if marked.js is not available
+              let html = markdown
+                // Headers
+                .replace(/^### (.*$)/gim, '<h4>$1</h4>')
+                .replace(/^## (.*$)/gim, '<h3>$1</h3>')
+                .replace(/^# (.*$)/gim, '<h2>$1</h2>')
+                // Bold
+                .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+                // Italic
+                .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+                // Code inline
+                .replace(/`([^`]+)`/gim, '<code>$1</code>')
+                // Links
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>')
+                // Lists
+                .replace(/^\- (.*$)/gim, '<li>$1</li>')
+                .replace(/^(\d+)\. (.*$)/gim, '<li>$2</li>')
+                // Paragraphs
+                .replace(/\n\n/g, '</p><p>')
+                // Line breaks
+                .replace(/\n/g, '<br>');
+
+              // Wrap in paragraph tags
+              html = '<p>' + html + '</p>';
+
+              // Clean up list formatting
+              html = html.replace(/(<li>.*?<\/li>)/gis, (match) => {
+                return '<ul>' + match.replace(/<br>/g, '') + '</ul>';
+              });
+
+              // Clean up consecutive ul tags
+              html = html.replace(/<\/ul><ul>/g, '');
+
+              aboutContent.innerHTML = html;
+            }
+          } catch (error) {
+            console.error('Error loading about.md:', error);
+            aboutContent.innerHTML = '<div class="alert alert-danger">Failed to load about information.</div>';
+          }
+        }
+      } catch (error) {
+        console.error('Error showing about modal:', error);
+      }
+    });
+  }
+
   // File upload modal functionality
   const openFileBtn = document.getElementById('open-file-btn');
   const fileUploadModal = document.getElementById('fileUploadModal');
@@ -1594,31 +1714,25 @@
           
           // Update viewer with new data
           if (viewer && typeof viewer.setData === 'function') {
-            // Get max sequence length
-            const newMaxSeqLen = Math.max(...newAlignment.map(s => s.sequence.length));
-            
-            // Update global variables
-            window.maxSeqLen = newMaxSeqLen;
-            window.rowCount = newAlignment.length;
-            
-            // Reset mask string
-            if (window.refreshMaskStr && typeof window.refreshMaskStr === 'function') {
-              window.maskStr = window.refreshMaskStr();
-            } else {
-              window.maskStr = '1'.repeat(newMaxSeqLen);
+            // Reset viewer state when loading new file (if properties exist)
+            if (viewer.selectedRows && typeof viewer.selectedRows.clear === 'function') {
+              viewer.selectedRows.clear();
             }
-            
-            // Reset viewer state
-            viewer.alignment = alignmentInstance;
-            viewer.selectedRows.clear();
-            viewer.selectedCols.clear();
-            viewer.labelTags.clear();
-            viewer.siteBookmarks.clear();
-            
-            // Clear any existing reference
+            if (viewer.selectedCols && typeof viewer.selectedCols.clear === 'function') {
+              viewer.selectedCols.clear();
+            }
+            if (viewer.labelTags && typeof viewer.labelTags.clear === 'function') {
+              viewer.labelTags.clear();
+            }
+            if (viewer.siteBookmarks && typeof viewer.siteBookmarks.clear === 'function') {
+              viewer.siteBookmarks.clear();
+            }
             window.refRow = null;
             
-            // Rebuild column offsets and update viewer
+            // Rebuild column offsets
+            const newMaxSeqLen = Math.max(...newAlignment.map(s => s.sequence.length));
+            window.maskStr = '1'.repeat(newMaxSeqLen);
+            
             if (typeof viewer.buildColOffsetsFor === 'function') {
               viewer.colOffsets = viewer.buildColOffsetsFor(viewer.maskEnabled, {
                 maxSeqLen: newMaxSeqLen,
@@ -1632,8 +1746,12 @@
             }
             
             // Update canvas sizes
-            viewer.setCanvasCSSSizes();
-            viewer.resizeBackings();
+            if (typeof viewer.setCanvasCSSSizes === 'function') {
+              viewer.setCanvasCSSSizes();
+            }
+            if (typeof viewer.resizeBackings === 'function') {
+              viewer.resizeBackings();
+            }
             
             // Invalidate overview cache
             if (viewer._overviewCacheInvalid !== undefined) {
@@ -1646,32 +1764,13 @@
               viewer.scroller.scrollLeft = 0;
             }
             
-            // Recompute consensus sequence for the new alignment
-            try {
-              const cons = viewer.alignment.computeConsensusSequence();
-              window.consensusSequence = cons;
-              if (cons) {
-                window.reference = String(cons);
-                if (window.refreshRefStr && typeof window.refreshRefStr === 'function') {
-                  window.refreshRefStr();
-                }
-                console.info('Recomputed consensus for new alignment');
-              }
-            } catch (e) {
-              console.warn('Failed to compute consensus for new alignment:', e);
-            }
-            
-            // Render the new alignment
-            if (typeof viewer.scheduleRender === 'function') {
-              viewer.scheduleRender();
-            } else if (typeof viewer.drawAll === 'function') {
-              viewer.drawAll();
-            }
-            
             console.info('File loaded successfully:', file.name);
             
             // Close modal
             fileModal.hide();
+            
+            // Load data using shared function
+            loadDataIntoViewer(alignmentInstance);
             
           } else {
             throw new Error('Viewer not available');
@@ -1680,6 +1779,49 @@
         } catch (error) {
           console.error('Error loading file:', error);
           fileErrorText.textContent = error.message || 'Failed to load file. Please check the file format.';
+          fileError.style.display = 'block';
+          fileLoading.style.display = 'none';
+          fileDropZone.style.display = 'block';
+        }
+      }
+      
+      // Function to load example data (ebov.js)
+      async function loadExampleData() {
+        try {
+          // Show loading state
+          fileDropZone.style.display = 'none';
+          fileError.style.display = 'none';
+          fileLoading.style.display = 'block';
+          
+          // Check if ebov_alignment data is available
+          if (!window.ebov_alignment || !Array.isArray(window.ebov_alignment)) {
+            throw new Error('Example data not available. Make sure ebov.js is loaded.');
+          }
+          
+          console.log(`Loading ${window.ebov_alignment.length} example sequences from ebov.js`);
+          
+          // Wrap the example data in an Alignment class instance
+          let alignmentInstance;
+          try {
+            alignmentInstance = new Alignment(window.ebov_alignment);
+          } catch (e) {
+            throw new Error('Failed to create Alignment instance: ' + e.message);
+          }
+          
+          // Update global alignment variable
+          window.alignment = alignmentInstance;
+          
+          // Close modal first
+          fileModal.hide();
+          
+          // Load the data into the viewer using the shared function
+          loadDataIntoViewer(alignmentInstance);
+          
+          console.info('Example data loaded successfully');
+          
+        } catch (error) {
+          console.error('Error loading example data:', error);
+          fileErrorText.textContent = error.message || 'Failed to load example data.';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
           fileDropZone.style.display = 'block';
@@ -1713,6 +1855,14 @@
       if (fileSelectBtn && fileUploadInput) {
         fileSelectBtn.addEventListener('click', () => {
           fileUploadInput.click();
+        });
+      }
+      
+      // Load example data button
+      const loadExampleBtn = document.getElementById('load-example-btn');
+      if (loadExampleBtn) {
+        loadExampleBtn.addEventListener('click', () => {
+          loadExampleData();
         });
       }
       
@@ -1758,8 +1908,12 @@
         
         // Click on drop zone to select file
         fileDropZone.addEventListener('click', (e) => {
-          // Don't trigger if clicking on the button or its children
+          // Don't trigger if clicking on the buttons or their children
+          const loadExampleBtn = document.getElementById('load-example-btn');
           if (e.target === fileSelectBtn || fileSelectBtn.contains(e.target)) {
+            return;
+          }
+          if (loadExampleBtn && (e.target === loadExampleBtn || loadExampleBtn.contains(e.target))) {
             return;
           }
           if (fileUploadInput) fileUploadInput.click();
