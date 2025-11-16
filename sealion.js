@@ -4120,7 +4120,7 @@
     },
     'wes': {
       name: 'Wes Anderson',
-      colors: { 'A': '#F4B942', 'C': '#DD7373', 'G': '#0B775E', 'T': '#35274A' }
+      colors: { 'A': '#0B775E', 'C': '#35274A', 'G': '#DD7373', 'T': '#F4B942' }
     },
     'verity': {
       name: 'Verity',
