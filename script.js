@@ -1618,6 +1618,87 @@
     });
   }
 
+  // Export button functionality
+  const exportBtn = document.getElementById('export-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+      try {
+        if (!viewer || !viewer.alignment) {
+          console.warn('No alignment data to export');
+          return;
+        }
+
+        const selectedRows = viewer.getSelectedRows ? viewer.getSelectedRows() : new Set();
+        const selectedCols = viewer.getSelectedCols ? viewer.getSelectedCols() : new Set();
+        
+        // If only columns are selected (no rows), use all sequences
+        const rowIndices = selectedRows.size > 0 
+          ? Array.from(selectedRows).sort((a, b) => a - b)
+          : Array.from({ length: viewer.alignment.length }, (_, i) => i);
+        
+        if (rowIndices.length === 0) {
+          console.warn('No sequences to export');
+          return;
+        }
+        
+        // Get sorted column indices if any are selected
+        const colIndices = selectedCols.size > 0 
+          ? Array.from(selectedCols).sort((a, b) => a - b)
+          : null;
+        
+        // Build FASTA text
+        let fastaText = '';
+        for (const rowIdx of rowIndices) {
+          const seq = viewer.alignment[rowIdx];
+          if (!seq) continue;
+          
+          // Get label
+          const label = seq.label || seq.name || `sequence_${rowIdx}`;
+          fastaText += `>${label}\n`;
+          
+          // Get sequence - either selected columns or full sequence
+          let sequence;
+          if (colIndices && colIndices.length > 0) {
+            // Extract only selected columns
+            sequence = colIndices.map(colIdx => {
+              return (seq.sequence && seq.sequence[colIdx]) ? seq.sequence[colIdx] : '';
+            }).join('');
+          } else {
+            // Use full sequence
+            sequence = seq.sequence || '';
+          }
+          
+          // Add sequence as single line (no wrapping)
+          fastaText += sequence + '\n';
+        }
+        
+        // Create a blob and download it
+        const blob = new Blob([fastaText], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        
+        // Generate filename with timestamp
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const rowCount = rowIndices.length;
+        const colCount = colIndices ? colIndices.length : 'all';
+        a.download = `alignment_${rowCount}seqs_${colCount}sites_${timestamp}.fasta`;
+        
+        // Trigger download
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        const exportColCount = colIndices ? colIndices.length : (viewer.alignment[0]?.sequence?.length || 0);
+        console.info(`Exported ${rowCount} sequence(s) with ${exportColCount} position(s) as FASTA file`);
+        
+      } catch (error) {
+        console.error('Export failed:', error);
+      }
+    });
+  }
+
   // File upload modal functionality
   const openFileBtn = document.getElementById('open-file-btn');
   const fileUploadModal = document.getElementById('fileUploadModal');
