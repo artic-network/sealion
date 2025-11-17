@@ -224,16 +224,21 @@ class Alignment {
       return;
     }
 
+    // Nucleotide sort order: A, C, G, T, N, -
+    const nucleotideOrder = { 'A': 0, 'C': 1, 'G': 2, 'T': 3, 'N': 4, '-': 5 };
+    const getOrder = (char) => {
+      const upper = char.toUpperCase();
+      return nucleotideOrder.hasOwnProperty(upper) ? nucleotideOrder[upper] : 6;
+    };
+
     this._currentOrder = this._sequences.slice().sort((a, b) => {
       const charA = (siteIndex < a.sequence.length) ? a.sequence[siteIndex] : '-';
       const charB = (siteIndex < b.sequence.length) ? b.sequence[siteIndex] : '-';
       
-      // Sort gaps (-) to the end (or beginning if reversed)
-      if (charA === '-' && charB !== '-') return reverse ? -1 : 1;
-      if (charA !== '-' && charB === '-') return reverse ? 1 : -1;
+      const orderA = getOrder(charA);
+      const orderB = getOrder(charB);
       
-      // Otherwise alphabetical
-      const result = charA.localeCompare(charB);
+      const result = orderA - orderB;
       return reverse ? -result : result;
     });
     this._invalidateCache();

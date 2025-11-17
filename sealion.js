@@ -398,6 +398,7 @@
           let isLabelDragging = false;
           let labelDragStartX = 0;
           let labelDragStartWidth = (typeof this.LABEL_WIDTH === 'number') ? this.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260);
+          let labelDragRafHandle = null;
           const MIN_LABEL_WIDTH = 80;
           const MAX_LABEL_WIDTH = 1200;
           labelDividerEl.addEventListener('mousedown', (e) => {
@@ -415,14 +416,24 @@
             if (nw === this.LABEL_WIDTH) return;
             try { this.LABEL_WIDTH = nw; } catch (_) { }
             try { document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); } catch (_) { }
-            // Update CSS sizes and backing immediately during drag for responsive feedback
-            try { this.setCanvasCSSSizes(); } catch (_) { }
-            try { this.resizeBackings(); } catch (_) { }
-            try { if (typeof this.scheduleRender === 'function') this.scheduleRender(); } catch (_) { }
+            // Throttle render using requestAnimationFrame for smooth performance
+            if (labelDragRafHandle === null) {
+              labelDragRafHandle = requestAnimationFrame(() => {
+                labelDragRafHandle = null;
+                try { this.setCanvasCSSSizes(); } catch (_) { }
+                try { this.resizeBackings(); } catch (_) { }
+                try { if (typeof this.scheduleRender === 'function') this.scheduleRender(); } catch (_) { }
+              });
+            }
           });
           window.addEventListener('mouseup', (e) => {
             if (!isLabelDragging) return;
             isLabelDragging = false;
+            // Cancel any pending animation frame
+            if (labelDragRafHandle !== null) {
+              cancelAnimationFrame(labelDragRafHandle);
+              labelDragRafHandle = null;
+            }
             try { document.body.style.userSelect = ''; } catch (_) { }
             try { document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); } catch (_) { }
             try { localStorage.setItem('sealion_label_width', String(this.LABEL_WIDTH)); } catch (_) { }

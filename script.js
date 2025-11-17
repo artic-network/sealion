@@ -324,6 +324,95 @@
           sortBtnGroup.appendChild(sortDropdownMenu);
           labelsConsensusDiv.appendChild(sortBtnGroup);
           
+          // Attach event handlers to sort buttons
+          document.getElementById('sort-original-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByOriginalIndex();
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-label-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByLabel();
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-label-reverse-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByLabel(true);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-column-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            const selectedCols = viewer.getSelectedCols ? viewer.getSelectedCols() : (viewer.selectedCols || new Set());
+            if (selectedCols.size === 0) {
+              alert('Please select a column first');
+              return;
+            }
+            const col = Array.from(selectedCols)[0];
+            viewer.alignment.orderBySite(col);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-column-reverse-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            const selectedCols = viewer.getSelectedCols ? viewer.getSelectedCols() : (viewer.selectedCols || new Set());
+            if (selectedCols.size === 0) {
+              alert('Please select a column first');
+              return;
+            }
+            const col = Array.from(selectedCols)[0];
+            viewer.alignment.orderBySite(col, true);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-start-pos-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByStartPos();
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-start-pos-reverse-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByStartPos(true);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-seq-length-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderBySeqLength();
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-seq-length-reverse-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderBySeqLength(true);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('sort-tag-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.orderByTag(viewer.labelTags);
+            viewer.cancelRender();
+            viewer.scheduleRender();
+          });
+          
+          document.getElementById('fix-order-btn').addEventListener('click', () => {
+            if (!viewer || !viewer.alignment) return;
+            viewer.alignment.fixCurrentOrder();
+            console.log('Current order fixed');
+          });
+          
           // Add dropdown button group for reference selection (aligned right)
           const btnGroup = document.createElement('div');
           btnGroup.className = 'btn-group';
