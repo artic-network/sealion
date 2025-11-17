@@ -246,27 +246,39 @@
             result.length = parseInt(match[1], 10);
           }
         }
-
         // Parse DEFINITION (may span multiple lines)
         else if (line.startsWith('DEFINITION')) {
-          result.definition = line.substring(12).trim();
+          const match = line.match(/^DEFINITION\s+(.+)/);
+          result.definition = match ? match[1].trim() : '';
           continuedField = 'definition';
         }
+        // Parse ACCESSION
+        else if (line.startsWith('ACCESSION')) {
+          const match = line.match(/^ACCESSION\s+(\S+)/);
+          result.accession = match ? match[1] : null;
+          continuedField = null;
+        }
+        // Parse VERSION
+        else if (line.startsWith('VERSION')) {
+          const match = line.match(/^VERSION\s+(\S+)/);
+          result.version = match ? match[1] : null;
+          continuedField = null;
+        }
+        
+        // Parse sequence from ORIGIN section (check early to avoid matching other patterns)
+        else if (inOrigin && line.match(/^\s*\d+/)) {
+          // Remove line numbers and spaces
+          const seqPart = line.replace(/^\s*\d+/, '').replace(/\s+/g, '');
+          result.sequence += seqPart;
+        }
+        
+        // Handle continuation of multi-line fields
         else if (continuedField === 'definition' && line.match(/^\s{12,}/) && !line.match(/^[A-Z]/)) {
           result.definition += ' ' + trimmed;
         }
-        else if (continuedField === 'definition') {
+        // Clear continuation flag if we hit a new field
+        else if (continuedField && line.match(/^[A-Z]/)) {
           continuedField = null;
-        }
-
-        // Parse ACCESSION
-        else if (line.startsWith('ACCESSION')) {
-          result.accession = line.substring(12).trim();
-        }
-
-        // Parse VERSION
-        else if (line.startsWith('VERSION')) {
-          result.version = line.substring(12).trim().split(/\s+/)[0];
         }
 
         // Parse SOURCE section for organism and isolate
@@ -294,36 +306,41 @@
         else if (line.startsWith('FEATURES')) {
           inFeatures = true;
         }
+        
+        // Detect ORIGIN section (start of sequence) - check before CDS parsing
+        else if (line.startsWith('ORIGIN')) {
+          inFeatures = false;
+          inOrigin = true;
+          continuedField = null;
+
+          // Save last CDS if exists
+          if (currentCDS) {
+            result.cds.push(currentCDS);
+          }
+          currentCDS = null;
+          currentLocation = null;
+        }
 
         // Parse CDS features
         else if (inFeatures && line.match(/^\s{5}CDS\s+/)) {
           // Save previous CDS if exists
-          if (currentCDS && currentLocation) {
-            currentCDS.coordinates = currentLocation;
+          if (currentCDS) {
             result.cds.push(currentCDS);
           }
 
-          // Start new CDS
+          // Start new CDS and extract coordinates ONLY from the CDS line itself
+          const locationMatch = line.match(/CDS\s+(.+)/);
+          const coordinates = locationMatch ? locationMatch[1].trim() : null;
+          
           currentCDS = {
             gene: null,
+            locus_tag: null,
             product: null,
             function: null,
-            coordinates: null
+            coordinates: coordinates
           };
-
-          // Extract location
-          const locationMatch = line.match(/CDS\s+(.+)/);
-          if (locationMatch) {
-            currentLocation = locationMatch[1].trim();
-          }
-        }
-
-        // Continue multi-line CDS location
-        else if (currentCDS && currentLocation && !line.match(/^\s{21}\//) && line.match(/^\s{21}(.+)/)) {
-          const contMatch = line.match(/^\s{21}(.+)/);
-          if (contMatch) {
-            currentLocation += contMatch[1].trim();
-          }
+          
+          currentLocation = null; // Don't track for continuation
         }
 
         // Parse CDS qualifiers
@@ -332,6 +349,12 @@
           const geneMatch = line.match(/\/gene="([^"]+)"/);
           if (geneMatch) {
             currentCDS.gene = geneMatch[1];
+          }
+
+          // Locus tag
+          const locusTagMatch = line.match(/\/locus_tag="([^"]+)"/);
+          if (locusTagMatch) {
+            currentCDS.locus_tag = locusTagMatch[1];
           }
 
           // Product
@@ -350,27 +373,6 @@
           if (noteMatch && !currentCDS.function) {
             currentCDS.function = noteMatch[1];
           }
-        }
-
-        // Detect ORIGIN section (start of sequence)
-        else if (line.startsWith('ORIGIN')) {
-          inFeatures = false;
-          inOrigin = true;
-
-          // Save last CDS if exists
-          if (currentCDS && currentLocation) {
-            currentCDS.coordinates = currentLocation;
-            result.cds.push(currentCDS);
-            currentCDS = null;
-            currentLocation = null;
-          }
-        }
-
-        // Parse sequence from ORIGIN section
-        else if (inOrigin && line.match(/^\s*\d+/)) {
-          // Remove line numbers and spaces
-          const seqPart = line.replace(/^\s*\d+/, '').replace(/\s+/g, '');
-          result.sequence += seqPart;
         }
 
         // End of file
