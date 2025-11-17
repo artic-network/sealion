@@ -521,6 +521,12 @@
   // State for currently displayed reference genome in consensus canvas
   let displayedReferenceType = 'consensus'; // 'consensus' or 'reference'
   let displayedReferenceAccession = null; // accession number when displayedReferenceType === 'reference'
+  
+  // Expose globally for access from viewer
+  try { 
+    window.displayedReferenceType = displayedReferenceType; 
+    window.displayedReferenceAccession = displayedReferenceAccession;
+  } catch (_) { }
 
   // Function to update the dropdown menu with available reference genomes
   function updateReferenceDropdown() {
@@ -614,6 +620,12 @@
     try {
       displayedReferenceType = type;
       displayedReferenceAccession = accession;
+      
+      // Update window globals for viewer access
+      try { 
+        window.displayedReferenceType = type; 
+        window.displayedReferenceAccession = accession;
+      } catch (_) { }
 
       // Update dropdown button text
       const dropdownBtn = document.getElementById('reference-dropdown-btn');
@@ -2371,6 +2383,17 @@
           // Update the dropdown menu to include the new reference genome
           if (window.updateReferenceDropdown) {
             window.updateReferenceDropdown();
+          }
+          
+          // Automatically select the newly loaded reference genome
+          if (window.selectDisplayedReference) {
+            window.selectDisplayedReference('reference', referenceGenomeData.accession);
+            console.log(`Automatically selected reference genome ${referenceGenomeData.accession}`);
+          }
+          
+          // Trigger redraw to show CDS features
+          if (viewer && viewer.scheduleRender) {
+            viewer.scheduleRender();
           }
           
           // Show success message

@@ -680,6 +680,70 @@
           this.scheduleRender();
         });
         window.addEventListener('mouseup', () => { isOverviewDragging = false; });
+        
+        // Add mousemove handler for CDS tooltips
+        overviewCanvas.addEventListener('mousemove', (e) => {
+          if (isOverviewDragging) return; // Don't show tooltip while dragging
+          
+          // Get mouse position relative to canvas
+          const rect = overviewCanvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          
+          // Check if hovering over any CDS region
+          let hoveredCDS = null;
+          if (this._cdsHitRegions && Array.isArray(this._cdsHitRegions)) {
+            for (const region of this._cdsHitRegions) {
+              if (mouseX >= region.x && mouseX <= region.x + region.width &&
+                  mouseY >= region.y && mouseY <= region.y + region.height) {
+                hoveredCDS = region;
+                break;
+              }
+            }
+          }
+          
+          // Show or hide tooltip
+          if (hoveredCDS) {
+            this._showCDSTooltip(e.clientX, e.clientY, hoveredCDS);
+            overviewCanvas.style.cursor = 'pointer';
+          } else {
+            this._hideCDSTooltip();
+            overviewCanvas.style.cursor = 'default';
+          }
+        });
+        
+        // Hide tooltip when mouse leaves canvas
+        overviewCanvas.addEventListener('mouseleave', () => {
+          this._hideCDSTooltip();
+          overviewCanvas.style.cursor = 'default';
+        });
+        
+        // Add double-click handler for CDS region selection
+        overviewCanvas.addEventListener('dblclick', (e) => {
+          // Get mouse position relative to canvas
+          const rect = overviewCanvas.getBoundingClientRect();
+          const mouseX = e.clientX - rect.left;
+          const mouseY = e.clientY - rect.top;
+          
+          // Check if double-clicking on any CDS region
+          let clickedCDS = null;
+          if (this._cdsHitRegions && Array.isArray(this._cdsHitRegions)) {
+            for (const region of this._cdsHitRegions) {
+              if (mouseX >= region.x && mouseX <= region.x + region.width &&
+                  mouseY >= region.y && mouseY <= region.y + region.height) {
+                clickedCDS = region;
+                break;
+              }
+            }
+          }
+          
+          // If clicked on a CDS, select all columns in its coordinate range
+          if (clickedCDS && clickedCDS.coordinates) {
+            this._selectCDSRange(clickedCDS);
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        });
       }
 
       // Sequence canvas interactions (select columns, rows, rect selection)
@@ -1797,6 +1861,42 @@
       return ctx;
     }
 
+    // Helper: Parse GenBank-style CDS coordinates into array of {start, end, frame} objects
+    // Handles simple coordinates like "470..2689" and complex join() coordinates
+    // Frame is calculated as (start - 1) % 3 + 1, giving frames 1, 2, or 3
+    parseCDSCoordinates(coordinateString) {
+      if (!coordinateString || typeof coordinateString !== 'string') return [];
+      
+      const results = [];
+      
+      // Handle join(...) syntax
+      if (coordinateString.startsWith('join(') && coordinateString.endsWith(')')) {
+        const inner = coordinateString.slice(5, -1); // Remove 'join(' and ')'
+        const parts = inner.split(',');
+        for (const part of parts) {
+          const match = part.trim().match(/^(\d+)\.\.(\d+)$/);
+          if (match) {
+            const start = parseInt(match[1], 10);
+            const end = parseInt(match[2], 10);
+            // GenBank coordinates are 1-based, so frame = (start - 1) % 3 + 1
+            const frame = ((start - 1) % 3) + 1;
+            results.push({ start, end, frame });
+          }
+        }
+      } else {
+        // Simple coordinate like "470..2689"
+        const match = coordinateString.match(/^(\d+)\.\.(\d+)$/);
+        if (match) {
+          const start = parseInt(match[1], 10);
+          const end = parseInt(match[2], 10);
+          const frame = ((start - 1) % 3) + 1;
+          results.push({ start, end, frame });
+        }
+      }
+      
+      return results;
+    }
+
     // Draw overview (mini-map) into the provided canvas using CSS-pixel coordinates.
     // This method is parameterized so callers can pass current layout/state from
     // the existing app while we progressively migrate behaviour into the class.
@@ -1828,6 +1928,7 @@
       const refStr = (opts && opts.refStr) ? opts.refStr : null;
       const refModeEnabled = (opts && typeof opts.refModeEnabled === 'boolean') ? opts.refModeEnabled : false;
       const rows = (opts && opts.rows) ? opts.rows : [];
+      const refGenomeCDS = (opts && opts.refGenomeCDS) ? opts.refGenomeCDS : null;
 
       // Check if parameters have changed (need to rebuild cache)
       const currentParams = {
@@ -1837,7 +1938,8 @@
         refStr,
         refModeEnabled,
         rowCount: rows.length,
-        bookmarkCount: this.siteBookmarks ? this.siteBookmarks.size : 0
+        bookmarkCount: this.siteBookmarks ? this.siteBookmarks.size : 0,
+        cdsCount: refGenomeCDS ? refGenomeCDS.length : 0
       };
       
       const paramsChanged = !this._overviewCacheParams || 
@@ -1847,7 +1949,8 @@
         this._overviewCacheParams.refStr !== currentParams.refStr ||
         this._overviewCacheParams.refModeEnabled !== currentParams.refModeEnabled ||
         this._overviewCacheParams.rowCount !== currentParams.rowCount ||
-        this._overviewCacheParams.bookmarkCount !== currentParams.bookmarkCount;
+        this._overviewCacheParams.bookmarkCount !== currentParams.bookmarkCount ||
+        this._overviewCacheParams.cdsCount !== currentParams.cdsCount;
 
       // Check if we need to rebuild the cache
       if (this._overviewCacheInvalid || !this._overviewCache || 
@@ -1921,6 +2024,99 @@
               cacheCtx.fillRect(x, barY, w, barH);
             }
           }
+          cacheCtx.restore();
+        }
+
+        // Draw CDS features if reference genome with cds array is available
+        const refGenomeCDS = (opts && opts.refGenomeCDS) ? opts.refGenomeCDS : null;
+        if (refGenomeCDS && Array.isArray(refGenomeCDS) && refGenomeCDS.length > 0) {
+          cacheCtx.save();
+          
+          // Define colors for the 3 reading frames
+          const frameColors = ['#4A90E2', '#E24A4A', '#4AE290']; // Blue, Red, Green
+          
+          // Calculate row heights - divide the bar area into 3 rows
+          const rowHeight = Math.max(2, barH / 3);
+          
+          // Store CDS hit regions for tooltip support
+          this._cdsHitRegions = [];
+          
+          // Process each CDS
+          for (const cds of refGenomeCDS) {
+            if (!cds.coordinates) continue;
+            
+            // Parse the coordinates
+            const segments = this.parseCDSCoordinates(cds.coordinates);
+            
+            for (const segment of segments) {
+              // Convert 1-based GenBank coordinates to 0-based sequence positions
+              const startPos = segment.start - 1;
+              const endPos = segment.end - 1;
+              
+              // Calculate row based on reading frame (1, 2, or 3 -> rows 0, 1, 2)
+              const rowIndex = segment.frame - 1;
+              const cdsY = barY + (rowIndex * rowHeight);
+              
+              // Calculate pixel positions using the same scale as the overview bars
+              const leftPixel = (colOffsets && typeof colOffsets[startPos] !== 'undefined') 
+                ? colOffsets[startPos] 
+                : (startPos * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+              const rightPixel = (colOffsets && typeof colOffsets[endPos] !== 'undefined') 
+                ? colOffsets[endPos] + CHAR_WIDTH 
+                : ((endPos + 1) * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+              
+              const x = Math.round(leftPixel * scale);
+              const endX = Math.round(rightPixel * scale);
+              const w = Math.max(1, endX - x);
+              
+              // Draw CDS rectangle with frame-specific color
+              cacheCtx.fillStyle = frameColors[rowIndex];
+              cacheCtx.globalAlpha = 0.6;
+              cacheCtx.fillRect(x, cdsY, w, rowHeight);
+              
+              // Add a subtle border for better visibility
+              cacheCtx.globalAlpha = 0.8;
+              cacheCtx.strokeStyle = frameColors[rowIndex];
+              cacheCtx.lineWidth = 0.5;
+              cacheCtx.strokeRect(x, cdsY, w, rowHeight);
+              
+              // Store hit region for tooltip support
+              this._cdsHitRegions.push({
+                x: x,
+                y: cdsY,
+                width: w,
+                height: rowHeight,
+                gene: cds.gene || '',
+                product: cds.product || '',
+                coordinates: cds.coordinates,
+                function: cds.function || ''
+              });
+              
+              // Draw gene label if there's enough space (at least 30 pixels wide)
+              if (w >= 30 && cds.gene) {
+                cacheCtx.globalAlpha = 1.0;
+                cacheCtx.fillStyle = '#ffffff';
+                cacheCtx.font = 'bold 10px sans-serif';
+                cacheCtx.textAlign = 'center';
+                cacheCtx.textBaseline = 'middle';
+                
+                // Add text shadow for better readability
+                cacheCtx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+                cacheCtx.shadowBlur = 2;
+                cacheCtx.shadowOffsetX = 0;
+                cacheCtx.shadowOffsetY = 0;
+                
+                const labelX = x + w / 2;
+                const labelY = cdsY + rowHeight / 2;
+                cacheCtx.fillText(cds.gene, labelX, labelY);
+                
+                // Reset shadow
+                cacheCtx.shadowColor = 'transparent';
+                cacheCtx.shadowBlur = 0;
+              }
+            }
+          }
+          
           cacheCtx.restore();
         }
 
@@ -3018,6 +3214,129 @@
       } catch (e) { console.warn('SealionViewer._scrollToRow failed', e); }
     }
 
+    // Helper: show CDS tooltip
+    _showCDSTooltip(clientX, clientY, cdsData) {
+      try {
+        // Create tooltip element if it doesn't exist
+        if (!this._cdsTooltip) {
+          this._cdsTooltip = document.createElement('div');
+          this._cdsTooltip.id = 'cds-tooltip';
+          this._cdsTooltip.style.position = 'fixed';
+          this._cdsTooltip.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+          this._cdsTooltip.style.color = '#ffffff';
+          this._cdsTooltip.style.padding = '8px 12px';
+          this._cdsTooltip.style.borderRadius = '4px';
+          this._cdsTooltip.style.fontSize = '12px';
+          this._cdsTooltip.style.fontFamily = 'sans-serif';
+          this._cdsTooltip.style.pointerEvents = 'none';
+          this._cdsTooltip.style.zIndex = '10000';
+          this._cdsTooltip.style.maxWidth = '300px';
+          this._cdsTooltip.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)';
+          this._cdsTooltip.style.lineHeight = '1.4';
+          document.body.appendChild(this._cdsTooltip);
+        }
+        
+        // Build tooltip content
+        let html = '';
+        if (cdsData.gene) {
+          html += `<div style="font-weight: bold; margin-bottom: 4px;">${cdsData.gene}</div>`;
+        }
+        if (cdsData.product) {
+          html += `<div style="margin-bottom: 4px;">${cdsData.product}</div>`;
+        }
+        if (cdsData.coordinates) {
+          html += `<div style="font-size: 10px; color: #aaa;">${cdsData.coordinates}</div>`;
+        }
+        if (cdsData.function) {
+          html += `<div style="font-size: 10px; color: #ccc; margin-top: 4px; font-style: italic;">${cdsData.function}</div>`;
+        }
+        
+        this._cdsTooltip.innerHTML = html;
+        
+        // Position tooltip near cursor, but keep it on screen
+        const offsetX = 15;
+        const offsetY = 15;
+        let left = clientX + offsetX;
+        let top = clientY + offsetY;
+        
+        // Make sure tooltip is visible first to get dimensions
+        this._cdsTooltip.style.display = 'block';
+        
+        // Adjust position if tooltip would go off screen
+        const tooltipRect = this._cdsTooltip.getBoundingClientRect();
+        if (left + tooltipRect.width > window.innerWidth) {
+          left = clientX - tooltipRect.width - offsetX;
+        }
+        if (top + tooltipRect.height > window.innerHeight) {
+          top = clientY - tooltipRect.height - offsetY;
+        }
+        
+        this._cdsTooltip.style.left = left + 'px';
+        this._cdsTooltip.style.top = top + 'px';
+      } catch (e) {
+        console.warn('SealionViewer._showCDSTooltip failed', e);
+      }
+    }
+
+    // Helper: hide CDS tooltip
+    _hideCDSTooltip() {
+      try {
+        if (this._cdsTooltip) {
+          this._cdsTooltip.style.display = 'none';
+        }
+      } catch (e) {
+        console.warn('SealionViewer._hideCDSTooltip failed', e);
+      }
+    }
+
+    // Helper: select all columns in a CDS coordinate range
+    _selectCDSRange(cdsData) {
+      try {
+        if (!cdsData || !cdsData.coordinates) return;
+        
+        // Parse the coordinates to get all segments
+        const segments = this.parseCDSCoordinates(cdsData.coordinates);
+        if (!segments || segments.length === 0) return;
+        
+        // Clear current selection and select all columns in all segments
+        if (!this.selectedCols) {
+          this.selectedCols = new Set();
+        } else {
+          this.selectedCols.clear();
+        }
+        
+        // Add all columns from all segments to selection
+        for (const segment of segments) {
+          // Convert 1-based GenBank coordinates to 0-based column indices
+          const startCol = segment.start - 1;
+          const endCol = segment.end - 1;
+          
+          // Add all columns in this segment
+          for (let col = startCol; col <= endCol; col++) {
+            this.selectedCols.add(col);
+          }
+        }
+        
+        // Update window.selectedCols if it exists
+        try {
+          if (window) {
+            window.selectedCols = this.selectedCols;
+          }
+        } catch (_) { }
+        
+        // Trigger redraw to show selection
+        this.scheduleRender();
+        
+        // Log selection info
+        const geneName = cdsData.gene || 'CDS';
+        const totalSelected = this.selectedCols.size;
+        console.info(`Selected ${totalSelected} columns in ${geneName} (${cdsData.coordinates})`);
+        
+      } catch (e) {
+        console.warn('SealionViewer._selectCDSRange failed', e);
+      }
+    }
+
     // Map a CSS-pixel x offset (relative to the canvas left) to a column index.
     // Uses binary search on this.colOffsets. Returns an integer column index
     // clamped to [0, numCols-1].
@@ -3109,7 +3428,43 @@
         //try { this.drawLabelsOutline(this.labelsOutlineCanvas, vis, { LABEL_FONT: this.labelFont }); } catch (e) { console.error('SealionViewer.drawLabelsOutline failed', e); }
         //try { this.drawLabelsHeader(this.labelsHeaderCanvas, vis, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, labelTextVertOffset: this.labelTextVertOffset, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_FONT: this.labelFont, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, CONSENSUS_HEIGHT: this.CONSENSUS_HEIGHT }); } catch (e) { console.error('SealionViewer.drawLabelsHeader failed', e); }
         // labelsConsensusDiv is now a UI container, not a canvas to draw on
-        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [], OVERVIEW_TOP_PAD: this.OVERVIEW_TOP_PAD, OVERVIEW_BOTTOM_PAD: this.OVERVIEW_BOTTOM_PAD })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
+        
+        // Get CDS array for genome structure display
+        // Strategy: Keep displaying CDS from the last reference genome that was loaded,
+        // unless the user explicitly selects a different reference genome
+        let refGenomeCDS = null;
+        try {
+          const displayedType = window && window.displayedReferenceType;
+          const displayedAccession = window && window.displayedReferenceAccession;
+          
+          // If a reference genome is currently displayed, use it
+          if (displayedType === 'reference' && displayedAccession && this.alignment) {
+            const refGenome = this.alignment.getReferenceGenome ? this.alignment.getReferenceGenome(displayedAccession) : null;
+            if (refGenome && refGenome.cds && Array.isArray(refGenome.cds)) {
+              refGenomeCDS = refGenome.cds;
+              // Remember this for future draws
+              this._lastRefGenomeCDS = refGenomeCDS;
+              this._lastRefGenomeAccession = displayedAccession;
+            }
+          }
+          // If no reference genome is displayed but we have a remembered one, keep using it
+          // (i.e., user switched to consensus or selected sequence)
+          else if (this._lastRefGenomeCDS && this._lastRefGenomeAccession) {
+            // Verify the reference genome still exists
+            if (this.alignment && this.alignment.getReferenceGenome) {
+              const refGenome = this.alignment.getReferenceGenome(this._lastRefGenomeAccession);
+              if (refGenome && refGenome.cds && Array.isArray(refGenome.cds)) {
+                refGenomeCDS = this._lastRefGenomeCDS;
+              } else {
+                // Reference genome was removed, clear memory
+                this._lastRefGenomeCDS = null;
+                this._lastRefGenomeAccession = null;
+              }
+            }
+          }
+        } catch (_) { refGenomeCDS = null; }
+        
+        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [], OVERVIEW_TOP_PAD: this.OVERVIEW_TOP_PAD, OVERVIEW_BOTTOM_PAD: this.OVERVIEW_BOTTOM_PAD, refGenomeCDS: refGenomeCDS })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
         try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }

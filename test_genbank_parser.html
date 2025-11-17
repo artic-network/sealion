@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenBank Parser Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4A90E2;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .input-section {
+            margin: 20px 0;
+        }
+        .file-input {
+            margin: 10px 0;
+            padding: 10px;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            background: #fafafa;
+        }
+        input[type="file"] {
+            display: block;
+            margin: 10px 0;
+        }
+        button {
+            background: #4A90E2;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px 5px 5px 0;
+        }
+        button:hover {
+            background: #357ABD;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .output {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .success {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #4A90E2;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-top: 5px;
+        }
+        .cds-list {
+            list-style: none;
+            padding: 0;
+        }
+        .cds-item {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 8px 0;
+        }
+        .cds-gene {
+            font-weight: bold;
+            color: #4A90E2;
+            font-size: 16px;
+        }
+        .cds-product {
+            color: #666;
+            margin: 5px 0;
+        }
+        .cds-coords {
+            font-family: monospace;
+            color: #999;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>GenBank File Parser Utility</h1>
+        
+        <div class="info-box">
+            <strong>Purpose:</strong> This utility parses GenBank format files (.gb) and converts them to the reference genome JSON format used by Sealion viewer.
+            You can use this to load reference genomes directly from GenBank files instead of manually creating JSON files.
+        </div>
+
+        <div class="input-section">
+            <h2>Select GenBank File</h2>
+            <div class="file-input">
+                <input type="file" id="fileInput" accept=".gb,.gbk,.genbank" />
+                <button id="parseBtn" disabled>Parse GenBank File</button>
+                <button id="downloadBtn" disabled>Download as JSON</button>
+            </div>
+        </div>
+
+        <div id="statusDiv"></div>
+
+        <div id="statsDiv"></div>
+
+        <div id="cdsDiv"></div>
+
+        <div id="outputDiv"></div>
+
+        <h2>Usage Example</h2>
+        <div class="output">
+            <pre>// In your code:
+const fileInput = document.getElementById('myFileInput');
+fileInput.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  const text = await file.text();
+  
+  // Parse GenBank file
+  const refGenome = SealionUtils.parseGenBankFile(text);
+  
+  if (refGenome) {
+    // Add to alignment
+    alignment.addReferenceGenome(refGenome);
+    console.log('Loaded reference:', refGenome.accession);
+  }
+});</pre>
+        </div>
+    </div>
+
+    <!-- Load the utility -->
+    <script src="sealion/utils.js"></script>
+
+    <script>
+        let parsedData = null;
+
+        const fileInput = document.getElementById('fileInput');
+        const parseBtn = document.getElementById('parseBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const statusDiv = document.getElementById('statusDiv');
+        const statsDiv = document.getElementById('statsDiv');
+        const cdsDiv = document.getElementById('cdsDiv');
+        const outputDiv = document.getElementById('outputDiv');
+
+        fileInput.addEventListener('change', (e) => {
+            parseBtn.disabled = !e.target.files[0];
+            downloadBtn.disabled = true;
+            parsedData = null;
+            statusDiv.innerHTML = '';
+            statsDiv.innerHTML = '';
+            cdsDiv.innerHTML = '';
+            outputDiv.innerHTML = '';
+        });
+
+        parseBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            statusDiv.innerHTML = '<p>Parsing...</p>';
+            
+            try {
+                const text = await file.text();
+                parsedData = SealionUtils.parseGenBankFile(text);
+
+                if (parsedData) {
+                    statusDiv.innerHTML = '<p class="success">✓ Successfully parsed GenBank file!</p>';
+                    downloadBtn.disabled = false;
+                    displayResults(parsedData);
+                } else {
+                    statusDiv.innerHTML = '<p class="error">✗ Failed to parse GenBank file. See console for details.</p>';
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<p class="error">✗ Error: ${e.message}</p>`;
+                console.error(e);
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            if (!parsedData) return;
+
+            const json = JSON.stringify(parsedData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${parsedData.accession || 'reference'}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        function displayResults(data) {
+            // Display stats
+            statsDiv.innerHTML = `
+                <h2>Reference Genome Information</h2>
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Accession</div>
+                        <div class="stat-value">${data.accession || 'N/A'}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Length</div>
+                        <div class="stat-value">${data.length.toLocaleString()} bp</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">CDS Features</div>
+                        <div class="stat-value">${data.cds.length}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Organism</div>
+                        <div class="stat-value" style="font-size: 14px;">${data.organism || 'N/A'}</div>
+                    </div>
+                </div>
+                <div class="info-box">
+                    <strong>Definition:</strong> ${data.definition || 'N/A'}
+                </div>
+            `;
+
+            // Display CDS features
+            if (data.cds.length > 0) {
+                let cdsHTML = '<h2>CDS Features</h2><ul class="cds-list">';
+                data.cds.forEach(cds => {
+                    cdsHTML += `
+                        <li class="cds-item">
+                            <div class="cds-gene">${cds.gene || 'Unknown'}</div>
+                            <div class="cds-product">${cds.product || ''}</div>
+                            ${cds.function ? `<div class="cds-product"><em>${cds.function}</em></div>` : ''}
+                            <div class="cds-coords">${cds.coordinates}</div>
+                        </li>
+                    `;
+                });
+                cdsHTML += '</ul>';
+                cdsDiv.innerHTML = cdsHTML;
+            }
+
+            // Display JSON output
+            outputDiv.innerHTML = `
+                <h2>Generated JSON</h2>
+                <div class="output">
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

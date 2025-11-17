@@ -185,13 +185,229 @@
     return result;
   }
 
+  /**
+   * Parse a GenBank format file and convert it to reference genome JSON format
+   * @param {string} genbankText - The full text content of a GenBank file
+   * @returns {Object|null} Reference genome object in JSON format, or null if parsing fails
+   * 
+   * Example return format:
+   * {
+   *   accession: "NC_002549",
+   *   version: "NC_002549.1",
+   *   definition: "Zaire ebolavirus isolate...",
+   *   organism: "Zaire ebolavirus",
+   *   isolate: "Ebola virus/H.sapiens-tc/COD/1976/Yambuku-Mayinga",
+   *   length: 18959,
+   *   sequence: "cggacacacaaa...",
+   *   cds: [
+   *     {
+   *       gene: "NP",
+   *       product: "nucleoprotein",
+   *       function: "encapsidation of genomic RNA",
+   *       coordinates: "470..2689"
+   *     },
+   *     ...
+   *   ]
+   * }
+   */
+  function parseGenBankFile(genbankText) {
+    try {
+      if (!genbankText || typeof genbankText !== 'string') {
+        throw new Error('Invalid input: expected GenBank text string');
+      }
+
+      const result = {
+        accession: null,
+        version: null,
+        definition: null,
+        organism: null,
+        isolate: null,
+        length: 0,
+        sequence: '',
+        cds: []
+      };
+
+      // Split into lines for processing
+      const lines = genbankText.split('\n');
+      let inFeatures = false;
+      let inOrigin = false;
+      let currentCDS = null;
+      let currentLocation = null;
+      let continuedField = null;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+
+        // Parse LOCUS line for length
+        if (line.startsWith('LOCUS')) {
+          const match = line.match(/LOCUS\s+\S+\s+(\d+)\s+bp/);
+          if (match) {
+            result.length = parseInt(match[1], 10);
+          }
+        }
+
+        // Parse DEFINITION (may span multiple lines)
+        else if (line.startsWith('DEFINITION')) {
+          result.definition = line.substring(12).trim();
+          continuedField = 'definition';
+        }
+        else if (continuedField === 'definition' && line.match(/^\s{12,}/) && !line.match(/^[A-Z]/)) {
+          result.definition += ' ' + trimmed;
+        }
+        else if (continuedField === 'definition') {
+          continuedField = null;
+        }
+
+        // Parse ACCESSION
+        else if (line.startsWith('ACCESSION')) {
+          result.accession = line.substring(12).trim();
+        }
+
+        // Parse VERSION
+        else if (line.startsWith('VERSION')) {
+          result.version = line.substring(12).trim().split(/\s+/)[0];
+        }
+
+        // Parse SOURCE section for organism and isolate
+        else if (line.startsWith('SOURCE')) {
+          // Organism name might be on the same line or next
+          const sourceMatch = line.match(/SOURCE\s+(.+)/);
+          if (sourceMatch) {
+            result.organism = sourceMatch[1].trim();
+          }
+        }
+        else if (line.match(/^\s+ORGANISM\s+/)) {
+          const orgMatch = line.match(/ORGANISM\s+(.+)/);
+          if (orgMatch) {
+            result.organism = orgMatch[1].trim();
+          }
+        }
+        else if (line.match(/^\s+\/isolate=/)) {
+          const isolateMatch = line.match(/\/isolate="([^"]+)"/);
+          if (isolateMatch) {
+            result.isolate = isolateMatch[1];
+          }
+        }
+
+        // Detect FEATURES section
+        else if (line.startsWith('FEATURES')) {
+          inFeatures = true;
+        }
+
+        // Parse CDS features
+        else if (inFeatures && line.match(/^\s{5}CDS\s+/)) {
+          // Save previous CDS if exists
+          if (currentCDS && currentLocation) {
+            currentCDS.coordinates = currentLocation;
+            result.cds.push(currentCDS);
+          }
+
+          // Start new CDS
+          currentCDS = {
+            gene: null,
+            product: null,
+            function: null,
+            coordinates: null
+          };
+
+          // Extract location
+          const locationMatch = line.match(/CDS\s+(.+)/);
+          if (locationMatch) {
+            currentLocation = locationMatch[1].trim();
+          }
+        }
+
+        // Continue multi-line CDS location
+        else if (currentCDS && currentLocation && !line.match(/^\s{21}\//) && line.match(/^\s{21}(.+)/)) {
+          const contMatch = line.match(/^\s{21}(.+)/);
+          if (contMatch) {
+            currentLocation += contMatch[1].trim();
+          }
+        }
+
+        // Parse CDS qualifiers
+        else if (currentCDS) {
+          // Gene name
+          const geneMatch = line.match(/\/gene="([^"]+)"/);
+          if (geneMatch) {
+            currentCDS.gene = geneMatch[1];
+          }
+
+          // Product
+          const productMatch = line.match(/\/product="([^"]+)"/);
+          if (productMatch) {
+            currentCDS.product = productMatch[1];
+          }
+
+          // Function
+          const functionMatch = line.match(/\/function="([^"]+)"/);
+          if (functionMatch) {
+            currentCDS.function = functionMatch[1];
+          }
+          // Note field (might contain function info)
+          const noteMatch = line.match(/\/note="([^"]+)"/);
+          if (noteMatch && !currentCDS.function) {
+            currentCDS.function = noteMatch[1];
+          }
+        }
+
+        // Detect ORIGIN section (start of sequence)
+        else if (line.startsWith('ORIGIN')) {
+          inFeatures = false;
+          inOrigin = true;
+
+          // Save last CDS if exists
+          if (currentCDS && currentLocation) {
+            currentCDS.coordinates = currentLocation;
+            result.cds.push(currentCDS);
+            currentCDS = null;
+            currentLocation = null;
+          }
+        }
+
+        // Parse sequence from ORIGIN section
+        else if (inOrigin && line.match(/^\s*\d+/)) {
+          // Remove line numbers and spaces
+          const seqPart = line.replace(/^\s*\d+/, '').replace(/\s+/g, '');
+          result.sequence += seqPart;
+        }
+
+        // End of file
+        else if (line.startsWith('//')) {
+          break;
+        }
+      }
+
+      // Validate required fields
+      if (!result.accession) {
+        throw new Error('No accession found in GenBank file');
+      }
+      if (!result.sequence) {
+        throw new Error('No sequence found in GenBank file');
+      }
+
+      // Set length from actual sequence if not found in LOCUS
+      if (!result.length && result.sequence) {
+        result.length = result.sequence.length;
+      }
+
+      return result;
+
+    } catch (e) {
+      console.error('Error parsing GenBank file:', e);
+      return null;
+    }
+  }
+
   // expose new utilities
   exports.computeConstantMask = computeConstantMask;
   exports.computeConsensusSequence = computeConsensusSequence;
   exports.computeConstantMaskAllowN = computeConstantMaskAllowN;
   exports.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps;
   exports.andMasks = andMasks;
-  try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.computeConstantMask = computeConstantMask; window.SealionUtils.computeConsensusSequence = computeConsensusSequence; window.SealionUtils.computeConstantMaskAllowN = computeConstantMaskAllowN; window.SealionUtils.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.SealionUtils.andMasks = andMasks; } }catch(_){ }
+  exports.parseGenBankFile = parseGenBankFile;
+  try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.computeConstantMask = computeConstantMask; window.SealionUtils.computeConsensusSequence = computeConsensusSequence; window.SealionUtils.computeConstantMaskAllowN = computeConstantMaskAllowN; window.SealionUtils.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.SealionUtils.andMasks = andMasks; window.SealionUtils.parseGenBankFile = parseGenBankFile; } }catch(_){ }
   // attach globals for backward compatibility
   try{ if(window){ window.computeConstantMask = computeConstantMask; window.computeConsensusSequence = computeConsensusSequence; window.computeConstantMaskAllowN = computeConstantMaskAllowN; window.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.andMasks = andMasks; } }catch(_){ }
   // attach to window.SealionUtils
