@@ -65,61 +65,6 @@
                 </div>
               </div>
               
-              <!-- Dark Mode Toggle -->
-              <div class="nav-item ms-2">
-                <button class="btn btn-sm btn-outline-secondary" id="toggle-dark-mode-btn" type="button" title="Toggle dark mode">
-                  <i class="bi bi-moon-fill"></i>
-                </button>
-              </div>
-              
-              <!-- Column Collapse/Expand Controls -->
-              <div class="nav-item ms-2">
-                <div class="btn-group" role="group" aria-label="Column collapse controls">
-                  <button class="btn btn-sm btn-outline-secondary" id="collapse-columns-btn" type="button" title="Collapse selected columns (Cmd -)">
-                    <i class="bi bi-arrows-collapse" style="display: inline-block; transform: rotate(90deg);"></i>
-                  </button>
-                  <button class="btn btn-sm btn-outline-secondary" id="expand-columns-btn" type="button" title="Expand selected columns (Cmd =)">
-                    <i class="bi bi-arrows-expand" style="display: inline-block; transform: rotate(90deg);"></i>
-                  </button>
-                  <button class="btn btn-sm btn-outline-secondary" id="toggle-hide-mode-btn" type="button" title="Toggle hide mode (Cmd H) - hides collapsed regions with center markers">
-                    <i class="bi bi-eye-slash"></i>
-                  </button>
-                  <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Collapse presets">
-                      <i class="bi bi-funnel"></i>
-                    </button>
-                    <ul class="dropdown-menu">
-                      <li>
-                        <button class="dropdown-item" id="apply-constant-mask-btn" type="button">
-                          <i class="bi bi-filter"></i> Constant sites
-                        </button>
-                      </li>
-                      <li>
-                        <button class="dropdown-item" id="apply-constant-ambiguous-btn" type="button">
-                          <i class="bi bi-filter"></i> Constant (allow N)
-                        </button>
-                      </li>
-                      <li>
-                        <button class="dropdown-item" id="apply-constant-gapped-btn" type="button">
-                          <i class="bi bi-filter"></i> Constant (allow N & -)
-                        </button>
-                      </li>
-                      <li><hr class="dropdown-divider"></li>
-                      <li>
-                        <button class="dropdown-item" id="expand-all-btn" type="button">
-                          <i class="bi bi-arrows-expand"></i> Expand all
-                        </button>
-                      </li>
-                      <li>
-                        <button class="dropdown-item" id="collapse-all-btn" type="button">
-                          <i class="bi bi-arrows-collapse"></i> Collapse all
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-              
               <!-- Colour Controls -->
               <div class="nav-item ms-2">
                 <div class="btn-group" role="group">
@@ -316,6 +261,54 @@
                   </ul>
                 </div>
               </div>
+
+              <!-- Column Collapse/Expand Controls -->
+              <div class="nav-item ms-2">
+                <div class="btn-group" role="group" aria-label="Column collapse controls">
+                  <button class="btn btn-sm btn-outline-secondary" id="collapse-columns-btn" type="button" title="Collapse selected columns (Cmd -)">
+                    <i class="bi bi-arrows-collapse" style="display: inline-block; transform: rotate(90deg);"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" id="expand-columns-btn" type="button" title="Expand selected columns (Cmd =)">
+                    <i class="bi bi-arrows-expand" style="display: inline-block; transform: rotate(90deg);"></i>
+                  </button>
+                  <button class="btn btn-sm btn-outline-secondary" id="toggle-hide-mode-btn" type="button" title="Toggle hide mode (Cmd H) - hides collapsed regions with center markers">
+                    <i class="bi bi-eye-slash"></i>
+                  </button>
+                  <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Collapse presets">
+                      <i class="bi bi-funnel"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                      <li>
+                        <button class="dropdown-item" id="apply-constant-mask-btn" type="button">
+                          <i class="bi bi-filter"></i> Constant sites
+                        </button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item" id="apply-constant-ambiguous-btn" type="button">
+                          <i class="bi bi-filter"></i> Constant (allow N)
+                        </button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item" id="apply-constant-gapped-btn" type="button">
+                          <i class="bi bi-filter"></i> Constant (allow N & -)
+                        </button>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <button class="dropdown-item" id="expand-all-btn" type="button">
+                          <i class="bi bi-arrows-expand"></i> Expand all
+                        </button>
+                      </li>
+                      <li>
+                        <button class="dropdown-item" id="collapse-all-btn" type="button">
+                          <i class="bi bi-arrows-collapse"></i> Collapse all
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>              
             </div>
             
             <!-- Search -->
@@ -325,6 +318,13 @@
                 <i class="bi bi-search"></i>
               </button>
             </form> -->
+            
+            <!-- Dark Mode Toggle -->
+            <div class="nav-item ms-2">
+              <button class="btn btn-sm btn-outline-secondary" id="toggle-dark-mode-btn" type="button" title="Toggle dark mode">
+                <i class="bi bi-moon-fill"></i>
+              </button>
+            </div>
             
             <!-- Help Button -->
             <button class="btn btn-sm btn-outline-secondary ms-2" id="help-btn" type="button" title="Show help">
