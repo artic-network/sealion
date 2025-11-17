@@ -29,6 +29,9 @@ class Alignment {
     // Current ordering (starts as original order)
     this._currentOrder = this._sequences.slice();
     
+    // Storage for reference genomes keyed by accession number
+    this._referenceGenomes = new Map();
+    
     // Cache for computed values
     this._cache = {
       maxSeqLen: null,
@@ -146,6 +149,54 @@ class Alignment {
   // Allow indexing with []
   get(index) {
     return this.getSequence(index);
+  }
+
+  // Add a reference genome object
+  addReferenceGenome(referenceGenome) {
+    if (!referenceGenome || typeof referenceGenome !== 'object') {
+      throw new Error('Alignment.addReferenceGenome: referenceGenome must be an object');
+    }
+    if (!referenceGenome.accession) {
+      throw new Error('Alignment.addReferenceGenome: referenceGenome must have an accession property');
+    }
+    
+    this._referenceGenomes.set(referenceGenome.accession, referenceGenome);
+    return this;
+  }
+
+  // Get a reference genome by accession number
+  getReferenceGenome(accession) {
+    return this._referenceGenomes.get(accession);
+  }
+
+  // Check if a reference genome exists by accession number
+  hasReferenceGenome(accession) {
+    return this._referenceGenomes.has(accession);
+  }
+
+  // Get all reference genome accession numbers
+  getReferenceGenomeAccessions() {
+    return Array.from(this._referenceGenomes.keys());
+  }
+
+  // Get all reference genomes as an array
+  getAllReferenceGenomes() {
+    return Array.from(this._referenceGenomes.values());
+  }
+
+  // Remove a reference genome by accession number
+  removeReferenceGenome(accession) {
+    return this._referenceGenomes.delete(accession);
+  }
+
+  // Clear all reference genomes
+  clearReferenceGenomes() {
+    this._referenceGenomes.clear();
+  }
+
+  // Get the number of stored reference genomes
+  getReferenceGenomeCount() {
+    return this._referenceGenomes.size;
   }
 
   // Order sequences by original index

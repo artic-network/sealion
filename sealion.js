@@ -2649,8 +2649,11 @@
       } catch (e) { }
       const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
 
-      // consensus string: prefer opts.consensus, else global
-      const cons = (opts && opts.consensus) ? opts.consensus : ((window && window.consensusSequence) ? window.consensusSequence : (window && window.computeConsensusSequence ? window.computeConsensusSequence() : null));
+      // consensus string: prefer opts.consensus, else window.displayedSequence (may be consensus or reference genome), else compute consensus
+      const cons = (opts && opts.consensus) ? opts.consensus : 
+                   ((window && window.displayedSequence) ? window.displayedSequence : 
+                   ((window && window.consensusSequence) ? window.consensusSequence : 
+                   (window && window.computeConsensusSequence ? window.computeConsensusSequence() : null)));
       if (!cons || cons.length === 0) return;
 
       const start = Math.max(0, visible.rawFirstCol - 1);

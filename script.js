@@ -67,33 +67,6 @@
   // Start the initialization process
   initializeViewer();
 
-  // Button to set the consensus sequence as the reference and clear any selected row
-  const diffConsensusBtn = document.getElementById('diff-consensus-btn');
-  if (diffConsensusBtn) {
-    diffConsensusBtn.addEventListener('click', () => {
-      try {
-        if (!viewer || !viewer.alignment) { console.warn('Viewer not available'); return; }
-        // compute or reuse consensus
-        const cons = (window && window.consensusSequence) ? window.consensusSequence : viewer.alignment.computeConsensusSequence();
-        if (!cons) { console.warn('No consensus available to set as reference'); return; }
-        try { window.reference = String(cons); } catch (_) { reference = String(cons); }
-        // clear any selected row (user asked to clear the previously selected row)
-        viewer.clearSelectionSets();
-        // refresh reference state (will set refIndex if any row exactly matches consensus)
-        // note: we intentionally do NOT auto-select any matching row when the reference
-        // is the consensus; rows that happen to equal the consensus should be treated
-        // the same as other sequences (no special highlight).
-        refreshRefStr();
-        // enable reference colouring so effect is visible
-        refModeEnabled = true;
-        try { window.refModeEnabled = true; } catch (_) { }
-        if (viewer) { try { viewer.refModeEnabled = true; } catch (_) { } }
-        console.info('Set reference to consensus');
-        viewer.scheduleRender();
-      } catch (e) { console.warn('diff-consensus failed', e); }
-    });
-  }
-
   // Button to jump to next difference from reference
   const diffNextBtn = document.getElementById('diff-next-btn');
   if (diffNextBtn) {
@@ -301,10 +274,12 @@
           const btnGroup = document.createElement('div');
           btnGroup.className = 'btn-group';
           btnGroup.role = 'group';
+          btnGroup.id = 'reference-dropdown-group';
           
           const dropdownBtn = document.createElement('button');
           dropdownBtn.className = 'btn btn-sm btn-outline-secondary dropdown-toggle';
           dropdownBtn.type = 'button';
+          dropdownBtn.id = 'reference-dropdown-btn';
           dropdownBtn.setAttribute('data-bs-toggle', 'dropdown');
           dropdownBtn.setAttribute('aria-expanded', 'false');
           dropdownBtn.style.padding = '0.125rem 0.5rem';
@@ -314,15 +289,35 @@
           
           const dropdownMenu = document.createElement('ul');
           dropdownMenu.className = 'dropdown-menu';
+          dropdownMenu.id = 'reference-dropdown-menu';
           
-          const menuItem = document.createElement('li');
-          const menuButton = document.createElement('button');
-          menuButton.className = 'dropdown-item';
-          menuButton.type = 'button';
-          menuButton.textContent = 'Consensus';
+          // Add Consensus option
+          const consensusItem = document.createElement('li');
+          const consensusButton = document.createElement('button');
+          consensusButton.className = 'dropdown-item';
+          consensusButton.type = 'button';
+          consensusButton.textContent = 'Consensus';
+          consensusButton.setAttribute('data-ref-type', 'consensus');
+          consensusButton.classList.add('active');
+          consensusButton.addEventListener('click', () => {
+            selectDisplayedReference('consensus', null);
+          });
+          consensusItem.appendChild(consensusButton);
+          dropdownMenu.appendChild(consensusItem);
           
-          menuItem.appendChild(menuButton);
-          dropdownMenu.appendChild(menuItem);
+          // Add "Use selected sequence as reference" option
+          const selectedSeqItem = document.createElement('li');
+          const selectedSeqButton = document.createElement('button');
+          selectedSeqButton.className = 'dropdown-item';
+          selectedSeqButton.type = 'button';
+          selectedSeqButton.textContent = 'Use selected sequence as reference';
+          selectedSeqButton.setAttribute('data-ref-type', 'selected');
+          selectedSeqButton.addEventListener('click', () => {
+            selectDisplayedReference('selected', null);
+          });
+          selectedSeqItem.appendChild(selectedSeqButton);
+          dropdownMenu.appendChild(selectedSeqItem);
+          
           btnGroup.appendChild(dropdownBtn);
           btnGroup.appendChild(dropdownMenu);
           labelsConsensusDiv.appendChild(btnGroup);
@@ -468,6 +463,214 @@
   // Mask compression is always enabled; start with a mask of all '1's (no actual compression)
   let maskEnabled = true;
   let refModeEnabled = false;
+
+  // State for currently displayed reference genome in consensus canvas
+  let displayedReferenceType = 'consensus'; // 'consensus' or 'reference'
+  let displayedReferenceAccession = null; // accession number when displayedReferenceType === 'reference'
+
+  // Function to update the dropdown menu with available reference genomes
+  function updateReferenceDropdown() {
+    try {
+      const dropdownMenu = document.getElementById('reference-dropdown-menu');
+      const dropdownBtn = document.getElementById('reference-dropdown-btn');
+      if (!dropdownMenu || !dropdownBtn) return;
+
+      // Clear existing items
+      dropdownMenu.innerHTML = '';
+
+      // Add Consensus option
+      const consensusItem = document.createElement('li');
+      const consensusButton = document.createElement('button');
+      consensusButton.className = 'dropdown-item';
+      consensusButton.type = 'button';
+      consensusButton.textContent = 'Consensus';
+      consensusButton.setAttribute('data-ref-type', 'consensus');
+      if (displayedReferenceType === 'consensus') {
+        consensusButton.classList.add('active');
+      }
+      consensusButton.addEventListener('click', () => {
+        selectDisplayedReference('consensus', null);
+      });
+      consensusItem.appendChild(consensusButton);
+      dropdownMenu.appendChild(consensusItem);
+
+      // Add "Use selected sequence as reference" option
+      const selectedSeqItem = document.createElement('li');
+      const selectedSeqButton = document.createElement('button');
+      selectedSeqButton.className = 'dropdown-item';
+      selectedSeqButton.type = 'button';
+      selectedSeqButton.textContent = 'Use selected sequence as reference';
+      selectedSeqButton.setAttribute('data-ref-type', 'selected');
+      if (displayedReferenceType === 'selected') {
+        selectedSeqButton.classList.add('active');
+      }
+      selectedSeqButton.addEventListener('click', () => {
+        selectDisplayedReference('selected', null);
+      });
+      selectedSeqItem.appendChild(selectedSeqButton);
+      dropdownMenu.appendChild(selectedSeqItem);
+
+      // Add reference genome options
+      if (alignment && alignment.getReferenceGenomeAccessions) {
+        const accessions = alignment.getReferenceGenomeAccessions();
+        if (accessions && accessions.length > 0) {
+          // Add separator
+          const separator = document.createElement('li');
+          separator.innerHTML = '<hr class="dropdown-divider">';
+          dropdownMenu.appendChild(separator);
+
+          // Add each reference genome
+          accessions.forEach(accession => {
+            const refGenome = alignment.getReferenceGenome(accession);
+            if (!refGenome) return;
+
+            const item = document.createElement('li');
+            const button = document.createElement('button');
+            button.className = 'dropdown-item';
+            button.type = 'button';
+            
+            // Use definition if available, otherwise use accession
+            const displayName = refGenome.definition || refGenome.accession || accession;
+            button.textContent = displayName.length > 50 ? displayName.substring(0, 47) + '...' : displayName;
+            button.title = displayName; // Full name on hover
+            
+            button.setAttribute('data-ref-type', 'reference');
+            button.setAttribute('data-accession', accession);
+            
+            if (displayedReferenceType === 'reference' && displayedReferenceAccession === accession) {
+              button.classList.add('active');
+            }
+            
+            button.addEventListener('click', () => {
+              selectDisplayedReference('reference', accession);
+            });
+            
+            item.appendChild(button);
+            dropdownMenu.appendChild(item);
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to update reference dropdown:', e);
+    }
+  }
+
+  // Function to select which reference to display in consensus canvas
+  function selectDisplayedReference(type, accession) {
+    try {
+      displayedReferenceType = type;
+      displayedReferenceAccession = accession;
+
+      // Update dropdown button text
+      const dropdownBtn = document.getElementById('reference-dropdown-btn');
+      if (dropdownBtn) {
+        if (type === 'consensus') {
+          dropdownBtn.textContent = 'Consensus';
+        } else if (type === 'selected') {
+          dropdownBtn.textContent = 'Selected sequence';
+        } else if (type === 'reference' && accession) {
+          const refGenome = alignment.getReferenceGenome(accession);
+          if (refGenome) {
+            const displayName = refGenome.definition || refGenome.accession || accession;
+            dropdownBtn.textContent = displayName.length > 30 ? displayName.substring(0, 27) + '...' : displayName;
+            dropdownBtn.title = displayName;
+          }
+        }
+      }
+
+      // Update active state in dropdown
+      const dropdownMenu = document.getElementById('reference-dropdown-menu');
+      if (dropdownMenu) {
+        const items = dropdownMenu.querySelectorAll('.dropdown-item');
+        items.forEach(item => {
+          item.classList.remove('active');
+          const itemType = item.getAttribute('data-ref-type');
+          const itemAccession = item.getAttribute('data-accession');
+          if (itemType === type && (type === 'consensus' || type === 'selected' || itemAccession === accession)) {
+            item.classList.add('active');
+          }
+        });
+      }
+
+      // Store the displayed sequence for rendering
+      if (type === 'consensus') {
+        window.displayedSequence = window.consensusSequence || (viewer && viewer.alignment ? viewer.alignment.computeConsensusSequence() : null);
+      } else if (type === 'selected') {
+        // Get the selected sequence
+        if (!viewer || !viewer.alignment) {
+          console.warn('No viewer or alignment available');
+          return;
+        }
+        
+        // Get selected row (prefer anchorRow, then first selected row, else row 0)
+        let idx = null;
+        if (viewer.anchorRow !== undefined && viewer.anchorRow !== null) {
+          idx = viewer.anchorRow;
+        } else {
+          const selectedRows = viewer.getSelectedRows ? viewer.getSelectedRows() : new Set();
+          if (selectedRows && selectedRows.size > 0) {
+            idx = Array.from(selectedRows)[0];
+          } else {
+            idx = 0;
+          }
+        }
+        
+        const rowCount = viewer.alignment.getSequenceCount ? viewer.alignment.getSequenceCount() : viewer.alignment.length;
+        idx = Math.max(0, Math.min(rowCount - 1, idx));
+        
+        const seq = viewer.alignment[idx];
+        if (!seq || !seq.sequence) {
+          console.warn('No sequence available at selected row');
+          window.displayedSequence = window.consensusSequence;
+          return;
+        }
+        
+        window.displayedSequence = seq.sequence;
+        // Also set this as the reference for coloring differences
+        try { 
+          window.reference = seq.sequence;
+          // Store the reference index
+          try { window.__refIndex = idx; window.refIndex = idx; } catch (_) { }
+          if (window.refreshRefStr) window.refreshRefStr();
+        } catch (_) { }
+        
+        // Enable reference coloring mode
+        refModeEnabled = true;
+        try { window.refModeEnabled = true; } catch (_) { }
+        if (viewer) { try { viewer.refModeEnabled = true; } catch (_) { } }
+        
+        console.info(`Set selected sequence (row ${idx}) as reference`);
+      } else if (type === 'reference' && accession && alignment) {
+        const refGenome = alignment.getReferenceGenome(accession);
+        if (refGenome && refGenome.sequence) {
+          window.displayedSequence = refGenome.sequence;
+          // Also set this as the reference for coloring differences
+          try { 
+            window.reference = refGenome.sequence; 
+            if (window.refreshRefStr) window.refreshRefStr();
+          } catch (_) { }
+        } else {
+          console.warn(`Reference genome ${accession} has no sequence`);
+          window.displayedSequence = window.consensusSequence;
+        }
+      }
+
+      // Trigger re-render
+      if (viewer && typeof viewer.scheduleRender === 'function') {
+        viewer.scheduleRender();
+      }
+
+      console.info(`Displaying ${type === 'consensus' ? 'consensus' : type === 'selected' ? 'selected sequence' : 'reference genome ' + accession}`);
+    } catch (e) {
+      console.warn('Failed to select displayed reference:', e);
+    }
+  }
+
+  // Expose functions globally for use by other parts of the application
+  try {
+    window.updateReferenceDropdown = updateReferenceDropdown;
+    window.selectDisplayedReference = selectDisplayedReference;
+  } catch (_) { }
 
   // Apply constant mask button
   const applyConstantMaskBtn = document.getElementById('apply-constant-mask-btn');
@@ -816,32 +1019,6 @@
       // Use setMaskBitsForCols to collapse all columns
       viewer.setMaskBitsForCols(allCols, '0');
       console.info('collapse-all: collapsed all ' + seqLen + ' sites');
-    });
-  }
-
-  // Button to set the currently selected sequence as the reference
-  const setRefBtn = document.getElementById('set-ref-btn');
-  if (setRefBtn) {
-    setRefBtn.addEventListener('click', () => {
-      try {
-        // prefer viewer.anchorRow if available, else first selected row, else top visible row (0)
-        let idx = null;
-        if (viewer.anchorRow !== undefined && viewer.anchorRow !== null) idx = viewer.anchorRow;
-        if (idx === null) { const s = viewer.getSelectedRows(); if (s && s.size > 0) idx = Array.from(s)[0]; else idx = 0; }
-        idx = Math.max(0, Math.min(rowCount - 1, idx));
-        const seq = (rows[idx] && rows[idx].sequence) ? rows[idx].sequence : null;
-        if (!seq) { console.warn('No sequence available at selected row to use as reference'); return; }
-        try { window.reference = String(seq); } catch (_) { reference = String(seq); }
-        refreshRefStr();
-        // Ensure the chosen row is used as the reference index (avoid matching the first identical sequence elsewhere)
-        try { refIndex = idx; window.__refIndex = refIndex; } catch (_) { }
-        // enable reference colouring so effect is visible
-        refModeEnabled = true;
-        try { window.refModeEnabled = true; } catch (_) { }
-        if (viewer) { try { viewer.refModeEnabled = true; } catch (_) { } }
-        console.info('Set reference to row', idx);
-        viewer.scheduleRender();
-      } catch (e) { console.warn('set-ref failed', e); }
     });
   }
 
@@ -1766,7 +1943,9 @@
           }
           
           // Show loading state
-          fileDropZone.style.display = 'none';
+          document.getElementById('fasta-url-panel').style.display = 'none';
+          document.getElementById('fasta-file-panel').style.display = 'none';
+          document.getElementById('fasta-example-panel').style.display = 'none';
           fileError.style.display = 'none';
           fileLoading.style.display = 'block';
           
@@ -1862,7 +2041,10 @@
           fileErrorText.textContent = error.message || 'Failed to load file. Please check the file format.';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
-          fileDropZone.style.display = 'block';
+          // Re-show the panels
+          document.getElementById('fasta-url-panel').style.display = 'block';
+          document.getElementById('fasta-file-panel').style.display = 'block';
+          document.getElementById('fasta-example-panel').style.display = 'block';
         }
       }
       
@@ -1870,7 +2052,9 @@
       async function loadExampleData() {
         try {
           // Show loading state
-          fileDropZone.style.display = 'none';
+          document.getElementById('fasta-url-panel').style.display = 'none';
+          document.getElementById('fasta-file-panel').style.display = 'none';
+          document.getElementById('fasta-example-panel').style.display = 'none';
           fileError.style.display = 'none';
           fileLoading.style.display = 'block';
           
@@ -1905,7 +2089,67 @@
           fileErrorText.textContent = error.message || 'Failed to load example data.';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
-          fileDropZone.style.display = 'block';
+          // Re-show the panels
+          document.getElementById('fasta-url-panel').style.display = 'block';
+          document.getElementById('fasta-file-panel').style.display = 'block';
+          document.getElementById('fasta-example-panel').style.display = 'block';
+        }
+      }
+      
+      // Function to load FASTA from URL
+      async function loadFastaFromUrl(url) {
+        try {
+          // Show loading state
+          fileLoading.style.display = 'block';
+          fileError.style.display = 'none';
+          document.getElementById('fasta-url-panel').style.display = 'none';
+          document.getElementById('fasta-file-panel').style.display = 'none';
+          document.getElementById('fasta-example-panel').style.display = 'none';
+          
+          // Fetch the URL
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+          }
+          
+          // Get text content
+          const text = await response.text();
+          
+          // Parse FASTA
+          const newAlignment = parseFasta(text);
+          
+          if (newAlignment.length === 0) {
+            throw new Error('No sequences found in file');
+          }
+          
+          console.log(`Loaded ${newAlignment.length} sequences from URL`);
+          
+          // Wrap in Alignment instance
+          let alignmentInstance;
+          try {
+            alignmentInstance = new Alignment(newAlignment);
+          } catch (e) {
+            throw new Error('Failed to create Alignment instance: ' + e.message);
+          }
+          
+          // Update global alignment variable
+          window.alignment = alignmentInstance;
+          
+          // Close modal
+          fileModal.hide();
+          
+          // Load data using shared function
+          loadDataIntoViewer(alignmentInstance);
+          
+        } catch (error) {
+          console.error('Error loading FASTA from URL:', error);
+          fileErrorText.textContent = error.message || 'Failed to load FASTA from URL';
+          fileError.style.display = 'block';
+          fileLoading.style.display = 'none';
+          // Re-show the panels
+          document.getElementById('fasta-url-panel').style.display = 'block';
+          document.getElementById('fasta-file-panel').style.display = 'block';
+          document.getElementById('fasta-example-panel').style.display = 'block';
         }
       }
       
@@ -1913,10 +2157,14 @@
       openFileBtn.addEventListener('click', () => {
         try {
           // Reset modal state
-          fileDropZone.style.display = 'block';
+          const fastaUrl = document.getElementById('fasta-url');
+          if (fastaUrl) fastaUrl.value = '';
           fileLoading.style.display = 'none';
           fileError.style.display = 'none';
           fileUploadInput.value = '';
+          document.getElementById('fasta-url-panel').style.display = 'block';
+          document.getElementById('fasta-file-panel').style.display = 'block';
+          document.getElementById('fasta-example-panel').style.display = 'block';
           
           fileModal.show();
         } catch (e) {
@@ -1944,6 +2192,29 @@
       if (loadExampleBtn) {
         loadExampleBtn.addEventListener('click', () => {
           loadExampleData();
+        });
+      }
+      
+      // Load from URL button
+      const loadFastaUrlBtn = document.getElementById('load-fasta-url-btn');
+      const fastaUrlInput = document.getElementById('fasta-url');
+      if (loadFastaUrlBtn && fastaUrlInput) {
+        loadFastaUrlBtn.addEventListener('click', () => {
+          const url = fastaUrlInput.value.trim();
+          if (!url) {
+            fileErrorText.textContent = 'Please enter a URL';
+            fileError.style.display = 'block';
+            return;
+          }
+          loadFastaFromUrl(url);
+        });
+        
+        // Allow pressing Enter in URL input to load
+        fastaUrlInput.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            loadFastaUrlBtn.click();
+          }
         });
       }
       
@@ -1989,12 +2260,8 @@
         
         // Click on drop zone to select file
         fileDropZone.addEventListener('click', (e) => {
-          // Don't trigger if clicking on the buttons or their children
-          const loadExampleBtn = document.getElementById('load-example-btn');
+          // Don't trigger if clicking on the button
           if (e.target === fileSelectBtn || fileSelectBtn.contains(e.target)) {
-            return;
-          }
-          if (loadExampleBtn && (e.target === loadExampleBtn || loadExampleBtn.contains(e.target))) {
             return;
           }
           if (fileUploadInput) fileUploadInput.click();
@@ -2003,6 +2270,227 @@
       
     } catch (e) {
       console.warn('Failed to initialize file upload modal', e);
+    }
+  }
+
+  // Reference genome modal functionality
+  const loadReferenceBtn = document.getElementById('load-reference-btn');
+  const referenceGenomeModal = document.getElementById('referenceGenomeModal');
+  const refGenomeUrl = document.getElementById('ref-genome-url');
+  const loadRefUrlBtn = document.getElementById('load-ref-url-btn');
+  const refGenomeDropZone = document.getElementById('ref-genome-drop-zone');
+  const refGenomeFileInput = document.getElementById('ref-genome-file-input');
+  const refGenomeSelectBtn = document.getElementById('ref-genome-select-btn');
+  const refGenomeLoading = document.getElementById('ref-genome-loading');
+  const refGenomeError = document.getElementById('ref-genome-error');
+  const refGenomeErrorText = document.getElementById('ref-genome-error-text');
+  const refGenomeSuccess = document.getElementById('ref-genome-success');
+  const refGenomeSuccessText = document.getElementById('ref-genome-success-text');
+  
+  let refGenomeModal = null;
+  
+  if (loadReferenceBtn && referenceGenomeModal) {
+    try {
+      refGenomeModal = new bootstrap.Modal(referenceGenomeModal);
+      
+      // Function to validate and add reference genome to alignment
+      function addReferenceGenome(referenceGenomeData) {
+        try {
+          // Validate the reference genome object
+          if (!referenceGenomeData || typeof referenceGenomeData !== 'object') {
+            throw new Error('Invalid reference genome format');
+          }
+          if (!referenceGenomeData.accession) {
+            throw new Error('Reference genome must have an accession field');
+          }
+          
+          // Get the alignment instance
+          if (!window.alignment) {
+            throw new Error('No alignment loaded. Please load an alignment first.');
+          }
+          
+          // Add to alignment
+          window.alignment.addReferenceGenome(referenceGenomeData);
+          
+          console.log(`Reference genome ${referenceGenomeData.accession} added successfully`);
+          
+          // Update the dropdown menu to include the new reference genome
+          if (window.updateReferenceDropdown) {
+            window.updateReferenceDropdown();
+          }
+          
+          // Show success message
+          refGenomeSuccessText.textContent = `Reference genome ${referenceGenomeData.accession} loaded successfully!`;
+          refGenomeSuccess.style.display = 'block';
+          refGenomeError.style.display = 'none';
+          
+          // Auto-hide success message and close modal after 2 seconds
+          setTimeout(() => {
+            refGenomeSuccess.style.display = 'none';
+            if (refGenomeModal) refGenomeModal.hide();
+          }, 2000);
+          
+        } catch (error) {
+          throw error;
+        }
+      }
+      
+      // Function to load reference genome from URL
+      async function loadReferenceFromUrl(url) {
+        try {
+          // Show loading state
+          refGenomeLoading.style.display = 'block';
+          refGenomeError.style.display = 'none';
+          refGenomeSuccess.style.display = 'none';
+          
+          // Fetch the URL
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+          }
+          
+          // Parse JSON
+          const referenceGenomeData = await response.json();
+          
+          // Add to alignment
+          addReferenceGenome(referenceGenomeData);
+          
+          // Hide loading
+          refGenomeLoading.style.display = 'none';
+          
+        } catch (error) {
+          console.error('Error loading reference genome from URL:', error);
+          refGenomeErrorText.textContent = error.message || 'Failed to load reference genome from URL';
+          refGenomeError.style.display = 'block';
+          refGenomeLoading.style.display = 'none';
+        }
+      }
+      
+      // Function to load reference genome from file
+      async function loadReferenceFromFile(file) {
+        try {
+          // Show loading state
+          refGenomeLoading.style.display = 'block';
+          refGenomeError.style.display = 'none';
+          refGenomeSuccess.style.display = 'none';
+          
+          // Check file type
+          if (!file.name.endsWith('.json')) {
+            throw new Error('Please select a JSON file');
+          }
+          
+          // Read file
+          const text = await file.text();
+          
+          // Parse JSON
+          const referenceGenomeData = JSON.parse(text);
+          
+          // Add to alignment
+          addReferenceGenome(referenceGenomeData);
+          
+          // Hide loading
+          refGenomeLoading.style.display = 'none';
+          
+        } catch (error) {
+          console.error('Error loading reference genome from file:', error);
+          refGenomeErrorText.textContent = error.message || 'Failed to load reference genome from file';
+          refGenomeError.style.display = 'block';
+          refGenomeLoading.style.display = 'none';
+        }
+      }
+      
+      // Open modal when button clicked
+      loadReferenceBtn.addEventListener('click', () => {
+        // Reset modal state
+        refGenomeUrl.value = '';
+        refGenomeLoading.style.display = 'none';
+        refGenomeError.style.display = 'none';
+        refGenomeSuccess.style.display = 'none';
+        refGenomeModal.show();
+      });
+      
+      // Load from URL button
+      if (loadRefUrlBtn) {
+        loadRefUrlBtn.addEventListener('click', () => {
+          const url = refGenomeUrl.value.trim();
+          if (!url) {
+            refGenomeErrorText.textContent = 'Please enter a URL';
+            refGenomeError.style.display = 'block';
+            return;
+          }
+          loadReferenceFromUrl(url);
+        });
+      }
+      
+      // File select button
+      if (refGenomeSelectBtn) {
+        refGenomeSelectBtn.addEventListener('click', () => {
+          if (refGenomeFileInput) refGenomeFileInput.click();
+        });
+      }
+      
+      // File input change handler
+      if (refGenomeFileInput) {
+        refGenomeFileInput.addEventListener('change', (e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            loadReferenceFromFile(e.target.files[0]);
+          }
+        });
+      }
+      
+      // Drag and drop handlers
+      if (refGenomeDropZone) {
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+          refGenomeDropZone.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }, false);
+        });
+        
+        // Highlight drop zone when dragging over
+        ['dragenter', 'dragover'].forEach(eventName => {
+          refGenomeDropZone.addEventListener(eventName, () => {
+            refGenomeDropZone.classList.add('drag-over');
+          }, false);
+        });
+        
+        ['dragleave', 'drop'].forEach(eventName => {
+          refGenomeDropZone.addEventListener(eventName, () => {
+            refGenomeDropZone.classList.remove('drag-over');
+          }, false);
+        });
+        
+        // Handle dropped files
+        refGenomeDropZone.addEventListener('drop', (e) => {
+          const files = e.dataTransfer.files;
+          if (files.length > 0) {
+            loadReferenceFromFile(files[0]);
+          }
+        }, false);
+        
+        // Click on drop zone to select file
+        refGenomeDropZone.addEventListener('click', (e) => {
+          // Don't trigger if clicking on the button
+          if (e.target === refGenomeSelectBtn || refGenomeSelectBtn.contains(e.target)) {
+            return;
+          }
+          if (refGenomeFileInput) refGenomeFileInput.click();
+        });
+      }
+      
+      // Allow pressing Enter in URL input to load
+      if (refGenomeUrl) {
+        refGenomeUrl.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            loadRefUrlBtn.click();
+          }
+        });
+      }
+      
+    } catch (e) {
+      console.warn('Failed to initialize reference genome modal', e);
     }
   }
 

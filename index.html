@@ -45,6 +45,13 @@
                 </button>
               </div>
               
+              <!-- Load Reference Genome Button -->
+              <div class="nav-item ms-2">
+                <button class="btn btn-sm btn-outline-info" id="load-reference-btn" type="button" title="Load reference genome">
+                  <i class="bi bi-file-earmark-code"></i>
+                </button>
+              </div>
+              
               <!-- Font Size Controls -->
               <div class="nav-item ms-2">
                 <div class="btn-group" role="group" aria-label="Font size controls">
@@ -127,17 +134,6 @@
                     <li>
                       <button class="dropdown-item" id="colour-diff-btn" type="button">
                         <i class="bi bi-palette"></i> Colour differences only
-                      </button>
-                    </li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li>
-                      <button class="dropdown-item" id="set-ref-btn" type="button">
-                        <i class="bi bi-pin-angle"></i> Set selected as reference
-                      </button>
-                    </li>
-                    <li>
-                      <button class="dropdown-item" id="diff-consensus-btn" type="button">
-                        <i class="bi bi-calculator"></i> Set consensus as reference
                       </button>
                     </li>
                     <li><hr class="dropdown-divider"></li>
@@ -473,30 +469,151 @@
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <div id="file-drop-zone" class="file-drop-zone text-center p-5 border border-2 border-dashed rounded">
-                <i class="bi bi-cloud-arrow-up" style="font-size: 3rem; color: #6c757d;"></i>
-                <p class="mt-3 mb-2">Drag and drop your FASTA file here</p>
-                <p class="text-muted small">or</p>
-                <input type="file" id="file-upload-input" accept=".fasta,.fa,.fna,.ffn,.faa,.frn" style="display: none;">
-                <button class="btn btn-outline-primary" id="file-select-btn" type="button">
-                  <i class="bi bi-file-earmark-text"></i> Choose File
-                </button>
-                <div class="mt-3">
-                  <p class="text-muted small mb-2">or</p>
-                  <button class="btn btn-outline-success" id="load-example-btn" type="button">
-                    <i class="bi bi-database"></i> Load Example Data
+              <!-- Tab navigation -->
+              <ul class="nav nav-tabs mb-3" id="fastaFileTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="fasta-url-tab" data-bs-toggle="tab" data-bs-target="#fasta-url-panel" type="button" role="tab" aria-controls="fasta-url-panel" aria-selected="true">
+                    <i class="bi bi-link-45deg"></i> URL
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="fasta-file-tab" data-bs-toggle="tab" data-bs-target="#fasta-file-panel" type="button" role="tab" aria-controls="fasta-file-panel" aria-selected="false">
+                    <i class="bi bi-file-earmark-arrow-up"></i> File
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="fasta-example-tab" data-bs-toggle="tab" data-bs-target="#fasta-example-panel" type="button" role="tab" aria-controls="fasta-example-panel" aria-selected="false">
+                    <i class="bi bi-database"></i> Example
+                  </button>
+                </li>
+              </ul>
+              
+              <!-- Tab content -->
+              <div class="tab-content" id="fastaFileTabContent">
+                <!-- URL Panel -->
+                <div class="tab-pane fade show active" id="fasta-url-panel" role="tabpanel" aria-labelledby="fasta-url-tab">
+                  <div class="mb-3">
+                    <label for="fasta-url" class="form-label">FASTA File URL</label>
+                    <input type="url" class="form-control" id="fasta-url" placeholder="https://example.com/alignment.fasta">
+                    <div class="form-text">Enter the URL of a FASTA alignment file</div>
+                  </div>
+                  <button class="btn btn-primary w-100" id="load-fasta-url-btn" type="button">
+                    <i class="bi bi-cloud-download"></i> Load from URL
                   </button>
                 </div>
+                
+                <!-- File Panel -->
+                <div class="tab-pane fade" id="fasta-file-panel" role="tabpanel" aria-labelledby="fasta-file-tab">
+                  <div id="file-drop-zone" class="file-drop-zone text-center p-4 border border-2 border-dashed rounded">
+                    <i class="bi bi-cloud-arrow-up" style="font-size: 2.5rem; color: #6c757d;"></i>
+                    <p class="mt-3 mb-2">Drag and drop your FASTA file here</p>
+                    <p class="text-muted small">or</p>
+                    <input type="file" id="file-upload-input" accept=".fasta,.fa,.fna,.ffn,.faa,.frn" style="display: none;">
+                    <button class="btn btn-outline-primary" id="file-select-btn" type="button">
+                      <i class="bi bi-file-earmark-text"></i> Choose File
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Example Panel -->
+                <div class="tab-pane fade" id="fasta-example-panel" role="tabpanel" aria-labelledby="fasta-example-tab">
+                  <div class="text-center p-4">
+                    <i class="bi bi-database" style="font-size: 2.5rem; color: #6c757d;"></i>
+                    <p class="mt-3 mb-3">Load the example Ebola virus alignment dataset</p>
+                    <button class="btn btn-success btn-lg" id="load-example-btn" type="button">
+                      <i class="bi bi-database"></i> Load Example Data
+                    </button>
+                  </div>
+                </div>
               </div>
+              
+              <!-- Loading indicator -->
               <div id="file-loading" class="text-center py-4" style="display: none;">
                 <div class="spinner-border text-primary" role="status">
                   <span class="visually-hidden">Loading...</span>
                 </div>
                 <p class="mt-2 text-muted">Loading file...</p>
               </div>
+              
+              <!-- Error display -->
               <div id="file-error" class="alert alert-danger mt-3" role="alert" style="display: none;">
                 <i class="bi bi-exclamation-triangle-fill me-2"></i>
                 <span id="file-error-text"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reference Genome Upload Modal -->
+      <div class="modal fade" id="referenceGenomeModal" tabindex="-1" aria-labelledby="referenceGenomeModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="referenceGenomeModalLabel"><i class="bi bi-file-earmark-code me-2"></i>Load Reference Genome</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <!-- Tab navigation -->
+              <ul class="nav nav-tabs mb-3" id="refGenomeTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link active" id="url-tab" data-bs-toggle="tab" data-bs-target="#url-panel" type="button" role="tab" aria-controls="url-panel" aria-selected="true">
+                    <i class="bi bi-link-45deg"></i> URL
+                  </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-panel" type="button" role="tab" aria-controls="file-panel" aria-selected="false">
+                    <i class="bi bi-file-earmark-arrow-up"></i> File
+                  </button>
+                </li>
+              </ul>
+              
+              <!-- Tab content -->
+              <div class="tab-content" id="refGenomeTabContent">
+                <!-- URL Panel -->
+                <div class="tab-pane fade show active" id="url-panel" role="tabpanel" aria-labelledby="url-tab">
+                  <div class="mb-3">
+                    <label for="ref-genome-url" class="form-label">Reference Genome URL</label>
+                    <input type="url" class="form-control" id="ref-genome-url" placeholder="https://example.com/reference.json">
+                    <div class="form-text">Enter the URL of a JSON reference genome file</div>
+                  </div>
+                  <button class="btn btn-primary w-100" id="load-ref-url-btn" type="button">
+                    <i class="bi bi-cloud-download"></i> Load from URL
+                  </button>
+                </div>
+                
+                <!-- File Panel -->
+                <div class="tab-pane fade" id="file-panel" role="tabpanel" aria-labelledby="file-tab">
+                  <div id="ref-genome-drop-zone" class="file-drop-zone text-center p-4 border border-2 border-dashed rounded">
+                    <i class="bi bi-cloud-arrow-up" style="font-size: 2.5rem; color: #6c757d;"></i>
+                    <p class="mt-3 mb-2">Drag and drop your reference genome JSON file here</p>
+                    <p class="text-muted small">or</p>
+                    <input type="file" id="ref-genome-file-input" accept=".json" style="display: none;">
+                    <button class="btn btn-outline-primary" id="ref-genome-select-btn" type="button">
+                      <i class="bi bi-file-earmark-text"></i> Choose File
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Loading indicator -->
+              <div id="ref-genome-loading" class="text-center py-4" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                  <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2 text-muted">Loading reference genome...</p>
+              </div>
+              
+              <!-- Error display -->
+              <div id="ref-genome-error" class="alert alert-danger mt-3" role="alert" style="display: none;">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                <span id="ref-genome-error-text"></span>
+              </div>
+              
+              <!-- Success display -->
+              <div id="ref-genome-success" class="alert alert-success mt-3" role="alert" style="display: none;">
+                <i class="bi bi-check-circle-fill me-2"></i>
+                <span id="ref-genome-success-text"></span>
               </div>
             </div>
           </div>
