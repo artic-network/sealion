@@ -102,7 +102,8 @@
   display: flex; 
   flex-shrink: 0; 
   align-items: center; 
-  justify-content: flex-end; 
+  justify-content: space-between; 
+  padding-left: 48px; /* Indent to align with label text (not line numbers) */
   padding-right: 8px; 
 }
 #left-inner{ flex: 1; min-height: 0; position: relative; }

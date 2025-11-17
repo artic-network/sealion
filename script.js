@@ -270,7 +270,61 @@
       try {
         const labelsConsensusDiv = document.getElementById('labels-consensus-div') || (viewer && viewer.labelsConsensusDiv);
         if (labelsConsensusDiv && labelsConsensusDiv.children.length === 0) {
-          // Add dropdown button group
+          // Create Sort dropdown (aligned left)
+          const sortBtnGroup = document.createElement('div');
+          sortBtnGroup.className = 'btn-group';
+          sortBtnGroup.role = 'group';
+          
+          const sortDropdownBtn = document.createElement('button');
+          sortDropdownBtn.className = 'btn btn-sm btn-outline-secondary dropdown-toggle';
+          sortDropdownBtn.type = 'button';
+          sortDropdownBtn.setAttribute('data-bs-toggle', 'dropdown');
+          sortDropdownBtn.setAttribute('aria-expanded', 'false');
+          sortDropdownBtn.style.padding = '0.125rem 0.5rem';
+          sortDropdownBtn.style.fontSize = '0.75rem';
+          sortDropdownBtn.style.lineHeight = '1.2';
+          sortDropdownBtn.innerHTML = '<i class="bi bi-sort-alpha-down"></i> Sort';
+          
+          const sortDropdownMenu = document.createElement('ul');
+          sortDropdownMenu.className = 'dropdown-menu';
+          
+          // Add all sort options
+          const sortOptions = [
+            { id: 'sort-original-btn', icon: 'bi-arrow-counterclockwise', text: 'Original order', divider: true },
+            { id: 'sort-label-btn', icon: 'bi-sort-alpha-down', text: 'Sort by label (A→Z)' },
+            { id: 'sort-label-reverse-btn', icon: 'bi-sort-alpha-up', text: 'Sort by label (Z→A)', divider: true },
+            { id: 'sort-column-btn', icon: 'bi-sort-down', text: 'Sort by selected column (A→Z)' },
+            { id: 'sort-column-reverse-btn', icon: 'bi-sort-up', text: 'Sort by selected column (Z→A)', divider: true },
+            { id: 'sort-start-pos-btn', icon: 'bi-arrow-right', text: 'Sort by start position (0→N)' },
+            { id: 'sort-start-pos-reverse-btn', icon: 'bi-arrow-left', text: 'Sort by start position (N→0)', divider: true },
+            { id: 'sort-seq-length-btn', icon: 'bi-arrow-bar-right', text: 'Sort by sequence length (short→long)' },
+            { id: 'sort-seq-length-reverse-btn', icon: 'bi-arrow-bar-left', text: 'Sort by sequence length (long→short)', divider: true },
+            { id: 'sort-tag-btn', icon: 'bi-tag', text: 'Sort by tags (tagged first)', divider: true },
+            { id: 'fix-order-btn', icon: 'bi-lock', text: 'Fix current order' }
+          ];
+          
+          sortOptions.forEach(option => {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.className = 'dropdown-item';
+            btn.id = option.id;
+            btn.type = 'button';
+            btn.innerHTML = `<i class="bi ${option.icon}"></i> ${option.text}`;
+            li.appendChild(btn);
+            sortDropdownMenu.appendChild(li);
+            
+            if (option.divider) {
+              const dividerLi = document.createElement('li');
+              dividerLi.innerHTML = '<hr class="dropdown-divider">';
+              sortDropdownMenu.appendChild(dividerLi);
+            }
+          });
+          
+          sortBtnGroup.appendChild(sortDropdownBtn);
+          sortBtnGroup.appendChild(sortDropdownMenu);
+          labelsConsensusDiv.appendChild(sortBtnGroup);
+          
+          // Add dropdown button group for reference selection (aligned right)
           const btnGroup = document.createElement('div');
           btnGroup.className = 'btn-group';
           btnGroup.role = 'group';
