@@ -265,13 +265,6 @@
           continuedField = null;
         }
         
-        // Parse sequence from ORIGIN section (check early to avoid matching other patterns)
-        else if (inOrigin && line.match(/^\s*\d+/)) {
-          // Remove line numbers and spaces
-          const seqPart = line.replace(/^\s*\d+/, '').replace(/\s+/g, '');
-          result.sequence += seqPart;
-        }
-        
         // Handle continuation of multi-line fields
         else if (continuedField === 'definition' && line.match(/^\s{12,}/) && !line.match(/^[A-Z]/)) {
           result.definition += ' ' + trimmed;
@@ -319,6 +312,13 @@
           }
           currentCDS = null;
           currentLocation = null;
+        }
+        
+        // Parse sequence from ORIGIN section
+        else if (inOrigin && line.match(/^\s*\d+/)) {
+          // Remove line numbers and spaces
+          const seqPart = line.replace(/^\s*\d+/, '').replace(/\s+/g, '');
+          result.sequence += seqPart;
         }
 
         // Parse CDS features
@@ -388,6 +388,9 @@
       if (!result.sequence) {
         throw new Error('No sequence found in GenBank file');
       }
+      
+      // Convert sequence to uppercase
+      result.sequence = result.sequence.toUpperCase();
 
       // Set length from actual sequence if not found in LOCUS
       if (!result.length && result.sequence) {

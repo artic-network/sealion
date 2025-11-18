@@ -678,10 +678,21 @@
             button.className = 'dropdown-item';
             button.type = 'button';
             
-            // Use definition if available, otherwise use accession
-            const displayName = refGenome.definition || refGenome.accession || accession;
+            // Use name if available, otherwise use accession
+            const displayName = refGenome.name || refGenome.accession || accession;
             button.textContent = displayName.length > 50 ? displayName.substring(0, 47) + '...' : displayName;
-            button.title = displayName; // Full name on hover
+            
+            // Build tooltip with accession and definition
+            const tooltipParts = [];
+            if (refGenome.accession) {
+              tooltipParts.push(`Accession: ${refGenome.accession}`);
+            }
+            if (refGenome.definition) {
+              tooltipParts.push(`Definition: ${refGenome.definition}`);
+            }
+            if (tooltipParts.length > 0) {
+              button.title = tooltipParts.join('\n');
+            }
             
             button.setAttribute('data-ref-type', 'reference');
             button.setAttribute('data-accession', accession);
@@ -726,9 +737,18 @@
         } else if (type === 'reference' && accession) {
           const refGenome = alignment.getReferenceGenome(accession);
           if (refGenome) {
-            const displayName = refGenome.definition || refGenome.accession || accession;
+            const displayName = refGenome.name || refGenome.accession || accession;
             dropdownBtn.textContent = displayName.length > 30 ? displayName.substring(0, 27) + '...' : displayName;
-            dropdownBtn.title = displayName;
+            
+            // Build tooltip with accession and definition
+            const tooltipParts = [];
+            if (refGenome.accession) {
+              tooltipParts.push(`Accession: ${refGenome.accession}`);
+            }
+            if (refGenome.definition) {
+              tooltipParts.push(`Definition: ${refGenome.definition}`);
+            }
+            dropdownBtn.title = tooltipParts.length > 0 ? tooltipParts.join('\n') : displayName;
           }
         }
       }
@@ -2203,7 +2223,7 @@
         }
       }
       
-      // Function to load example data (ebov.js)
+      // Function to load example data
       async function loadExampleData() {
         try {
           // Show loading state
@@ -2213,17 +2233,25 @@
           fileError.style.display = 'none';
           fileLoading.style.display = 'block';
           
-          // Check if ebov_alignment data is available
-          if (!window.ebov_alignment || !Array.isArray(window.ebov_alignment)) {
-            throw new Error('Example data not available. Make sure ebov.js is loaded.');
+          // Load mpox_clade_iib.fasta
+          console.log('Loading mpox_clade_iib.fasta...');
+          const fastaResponse = await fetch('mpox_clade_iib.fasta');
+          if (!fastaResponse.ok) {
+            throw new Error('Failed to load mpox_clade_iib.fasta');
+          }
+          const fastaText = await fastaResponse.text();
+          const sequences = parseFasta(fastaText);
+          
+          if (!sequences || sequences.length === 0) {
+            throw new Error('No sequences found in mpox_clade_iib.fasta');
           }
           
-          console.log(`Loading ${window.ebov_alignment.length} example sequences from ebov.js`);
+          console.log(`Loaded ${sequences.length} sequences from mpox_clade_iib.fasta`);
           
-          // Wrap the example data in an Alignment class instance
+          // Wrap in an Alignment class instance
           let alignmentInstance;
           try {
-            alignmentInstance = new Alignment(window.ebov_alignment);
+            alignmentInstance = new Alignment(sequences);
           } catch (e) {
             throw new Error('Failed to create Alignment instance: ' + e.message);
           }
@@ -2237,7 +2265,39 @@
           // Load the data into the viewer using the shared function
           loadDataIntoViewer(alignmentInstance);
           
-          console.info('Example data loaded successfully');
+          console.info('Example alignment loaded successfully');
+          
+          // Load the reference genome NC_063383_mpox_clade_iib.gb
+          try {
+            console.log('Loading NC_063383_mpox_clade_iib.gb reference genome...');
+            const gbResponse = await fetch('NC_063383_mpox_clade_iib.gb');
+            if (!gbResponse.ok) {
+              console.warn('Failed to load reference genome NC_063383_mpox_clade_iib.gb');
+              return;
+            }
+            const gbText = await gbResponse.text();
+            
+            if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
+              console.warn('GenBank parser not available, skipping reference genome');
+              return;
+            }
+            
+            const referenceGenomeData = window.SealionUtils.parseGenBankFile(gbText);
+            
+            if (referenceGenomeData) {
+              // Set name from filename
+              if (!referenceGenomeData.name) {
+                referenceGenomeData.name = 'NC_063383_mpox_clade_iib';
+              }
+              addReferenceGenome(referenceGenomeData);
+              console.info('Reference genome loaded successfully');
+            } else {
+              console.warn('Failed to parse reference genome');
+            }
+          } catch (refError) {
+            console.warn('Error loading reference genome:', refError);
+            // Don't fail the whole load if reference fails
+          }
           
         } catch (error) {
           console.error('Error loading example data:', error);
@@ -2459,6 +2519,11 @@
             throw new Error('Reference genome must have an accession field');
           }
           
+          // Convert sequence to uppercase if present
+          if (referenceGenomeData.sequence && typeof referenceGenomeData.sequence === 'string') {
+            referenceGenomeData.sequence = referenceGenomeData.sequence.toUpperCase();
+          }
+          
           // Get the alignment instance
           if (!window.alignment) {
             throw new Error('No alignment loaded. Please load an alignment first.');
@@ -2515,8 +2580,46 @@
             throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
           }
           
-          // Parse JSON
-          const referenceGenomeData = await response.json();
+          const text = await response.text();
+          let referenceGenomeData;
+          
+          // Try to parse as JSON first
+          if (url.endsWith('.json')) {
+            try {
+              referenceGenomeData = JSON.parse(text);
+            } catch (jsonError) {
+              throw new Error('Invalid JSON file: ' + jsonError.message);
+            }
+          }
+          // Check if it's a GenBank file
+          else if (url.endsWith('.gb') || url.endsWith('.gbk') || url.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
+            // Use GenBank parser
+            if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
+              throw new Error('GenBank parser not available. Please ensure sealion/utils.js is loaded.');
+            }
+            
+            referenceGenomeData = window.SealionUtils.parseGenBankFile(text);
+            
+            if (!referenceGenomeData) {
+              throw new Error('Failed to parse GenBank file. Please check the file format.');
+            }
+          }
+          // Try to parse as JSON anyway (in case extension is missing)
+          else {
+            try {
+              referenceGenomeData = JSON.parse(text);
+            } catch (jsonError) {
+              throw new Error('Unrecognized file format. File must be either a JSON (.json) or GenBank (.gb, .gbk) format file.');
+            }
+          }
+          
+          // Extract filename from URL (without extension) to use as name
+          const urlParts = url.split('/');
+          const filename = urlParts[urlParts.length - 1];
+          const nameWithoutExt = filename.replace(/\.(json|gb|gbk|genbank)$/i, '');
+          if (!referenceGenomeData.name) {
+            referenceGenomeData.name = nameWithoutExt;
+          }
           
           // Add to alignment
           addReferenceGenome(referenceGenomeData);
@@ -2540,16 +2643,45 @@
           refGenomeError.style.display = 'none';
           refGenomeSuccess.style.display = 'none';
           
-          // Check file type
-          if (!file.name.endsWith('.json')) {
-            throw new Error('Please select a JSON file');
-          }
-          
           // Read file
           const text = await file.text();
+          let referenceGenomeData;
           
-          // Parse JSON
-          const referenceGenomeData = JSON.parse(text);
+          // Try to parse as JSON first
+          if (file.name.endsWith('.json')) {
+            try {
+              referenceGenomeData = JSON.parse(text);
+            } catch (jsonError) {
+              throw new Error('Invalid JSON file: ' + jsonError.message);
+            }
+          }
+          // Check if it's a GenBank file
+          else if (file.name.endsWith('.gb') || file.name.endsWith('.gbk') || file.name.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
+            // Use GenBank parser
+            if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
+              throw new Error('GenBank parser not available. Please ensure sealion/utils.js is loaded.');
+            }
+            
+            referenceGenomeData = window.SealionUtils.parseGenBankFile(text);
+            
+            if (!referenceGenomeData) {
+              throw new Error('Failed to parse GenBank file. Please check the file format.');
+            }
+          }
+          // Try to parse as JSON anyway (in case extension is missing)
+          else {
+            try {
+              referenceGenomeData = JSON.parse(text);
+            } catch (jsonError) {
+              throw new Error('Unrecognized file format. File must be either a JSON (.json) or GenBank (.gb, .gbk) format file.');
+            }
+          }
+          
+          // Extract filename (without extension) to use as name
+          const nameWithoutExt = file.name.replace(/\.(json|gb|gbk|genbank)$/i, '');
+          if (!referenceGenomeData.name) {
+            referenceGenomeData.name = nameWithoutExt;
+          }
           
           // Add to alignment
           addReferenceGenome(referenceGenomeData);
