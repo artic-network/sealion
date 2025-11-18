@@ -22,9 +22,9 @@
   <body>
     <div id="app">
       <!-- Bootstrap Toolbar -->
-      <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+      <nav class="navbar navbar-expand-lg navbar-light bg-dark border-bottom">
         <div class="container-fluid">
-          <span class="navbar-brand mb-0 h1"><i class="bi bi-dna me-2"></i>Sealion</span>
+          <span class="navbar-brand mb-0 h1"><a href="http://github.com/artic-network/sealion"><i class="bi bi-dna me-2"></i>Sealion</span></a>
           
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarControls" aria-controls="navbarControls" aria-expanded="false" aria-label="Toggle controls">
             <span class="navbar-toggler-icon"></span>
@@ -426,7 +426,7 @@
                     <p class="mt-3 mb-2">Drag and drop your FASTA file here</p>
                     <p class="text-muted small">or</p>
                     <input type="file" id="file-upload-input" accept=".fasta,.fa,.fna,.ffn,.faa,.frn" style="display: none;">
-                    <button class="btn btn-outline-primary" id="file-select-btn" type="button">
+                    <button class="btn btn-primary" id="file-select-btn" type="button">
                       <i class="bi bi-file-earmark-text"></i> Choose File
                     </button>
                   </div>
@@ -439,17 +439,19 @@
                     <input type="url" class="form-control" id="fasta-url" placeholder="https://example.com/alignment.fasta">
                     <div class="form-text">Enter the URL of a FASTA alignment file</div>
                   </div>
-                  <button class="btn btn-primary w-100" id="load-fasta-url-btn" type="button">
-                    <i class="bi bi-cloud-download"></i> Load from URL
-                  </button>
+                  <div class="text-center p-4">
+                    <button class="btn btn-primary" id="load-fasta-url-btn" type="button">
+                      <i class="bi bi-cloud-download"></i> Load from URL
+                    </button>
+                  </div>
                 </div>
                 
                 <!-- Example Panel -->
                 <div class="tab-pane fade" id="fasta-example-panel" role="tabpanel" aria-labelledby="fasta-example-tab">
                   <div class="text-center p-4">
                     <i class="bi bi-database" style="font-size: 2.5rem; color: #6c757d;"></i>
-                    <p class="mt-3 mb-3">Load the example Ebola virus alignment dataset</p>
-                    <button class="btn btn-success btn-lg" id="load-example-btn" type="button">
+                    <p class="mt-3 mb-3">Load the example alignment dataset</p>
+                    <button class="btn btn-primary" id="load-example-btn" type="button">
                       <i class="bi bi-database"></i> Load Example Data
                     </button>
                   </div>
@@ -506,7 +508,7 @@
                     <p class="mt-3 mb-2">Drag and drop your reference genome file here</p>
                     <p class="text-muted small">or</p>
                     <input type="file" id="ref-genome-file-input" accept=".json,.gb,.gbk,.genbank" style="display: none;">
-                    <button class="btn btn-outline-primary" id="ref-genome-select-btn" type="button">
+                    <button class="btn btn-primary" id="ref-genome-select-btn" type="button">
                       <i class="bi bi-file-earmark-text"></i> Choose File
                     </button>
                   </div>
@@ -519,9 +521,11 @@
                     <input type="url" class="form-control" id="ref-genome-url" placeholder="https://example.com/reference.json">
                     <div class="form-text">Enter the URL of a JSON or GenBank reference genome file</div>
                   </div>
-                  <button class="btn btn-primary w-100" id="load-ref-url-btn" type="button">
-                    <i class="bi bi-cloud-download"></i> Load from URL
-                  </button>
+                  <div class="text-center p-4">
+                    <button class="btn btn-primary" id="load-ref-url-btn" type="button">
+                      <i class="bi bi-cloud-download"></i> Load from URL
+                    </button>
+                  </div>
                 </div>
               </div>
               

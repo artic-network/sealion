@@ -52,8 +52,8 @@
     --bs-info-rgb: 38, 139, 210;
     --bs-warning-rgb: 203, 75, 22;
     --bs-danger-rgb: 211, 54, 130;
-    --bs-light-rgb: 253, 246, 227;
-    --bs-dark-rgb: 7, 54, 66;
+    --bs-light-rgb: 247, 238, 202;
+    --bs-dark-rgb: 0, 91, 104;
     --bs-primary-text-emphasis: #483700;
     --bs-secondary-text-emphasis: #343b3c;
     --bs-success-text-emphasis: #11403d;
@@ -88,11 +88,11 @@
     --bs-body-font-weight: 400;
     --bs-body-line-height: 1.5;
     --bs-body-color: #F7EECA;
-    --bs-body-color-rgb: 131, 148, 150;
+    --bs-body-color-rgb: 247, 238, 202;
     --bs-body-bg: #005B68;
     --bs-body-bg-rgb: 0, 43, 54;
-    --bs-emphasis-color: #000;
-    --bs-emphasis-color-rgb: 0, 0, 0;
+    --bs-emphasis-color: #BF4B43;
+    --bs-emphasis-color-rgb: 191, 75, 67;
     --bs-secondary-color: rgba(131, 148, 150, 0.75);
     --bs-secondary-color-rgb: 131, 148, 150;
     --bs-secondary-bg: #eee8d5;
@@ -102,11 +102,11 @@
     --bs-tertiary-bg: #fdf6e3;
     --bs-tertiary-bg-rgb: 253, 246, 227;
     --bs-heading-color: inherit;
-    --bs-link-color: #2aa198;
-    --bs-link-color-rgb: 42, 161, 152;
+    --bs-link-color: #BF4B43;
+    --bs-link-color-rgb: 191, 75, 67;
     --bs-link-decoration: underline;
-    --bs-link-hover-color: #2aa198;
-    --bs-link-hover-color-rgb: 42, 161, 152;
+    --bs-link-hover-color: #E06961;
+    --bs-link-hover-color-rgb: 224, 105, 97;
     --bs-code-color: #e83e8c;
     --bs-highlight-color: #839496;
     --bs-highlight-bg: #f5dbd0;
@@ -4561,6 +4561,11 @@ fieldset:disabled .btn {
     white-space: nowrap
 }
 
+.navbar-brand a {
+    text-decoration: none;
+}
+
+
 .navbar-brand:focus,
 .navbar-brand:hover {
     color: var(--bs-navbar-brand-hover-color)
@@ -6213,7 +6218,7 @@ fieldset:disabled .btn {
     --bs-modal-padding: 1rem;
     --bs-modal-margin: 0.5rem;
     --bs-modal-color: var(--bs-body-color);
-    --bs-modal-bg: #005B68;
+    --bs-modal-bg: #033940;
     --bs-modal-border-color: #002b36;
     --bs-modal-border-width: var(--bs-border-width);
     --bs-modal-border-radius: var(--bs-border-radius-lg);

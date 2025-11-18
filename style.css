@@ -42,12 +42,12 @@
 @keyframes spin{ from{ transform: rotate(0deg); } to{ transform: rotate(360deg); } }
 
 /* App layout */
-html, body { height:100%; margin:0; overflow:hidden; }
-#app { height:100vh; display:flex; flex-direction:column; }
+html, body { height:100%; margin:0; padding:0; overflow:hidden; }
+#app { height:100%; display:flex; flex-direction:column; overflow:hidden; }
 
 /* Navbar stays at top, sealion container fills remaining space */
 .navbar { flex-shrink: 0; }
-#sealion { flex: 1; min-height: 0; }
+#sealion { flex: 1; min-height: 0; overflow:hidden; }
 
 /* Dark mode navbar and UI */
 .dark-mode .navbar-light {
