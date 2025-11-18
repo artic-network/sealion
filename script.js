@@ -2067,6 +2067,22 @@
     try {
       fileModal = new bootstrap.Modal(fileUploadModal);
       
+      // Reset modal state when hidden to prevent layout issues on reopen
+      fileUploadModal.addEventListener('hidden.bs.modal', () => {
+        // Remove inline styles that may have been added during loading
+        const urlPanel = document.getElementById('fasta-url-panel');
+        const filePanel = document.getElementById('fasta-file-panel');
+        const examplePanel = document.getElementById('fasta-example-panel');
+        
+        if (urlPanel) urlPanel.style.display = '';
+        if (filePanel) filePanel.style.display = '';
+        if (examplePanel) examplePanel.style.display = '';
+        
+        // Hide loading and error states
+        if (fileLoading) fileLoading.style.display = 'none';
+        if (fileError) fileError.style.display = 'none';
+      });
+      
       // Function to parse FASTA file
       function parseFasta(text) {
         const sequences = [];
@@ -2216,10 +2232,10 @@
           fileErrorText.textContent = error.message || 'Failed to load file. Please check the file format.';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
-          // Re-show the panels
-          document.getElementById('fasta-url-panel').style.display = 'block';
-          document.getElementById('fasta-file-panel').style.display = 'block';
-          document.getElementById('fasta-example-panel').style.display = 'block';
+          // Re-show the panels by removing inline styles
+          document.getElementById('fasta-url-panel').style.display = '';
+          document.getElementById('fasta-file-panel').style.display = '';
+          document.getElementById('fasta-example-panel').style.display = '';
         }
       }
       
@@ -2304,10 +2320,10 @@
           fileErrorText.textContent = error.message || 'Failed to load example data.';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
-          // Re-show the panels
-          document.getElementById('fasta-url-panel').style.display = 'block';
-          document.getElementById('fasta-file-panel').style.display = 'block';
-          document.getElementById('fasta-example-panel').style.display = 'block';
+          // Re-show the panels by removing inline styles
+          document.getElementById('fasta-url-panel').style.display = '';
+          document.getElementById('fasta-file-panel').style.display = '';
+          document.getElementById('fasta-example-panel').style.display = '';
         }
       }
       
@@ -2361,10 +2377,10 @@
           fileErrorText.textContent = error.message || 'Failed to load FASTA from URL';
           fileError.style.display = 'block';
           fileLoading.style.display = 'none';
-          // Re-show the panels
-          document.getElementById('fasta-url-panel').style.display = 'block';
-          document.getElementById('fasta-file-panel').style.display = 'block';
-          document.getElementById('fasta-example-panel').style.display = 'block';
+          // Re-show the panels by removing inline styles
+          document.getElementById('fasta-url-panel').style.display = '';
+          document.getElementById('fasta-file-panel').style.display = '';
+          document.getElementById('fasta-example-panel').style.display = '';
         }
       }
       
@@ -2377,9 +2393,10 @@
           fileLoading.style.display = 'none';
           fileError.style.display = 'none';
           fileUploadInput.value = '';
-          document.getElementById('fasta-url-panel').style.display = 'block';
-          document.getElementById('fasta-file-panel').style.display = 'block';
-          document.getElementById('fasta-example-panel').style.display = 'block';
+          // Remove inline styles to let Bootstrap handle tab visibility
+          document.getElementById('fasta-url-panel').style.display = '';
+          document.getElementById('fasta-file-panel').style.display = '';
+          document.getElementById('fasta-example-panel').style.display = '';
           
           fileModal.show();
         } catch (e) {

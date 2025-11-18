@@ -158,3 +158,13 @@ html, body { height:100%; margin:0; overflow:hidden; }
   background-color: rgba(13, 110, 253, 0.1);
   border-color: #0d6efd !important;
 }
+
+/* Ensure modal content appears above backdrop */
+.modal-dialog {
+  z-index: 1055;
+}
+
+.modal-content {
+  position: relative;
+  z-index: 1055;
+}
