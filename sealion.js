@@ -4416,7 +4416,7 @@
     OVERVIEW_EXPANDED_COL: '#ddd',
     OVERVIEW_COLLAPSED_COL: '#999',
     OVERVIEW_VIEWPORT: 'rgba(0,120,200,0.9)',
-    OVERVIEW_DIFF_COL: '#ff6b6b',
+    OVERVIEW_DIFF_COL: '#4ecdc444',
     HEADER_BG: '#f3f3f3',
     HEADER_TEXT: '#333',
     HEADER_STROKE: '#666',
@@ -4442,13 +4442,13 @@
     snapEnabled: true,
     // Label tagging system
     TAG_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
-    TAG_NAMES: ['Slay', 'Bussin', 'Vibe', 'Snatched', 'No Cap', 'Periodt', 'Fire', 'Sus'],
+    TAG_NAMES: ['Slay', 'Mint', 'Vibey', 'Feral', 'Bussin', 'Solid', 'Mid', 'Sus'],
     TAG_BACKGROUND_ALPHA: 0.25,
     TAG_SEQ_BACKGROUND_ALPHA: 0.15,
     TAG_TEXT_COLOR: true,
     // Site bookmark system
     BOOKMARK_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
-    BOOKMARK_NAMES: ['Slay', 'Bussin', 'Vibe', 'Snatched', 'No Cap', 'Periodt', 'Fire', 'Sus'],
+    TAG_NAMES: ['Slay', 'Mint', 'Vibey', 'Feral', 'Bussin', 'Solid', 'Mid', 'Sus'],
     BOOKMARK_ALPHA: 0.3,
     BOOKMARK_COL_ALPHA: 0.15
   };
