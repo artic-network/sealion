@@ -113,6 +113,56 @@
                   </ul>
                 </div>
               </div>
+
+              <!-- Amino Acid Mode Controls -->
+              <div class="nav-item ms-2">
+                <div class="btn-group" role="group">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-protein"></i> View
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <button class="dropdown-item" id="nucleotide-mode-btn" type="button">
+                        <i class="bi bi-dna"></i> Nucleotide mode
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header">Codon Mode</li>
+                    <li>
+                      <button class="dropdown-item codon-frame-btn" data-frame="1" type="button">
+                        <i class="bi bi-1-circle-fill"></i> Reading frame 1
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item codon-frame-btn" data-frame="2" type="button">
+                        <i class="bi bi-2-circle-fill"></i> Reading frame 2
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item codon-frame-btn" data-frame="3" type="button">
+                        <i class="bi bi-3-circle-fill"></i> Reading frame 3
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li class="dropdown-header">Amino Acid Mode</li>
+                    <li>
+                      <button class="dropdown-item reading-frame-btn" data-frame="1" type="button">
+                        <i class="bi bi-1-circle"></i> Reading frame 1
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item reading-frame-btn" data-frame="2" type="button">
+                        <i class="bi bi-2-circle"></i> Reading frame 2
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item reading-frame-btn" data-frame="3" type="button">
+                        <i class="bi bi-3-circle"></i> Reading frame 3
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
               
               <!-- Navigate Differences -->
               <div class="nav-item ms-2">

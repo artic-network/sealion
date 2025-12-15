@@ -245,6 +245,11 @@
         this.maskEnabled = (typeof cfg.maskEnabled === 'boolean') ? cfg.maskEnabled : this.maskEnabled;
         // snap-to-character scrolling preference
         this.snapEnabled = (typeof cfg.snapEnabled === 'boolean') ? cfg.snapEnabled : true;
+        // amino acid mode settings
+        this.aminoAcidMode = (typeof cfg.aminoAcidMode === 'boolean') ? cfg.aminoAcidMode : false;
+        this.readingFrame = (typeof cfg.readingFrame === 'number') ? cfg.readingFrame : 1;
+        this.AA_COLORS = cfg.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS;
+        this.DEFAULT_AA_COLOR = cfg.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR;
         // label tagging system
         this.TAG_COLORS = cfg.TAG_COLORS || SealionViewer.DEFAULTS.TAG_COLORS;
         this.TAG_NAMES = cfg.TAG_NAMES || SealionViewer.DEFAULTS.TAG_NAMES;
@@ -2199,6 +2204,10 @@
       const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
       const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
       const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (window && window.selectedCols) ? window.selectedCols : new Set();
+      // Amino acid mode settings
+      const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
+      const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
+      const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
 
       // clear header area
       ctx.clearRect(0, 0, cssW, HEADER_HEIGHT);
@@ -2255,7 +2264,18 @@
         }
         return Math.max(10, Math.ceil(raw));
       }
-      const step = chooseTickStep(actualAvgPx);
+      
+      // In amino acid mode, adjust tick step for amino acid positions
+      // In codon mode, keep nucleotide positions
+      let step;
+      if (aminoAcidMode && !codonMode) {
+        // Calculate effective spacing for amino acids (every 3 nucleotides)
+        const aaAvgPx = actualAvgPx * 3;
+        step = chooseTickStep(aaAvgPx);
+      } else {
+        step = chooseTickStep(actualAvgPx);
+      }
+      
       const smallTickH = Math.max(2, Math.round(HEADER_HEIGHT * 0.28));
       const largeTickH = Math.max(3, Math.round(HEADER_HEIGHT * 0.6));
       const bottom = HEADER_HEIGHT;
@@ -2264,13 +2284,27 @@
       ctx.fillStyle = this.HEADER_TEXT;
 
       for (let c = start; c <= end; c++) {
+        let posIndex, isMajor, isMinor;
+        
+        if (aminoAcidMode && !codonMode) {
+          // Only show ticks at codon start positions
+          const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+          if (aaPos < 0 || (c - (readingFrame - 1)) % 3 !== 0) continue;
+          
+          posIndex = aaPos + 1; // 1-based amino acid position
+          isMajor = (posIndex % step) === 0;
+          isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
+        } else {
+          posIndex = c + 1; // 1-based nucleotide position
+          isMajor = (posIndex % step) === 0;
+          isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
+        }
+        
         const colLeft = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
         const colRight = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
         const centerLocal = ((colLeft + colRight) / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
         const x = Math.round(centerLocal) + 0.5;
-        const posIndex = c + 1;
-        const isMajor = (posIndex % step) === 0;
-        const isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
+        
         const tickH = isMajor ? largeTickH : (isMinor ? Math.max(2, Math.round(HEADER_HEIGHT * 0.4)) : smallTickH);
         ctx.beginPath();
         ctx.moveTo(x, bottom - tickH);
@@ -2625,6 +2659,12 @@
       const BASE_COLORS = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
       const DEFAULT_BASE_COLOR = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
       const PALE_REF_COLOR = (opts && opts.PALE_REF_COLOR) ? opts.PALE_REF_COLOR : (window && window.PALE_REF_COLOR) ? window.PALE_REF_COLOR : '#bfc9d6';
+      // Amino acid mode settings
+      const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
+      const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
+      const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
+      const AA_COLORS = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
+      const DEFAULT_AA_COLOR = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
       const COMPRESSED_CELL_VPAD = (opts && typeof opts.COMPRESSED_CELL_VPAD === 'number') ? opts.COMPRESSED_CELL_VPAD : ((window && typeof window.COMPRESSED_CELL_VPAD === 'number') ? window.COMPRESSED_CELL_VPAD : 2);
       const seqTextVertOffset = (opts && typeof opts.seqTextVertOffset === 'number') ? opts.seqTextVertOffset : ((window && typeof window.seqTextVertOffset === 'number') ? window.seqTextVertOffset : Math.round(ROW_HEIGHT / 2));
       const rowCount = (opts && typeof opts.rowCount === 'number') ? opts.rowCount : ((window && typeof window.rowCount === 'number') ? window.rowCount : rows.length);
@@ -2709,23 +2749,85 @@
       }
 
       // Second pass: draw glyphs
+      // Translate reference sequence once if needed (for performance)
+      let translatedRef = null;
+      if ((aminoAcidMode || codonMode) && refModeEnabled && refStr) {
+        translatedRef = SealionViewer.translateSequence(refStr, readingFrame);
+      }
+      
       for (let r = visible.firstRow; r <= visible.lastRow; r++) {
         const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
         const y = Math.round((rawRowY + seqTextVertOffset) * pr) / pr;
         const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
         ctx.fillStyle = '#000';
+        
+        // Translate sequence to amino acids if in amino acid or codon mode
+        let translatedSeq = null;
+        if ((aminoAcidMode || codonMode) && seq) {
+          translatedSeq = SealionViewer.translateSequence(seq, readingFrame);
+        }
+        
         for (let c = visible.firstCol; c <= visible.lastCol; c++) {
-          const rawCh = seq[c] || ' ';
-          const ch = String(rawCh);
+          let ch, base, color;
+          
+          if (codonMode && translatedSeq) {
+            // In codon mode, display nucleotides but color them by amino acid
+            const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+            const posInCodon = (c - (readingFrame - 1)) % 3;
+            
+            if (aaPos >= 0 && aaPos < translatedSeq.length && posInCodon >= 0 && posInCodon < 3) {
+              // Show the nucleotide
+              const rawCh = seq[c] || ' ';
+              ch = String(rawCh);
+              base = ch ? ch.charAt(0).toUpperCase() : '';
+              
+              // Get the amino acid this codon translates to
+              const aa = translatedSeq.charAt(aaPos);
+              
+              // Get reference amino acid if reference mode is enabled
+              const refAA = (translatedRef && aaPos < translatedRef.length) ? translatedRef.charAt(aaPos) : null;
+              
+              const isSameRef = refModeEnabled && refStr && refAA === aa;
+              const isRefRow = (typeof refIndex === 'number' && refIndex === r);
+              color = isRefRow ? (AA_COLORS[aa] || DEFAULT_AA_COLOR) : (isSameRef ? PALE_REF_COLOR : (AA_COLORS[aa] || DEFAULT_AA_COLOR));
+            } else {
+              // Outside valid codon range - skip
+              continue;
+            }
+          } else if (aminoAcidMode && translatedSeq) {
+            // In amino acid mode, display amino acids
+            // Map nucleotide position to amino acid position
+            const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+            if (aaPos >= 0 && aaPos < translatedSeq.length && (c - (readingFrame - 1)) % 3 === 0) {
+              // This is the first nucleotide position of a codon
+              ch = translatedSeq.charAt(aaPos);
+              base = ch.toUpperCase();
+              
+              // Get reference amino acid if reference mode is enabled
+              const refAA = (translatedRef && aaPos < translatedRef.length) ? translatedRef.charAt(aaPos) : null;
+              
+              const isSameRef = refModeEnabled && refStr && refAA === base;
+              const isRefRow = (typeof refIndex === 'number' && refIndex === r);
+              color = isRefRow ? (AA_COLORS[base] || DEFAULT_AA_COLOR) : (isSameRef ? PALE_REF_COLOR : (AA_COLORS[base] || DEFAULT_AA_COLOR));
+            } else {
+              // Not at codon start position in amino acid mode - skip drawing
+              continue;
+            }
+          } else {
+            // Normal nucleotide mode
+            const rawCh = seq[c] || ' ';
+            ch = String(rawCh);
+            base = ch ? ch.charAt(0).toUpperCase() : '';
+            const refChar = (refStr && refStr.charAt(c)) ? refStr.charAt(c).toUpperCase() : null;
+            const isSameRef = refModeEnabled && refStr && refChar === base;
+            const isRefRow = (typeof refIndex === 'number' && refIndex === r);
+            color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
+          }
+          
           const colLeft = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
           const colRight = (colOffsets[c + 1] !== undefined) ? colOffsets[c + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
           const x = colLeft - visible.scrollLeft;
           const w = Math.max(1, colRight - colLeft);
-          const base = ch ? ch.charAt(0).toUpperCase() : '';
-          const refChar = (refStr && refStr.charAt(c)) ? refStr.charAt(c).toUpperCase() : null;
-          const isSameRef = refModeEnabled && refStr && refChar === base;
-          const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-          const color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
           
           if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
             // Collapsed column
@@ -2842,6 +2944,12 @@
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
       const BASE_COLORS = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
       const DEFAULT_BASE_COLOR = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
+      // Amino acid mode settings
+      const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
+      const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
+      const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
+      const AA_COLORS = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
+      const DEFAULT_AA_COLOR = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
 
       ctx.font = FONT;
       ctx.textBaseline = 'alphabetic';
@@ -2864,16 +2972,51 @@
                    (window && window.computeConsensusSequence ? window.computeConsensusSequence() : null)));
       if (!cons || cons.length === 0) return;
 
+      // Translate consensus if in amino acid or codon mode
+      let translatedCons = null;
+      if ((aminoAcidMode || codonMode) && cons) {
+        translatedCons = SealionViewer.translateSequence(cons, readingFrame);
+      }
+
       const start = Math.max(0, visible.rawFirstCol - 1);
       const end = Math.min(maxSeqLen - 1, visible.rawLastCol + 1);
       for (let c = start; c <= end; c++) {
+        let ch, base, color;
+        
+        if (codonMode && translatedCons) {
+          // In codon mode, display nucleotides colored by amino acid
+          const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+          const posInCodon = (c - (readingFrame - 1)) % 3;
+          
+          if (aaPos >= 0 && aaPos < translatedCons.length && posInCodon >= 0 && posInCodon < 3) {
+            ch = (cons.charAt(c) || 'N');
+            base = ch ? ch.charAt(0).toUpperCase() : '';
+            const aa = translatedCons.charAt(aaPos);
+            color = AA_COLORS[aa] || DEFAULT_AA_COLOR;
+          } else {
+            continue; // Skip positions outside valid codon range
+          }
+        } else if (aminoAcidMode && translatedCons) {
+          // In amino acid mode, only draw at codon start positions
+          const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+          if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
+            ch = translatedCons.charAt(aaPos);
+            base = ch.toUpperCase();
+            color = AA_COLORS[base] || DEFAULT_AA_COLOR;
+          } else {
+            continue; // Skip non-codon-start positions
+          }
+        } else {
+          ch = (cons.charAt(c) || 'N');
+          base = ch ? ch.charAt(0).toUpperCase() : '';
+          color = BASE_COLORS[base] || DEFAULT_BASE_COLOR;
+        }
+        
         const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
         const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
         const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
         const w = Math.max(1, right - left);
-        const ch = (cons.charAt(c) || 'N');
-        const base = ch ? ch.charAt(0).toUpperCase() : '';
-        const color = BASE_COLORS[base] || DEFAULT_BASE_COLOR;
+        
         if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
           ctx.fillStyle = color;
           const blockTop = CONSENSUS_TOP_PAD;
@@ -3433,7 +3576,12 @@
           hideMode: !!this.hideMode,
           HIDDEN_MARKER_COLOR: this.HIDDEN_MARKER_COLOR,
           BASE_COLORS: this.BASE_COLORS,
-          DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR
+          DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR,
+          aminoAcidMode: !!this.aminoAcidMode,
+          codonMode: !!this.codonMode,
+          readingFrame: this.readingFrame || 1,
+          AA_COLORS: this.AA_COLORS,
+          DEFAULT_AA_COLOR: this.DEFAULT_AA_COLOR
         };
 
         // draw headers/overview/consensus/labels/sequences in safe guards
@@ -4372,6 +4520,92 @@
   // Consumers may pass an overrides object as the third constructor argument
   // to change any of these defaults. Keeping the defaults close to the class
   // makes staged migration and later configurability easier.
+  // Universal genetic code translation table
+  SealionViewer.GENETIC_CODE = {
+    'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
+    'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S',
+    'TAT': 'Y', 'TAC': 'Y', 'TAA': '*', 'TAG': '*',
+    'TGT': 'C', 'TGC': 'C', 'TGA': '*', 'TGG': 'W',
+    'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
+    'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
+    'CAT': 'H', 'CAC': 'H', 'CAA': 'Q', 'CAG': 'Q',
+    'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R',
+    'ATT': 'I', 'ATC': 'I', 'ATA': 'I', 'ATG': 'M',
+    'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
+    'AAT': 'N', 'AAC': 'N', 'AAA': 'K', 'AAG': 'K',
+    'AGT': 'S', 'AGC': 'S', 'AGA': 'R', 'AGG': 'R',
+    'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
+    'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
+    'GAT': 'D', 'GAC': 'D', 'GAA': 'E', 'GAG': 'E',
+    'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
+  };
+
+  // Translate a nucleotide sequence to amino acids
+  // seq: nucleotide sequence string
+  // frame: reading frame (1, 2, or 3)
+  // Returns: amino acid sequence string
+  SealionViewer.translateSequence = function(seq, frame) {
+    if (!seq || typeof seq !== 'string') return '';
+    frame = frame || 1;
+    const startPos = frame - 1; // Convert to 0-indexed
+    let protein = '';
+    
+    for (let i = startPos; i + 2 < seq.length; i += 3) {
+      const codon = seq.substring(i, i + 3).toUpperCase().replace(/U/g, 'T');
+      if (codon.length === 3 && !/[^ACGT]/.test(codon)) {
+        const aa = SealionViewer.GENETIC_CODE[codon] || 'X';
+        protein += aa;
+      } else {
+        protein += 'X'; // Unknown/ambiguous
+      }
+    }
+    
+    return protein;
+  };
+
+  // Universal genetic code translation table
+  SealionViewer.GENETIC_CODE = {
+    'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
+    'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S',
+    'TAT': 'Y', 'TAC': 'Y', 'TAA': '*', 'TAG': '*',
+    'TGT': 'C', 'TGC': 'C', 'TGA': '*', 'TGG': 'W',
+    'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
+    'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
+    'CAT': 'H', 'CAC': 'H', 'CAA': 'Q', 'CAG': 'Q',
+    'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R',
+    'ATT': 'I', 'ATC': 'I', 'ATA': 'I', 'ATG': 'M',
+    'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
+    'AAT': 'N', 'AAC': 'N', 'AAA': 'K', 'AAG': 'K',
+    'AGT': 'S', 'AGC': 'S', 'AGA': 'R', 'AGG': 'R',
+    'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
+    'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
+    'GAT': 'D', 'GAC': 'D', 'GAA': 'E', 'GAG': 'E',
+    'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
+  };
+
+  // Translate a nucleotide sequence to amino acids
+  // seq: nucleotide sequence string
+  // frame: reading frame (1, 2, or 3)
+  // Returns: amino acid sequence string
+  SealionViewer.translateSequence = function(seq, frame) {
+    if (!seq || typeof seq !== 'string') return '';
+    frame = frame || 1;
+    const startPos = frame - 1; // Convert to 0-indexed
+    let protein = '';
+    
+    for (let i = startPos; i + 2 < seq.length; i += 3) {
+      const codon = seq.substring(i, i + 3).toUpperCase().replace(/U/g, 'T');
+      if (codon.length === 3 && !/[^ACGT]/.test(codon)) {
+        const aa = SealionViewer.GENETIC_CODE[codon] || 'X';
+        protein += aa;
+      } else {
+        protein += 'X'; // Unknown/ambiguous
+      }
+    }
+    
+    return protein;
+  };
+
   SealionViewer.DEFAULTS = {
     FONT_SIZE: 14,
     FONT: '14px monospace',
@@ -4395,6 +4629,33 @@
     DEFAULT_BASE_COLOR: '#666',
     PALE_REF_COLOR: '#e6e6e6',
     REF_ACCENT: '#2b8cff',
+    // Amino acid mode settings
+    aminoAcidMode: false,
+    codonMode: false,
+    readingFrame: 1,
+    // Amino acid color scheme (Zappo scheme - grouped by chemical properties)
+    // Optimized for high contrast on light backgrounds
+    AA_COLORS: {
+      // Hydrophobic/aliphatic (pink)
+      'A': '#e91e63', 'I': '#e91e63', 'L': '#e91e63', 'M': '#e91e63', 'V': '#e91e63',
+      // Aromatic (orange)
+      'F': '#ff6f00', 'W': '#ff6f00', 'Y': '#ff6f00',
+      // Positive (blue)
+      'K': '#2962ff', 'R': '#2962ff', 'H': '#2962ff',
+      // Negative (red)
+      'D': '#d50000', 'E': '#d50000',
+      // Hydrophilic (green)
+      'N': '#00c853', 'Q': '#00c853', 'S': '#00c853', 'T': '#00c853',
+      // Special conformational (magenta)
+      'G': '#aa00ff', 'P': '#aa00ff',
+      // Cysteine (yellow/gold)
+      'C': '#ffd600',
+      // Stop codon (black)
+      '*': '#000000',
+      // Unknown (grey)
+      'X': '#757575'
+    },
+    DEFAULT_AA_COLOR: '#757575',
     // Nucleotide color scheme (default is 'default')
     nucleotideColorScheme: 'default',
     // Canvas background colors - Light mode
@@ -4472,7 +4733,29 @@
     // CDS reading frame colors (overview display)
     CDS_FRAME_COLORS: ['#0B775E', '#45b7d1', '#fd79a8'], // frames 1, 2, 3
     CDS_FILL_ALPHA: 0.3,
-    CDS_BORDER_ALPHA: 1.0
+    CDS_BORDER_ALPHA: 1.0,
+    // Amino acid colors optimized for dark backgrounds
+    AA_COLORS: {
+      // Hydrophobic/aliphatic (bright pink)
+      'A': '#ff80ab', 'I': '#ff80ab', 'L': '#ff80ab', 'M': '#ff80ab', 'V': '#ff80ab',
+      // Aromatic (bright orange)
+      'F': '#ffab40', 'W': '#ffab40', 'Y': '#ffab40',
+      // Positive (bright blue)
+      'K': '#448aff', 'R': '#448aff', 'H': '#448aff',
+      // Negative (bright red)
+      'D': '#ff5252', 'E': '#ff5252',
+      // Hydrophilic (bright green)
+      'N': '#69f0ae', 'Q': '#69f0ae', 'S': '#69f0ae', 'T': '#69f0ae',
+      // Special conformational (bright magenta)
+      'G': '#e040fb', 'P': '#e040fb',
+      // Cysteine (bright yellow)
+      'C': '#ffea00',
+      // Stop codon (white)
+      '*': '#ffffff',
+      // Unknown (light grey)
+      'X': '#bdbdbd'
+    },
+    DEFAULT_AA_COLOR: '#bdbdbd'
 };
 
   // Nucleotide color schemes
