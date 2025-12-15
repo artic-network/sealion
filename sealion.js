@@ -416,13 +416,14 @@
             if (nw === this.LABEL_WIDTH) return;
             try { this.LABEL_WIDTH = nw; } catch (_) { }
             try { document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); } catch (_) { }
-            // Throttle render using requestAnimationFrame for smooth performance
+            // During drag, only update canvas sizes without rendering
+            // This prevents expensive redraws (especially when colour-by-differences is enabled)
             if (labelDragRafHandle === null) {
               labelDragRafHandle = requestAnimationFrame(() => {
                 labelDragRafHandle = null;
                 try { this.setCanvasCSSSizes(); } catch (_) { }
                 try { this.resizeBackings(); } catch (_) { }
-                try { if (typeof this.scheduleRender === 'function') this.scheduleRender(); } catch (_) { }
+                // Skip scheduleRender() during drag for better performance
               });
             }
           });
@@ -2043,8 +2044,8 @@
         if (refGenomeCDS && Array.isArray(refGenomeCDS) && refGenomeCDS.length > 0) {
           cacheCtx.save();
           
-          // Define colors for the 3 reading frames
-          const frameColors = ['#4A90E2', '#E24A4A', '#4AE290']; // Blue, Red, Green
+          // Get colors for the 3 reading frames from DEFAULTS
+          const frameColors = this.CDS_FRAME_COLORS || SealionViewer.DEFAULTS.CDS_FRAME_COLORS;
           
           // Calculate row heights - divide the bar area into 3 rows
           const rowHeight = Math.max(2, barH / 3);
@@ -2082,11 +2083,11 @@
               
               // Draw CDS rectangle with frame-specific color
               cacheCtx.fillStyle = frameColors[rowIndex];
-              cacheCtx.globalAlpha = 0.6;
+              cacheCtx.globalAlpha = this.CDS_FILL_ALPHA || SealionViewer.DEFAULTS.CDS_FILL_ALPHA;
               cacheCtx.fillRect(x, cdsY, w, rowHeight);
               
               // Add a subtle border for better visibility
-              cacheCtx.globalAlpha = 0.8;
+              cacheCtx.globalAlpha = this.CDS_BORDER_ALPHA || SealionViewer.DEFAULTS.CDS_BORDER_ALPHA;
               cacheCtx.strokeStyle = frameColors[rowIndex];
               cacheCtx.lineWidth = 0.5;
               cacheCtx.strokeRect(x, cdsY, w, rowHeight);
@@ -3935,25 +3936,11 @@
         console.info('Dark mode:', this.darkMode ? 'ON' : 'OFF');
         
         if (this.darkMode) {
-          // Store current (light mode) colors
-          const colorProps = [
-            'DEFAULT_BASE_COLOR', 'PALE_REF_COLOR', 'REF_ACCENT',
-            'OVERVIEW_BG', 'OVERVIEW_EXPANDED_COL', 'OVERVIEW_COLLAPSED_COL', 'OVERVIEW_VIEWPORT',
-            'HEADER_BG', 'HEADER_TEXT', 'HEADER_STROKE', 'HEADER_SELECTION',
-            'CONSENSUS_BG', 'CONSENSUS_SEPARATOR',
-            'LABELS_BG', 'LABELS_TEXT', 'LABELS_HEADER_TEXT',
-            'INDEX_COLOR',
-            'SEQ_SELECTED_ROW', 'SEQ_EVEN_ROW', 'SEQ_ODD_ROW', 'SEQ_COL_SELECTION',
-            'SEQ_RECT_SELECTION_START', 'SEQ_RECT_SELECTION_END'
-          ];
-          
-          for (const prop of colorProps) {
+          // Store current (light mode) colors and switch ALL DARK_MODE_COLORS
+          for (const prop in SealionViewer.DARK_MODE_COLORS) {
             this._lightModeColors[prop] = this[prop];
-            if (SealionViewer.DARK_MODE_COLORS[prop]) {
-              this[prop] = SealionViewer.DARK_MODE_COLORS[prop];
-            }
+            this[prop] = SealionViewer.DARK_MODE_COLORS[prop];
           }
-          
           // Update CSS for UI elements
           document.documentElement.classList.add('dark-mode');
         } else {
@@ -3962,7 +3949,6 @@
             this[prop] = this._lightModeColors[prop];
           }
           this._lightModeColors = {};
-          
           // Update CSS for UI elements
           document.documentElement.classList.remove('dark-mode');
         }
@@ -4416,12 +4402,12 @@
     OVERVIEW_EXPANDED_COL: '#ddd',
     OVERVIEW_COLLAPSED_COL: '#999',
     OVERVIEW_VIEWPORT: 'rgba(0,120,200,0.9)',
-    OVERVIEW_DIFF_COL: '#4ecdc444',
+    OVERVIEW_DIFF_COL: '#ff7f0e22',
     HEADER_BG: '#f3f3f3',
     HEADER_TEXT: '#333',
     HEADER_STROKE: '#666',
     HEADER_SELECTION: '#ffd54d',
-    CONSENSUS_BG: '#fafafa',
+    CONSENSUS_BG: '#fafafa',  
     CONSENSUS_SEPARATOR: '#e0e0e0',
     LABELS_BG: '#f3f3f3',
     LABELS_TEXT: '#111',
@@ -4450,7 +4436,11 @@
     BOOKMARK_COLORS: ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#a29bfe', '#fd79a8', '#fdcb6e'],
     TAG_NAMES: ['Slay', 'Mint', 'Vibey', 'Feral', 'Bussin', 'Solid', 'Mid', 'Sus'],
     BOOKMARK_ALPHA: 0.3,
-    BOOKMARK_COL_ALPHA: 0.15
+    BOOKMARK_COL_ALPHA: 0.15,
+    // CDS reading frame colors (overview display)
+    CDS_FRAME_COLORS: ['#0B775E', '#45b7d1', '#fd79a8'], // frames 1, 2, 3
+    CDS_FILL_ALPHA: 1.0,
+    CDS_BORDER_ALPHA: 0.3
   };
 
   // Dark mode color scheme
@@ -4462,7 +4452,7 @@
     OVERVIEW_EXPANDED_COL: '#404040',
     OVERVIEW_COLLAPSED_COL: '#666',
     OVERVIEW_VIEWPORT: 'rgba(91,163,255,0.9)',
-    OVERVIEW_DIFF_COL: '#e4a0a0ff',
+    OVERVIEW_DIFF_COL: '#ff7f0e11',
     HEADER_BG: '#252525',
     HEADER_TEXT: '#d4d4d4',
     HEADER_STROKE: '#888',
@@ -4478,8 +4468,12 @@
     SEQ_ODD_ROW: '#1e1e1e',
     SEQ_COL_SELECTION: '#6b5b00',
     SEQ_RECT_SELECTION_START: 'rgba(255,0,0,0.6)',
-    SEQ_RECT_SELECTION_END: 'rgba(91,163,255,0.8)'
-  };
+    SEQ_RECT_SELECTION_END: 'rgba(91,163,255,0.8)',
+    // CDS reading frame colors (overview display)
+    CDS_FRAME_COLORS: ['#0B775E', '#45b7d1', '#fd79a8'], // frames 1, 2, 3
+    CDS_FILL_ALPHA: 0.3,
+    CDS_BORDER_ALPHA: 1.0
+};
 
   // Nucleotide color schemes
   SealionViewer.NUCLEOTIDE_COLOR_SCHEMES = {
