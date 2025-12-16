@@ -492,6 +492,26 @@
 
       // helper mutation methods exposed on the instance
       this.clearSelectionSets = () => { try { this.selectedRows.clear(); this.selectedCols.clear(); } catch (_) { } };
+      
+      // Helper: snap column to codon boundary in codon or amino acid mode
+      this.snapToCodonStart = (col) => {
+        if (!this.codonMode && !this.aminoAcidMode) return col;
+        const frame = this.readingFrame || 1;
+        const offset = (col - (frame - 1));
+        if (offset < 0) return col;
+        const codonStart = Math.floor(offset / 3) * 3 + (frame - 1);
+        return codonStart;
+      };
+      
+      this.snapToCodonEnd = (col) => {
+        if (!this.codonMode && !this.aminoAcidMode) return col;
+        const frame = this.readingFrame || 1;
+        const offset = (col - (frame - 1));
+        if (offset < 0) return col;
+        const codonStart = Math.floor(offset / 3) * 3 + (frame - 1);
+        return codonStart + 2;
+      };
+      
       this.setSelectionToRange = (a, b) => {
         const lo = Math.max(0, Math.min(a, b));
         const hi = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(a, b));
@@ -517,26 +537,52 @@
         for (let r = lo; r <= hi; r++) this.selectedRows.add(r);
       };
       this.setColSelectionToRange = (a, b) => {
-        const lo = Math.max(0, Math.min(a, b));
-        const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
+        // Snap to codon boundaries if in codon or amino acid mode
+        let lo = Math.max(0, Math.min(a, b));
+        let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
+        
+        if (this.codonMode || this.aminoAcidMode) {
+          lo = this.snapToCodonStart(lo);
+          hi = this.snapToCodonEnd(hi);
+        }
+        
         this.selectedCols.clear();
         for (let c = lo; c <= hi; c++) this.selectedCols.add(c);
       };
       this.addRangeToColSelection = (a, b) => {
-        const lo = Math.max(0, Math.min(a, b));
-        const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
+        // Snap to codon boundaries if in codon or amino acid mode
+        let lo = Math.max(0, Math.min(a, b));
+        let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
+        
+        if (this.codonMode || this.aminoAcidMode) {
+          lo = this.snapToCodonStart(lo);
+          hi = this.snapToCodonEnd(hi);
+        }
+        
         for (let c = lo; c <= hi; c++) this.selectedCols.add(c);
       };
       this.expandColSelectionToInclude = (newPos) => {
         // Expand column selection to include newPos
         if (this.selectedCols.size === 0) {
-          this.selectedCols.add(newPos);
+          if (this.codonMode || this.aminoAcidMode) {
+            const start = this.snapToCodonStart(newPos);
+            const end = this.snapToCodonEnd(newPos);
+            for (let c = start; c <= end; c++) this.selectedCols.add(c);
+          } else {
+            this.selectedCols.add(newPos);
+          }
           return;
         }
         const currentMin = Math.min(...Array.from(this.selectedCols));
         const currentMax = Math.max(...Array.from(this.selectedCols));
-        const lo = Math.max(0, Math.min(currentMin, newPos));
-        const hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, currentMax), Math.max(currentMax, newPos));
+        let lo = Math.max(0, Math.min(currentMin, newPos));
+        let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, currentMax), Math.max(currentMax, newPos));
+        
+        if (this.codonMode || this.aminoAcidMode) {
+          lo = this.snapToCodonStart(lo);
+          hi = this.snapToCodonEnd(hi);
+        }
+        
         this.selectedCols.clear();
         for (let c = lo; c <= hi; c++) this.selectedCols.add(c);
       };
@@ -547,6 +593,13 @@
           let rhi = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(r0, r1));
           let clo = Math.max(0, Math.min(c0, c1));
           let chi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(c0, c1), Math.max(c0, c1));
+          
+          // Snap to codon boundaries in codon or amino acid mode
+          if (this.codonMode || this.aminoAcidMode) {
+            clo = this.snapToCodonStart(clo);
+            chi = this.snapToCodonEnd(chi);
+          }
+          
           if (orig) { rlo = Math.min(rlo, orig.rlo); rhi = Math.max(rhi, orig.rhi); clo = Math.min(clo, orig.clo); chi = Math.max(chi, orig.chi); }
           this.selectedRows.clear(); this.selectedCols.clear();
           for (let r = rlo; r <= rhi; r++) this.selectedRows.add(r);
@@ -559,6 +612,13 @@
           let rhi = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(r0, r1));
           let clo = Math.max(0, Math.min(c0, c1));
           let chi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(c0, c1), Math.max(c0, c1));
+          
+          // Snap to codon boundaries in codon or amino acid mode
+          if (this.codonMode || this.aminoAcidMode) {
+            clo = this.snapToCodonStart(clo);
+            chi = this.snapToCodonEnd(chi);
+          }
+          
           if (orig) { rlo = Math.min(rlo, orig.rlo); rhi = Math.max(rhi, orig.rhi); clo = Math.min(clo, orig.clo); chi = Math.max(chi, orig.chi); }
           this.selectedRows.clear(); this.selectedCols.clear();
           for (let r = rlo; r <= rhi; r++) this.selectedRows.add(r);
@@ -585,7 +645,12 @@
           if (e.button !== 0) return;
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedRows.clear(); } catch (_) { }
-          const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
+          let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
+          
+          // Snap to codon boundary in codon or amino acid mode
+          if (this.codonMode || this.aminoAcidMode) {
+            col = this.snapToCodonStart(col);
+          }
           
           if (e.shiftKey && this.selectedCols.size > 0) {
             // Shift-click: expand selection to include this column
@@ -602,11 +667,34 @@
           
           if (e.shiftKey && this.selectedCols.size > 0) {
             // Already handled above
-          } else if (e.metaKey) { 
-            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } 
+          } else if (e.metaKey) {
+            // Cmd-click: toggle selection of codon (or single column in non-codon mode)
+            if (this.codonMode || this.aminoAcidMode) {
+              const codonStart = this.snapToCodonStart(col);
+              const codonEnd = this.snapToCodonEnd(col);
+              // Check if any part of the codon is selected
+              const isSelected = this.selectedCols.has(codonStart) || this.selectedCols.has(codonStart + 1) || this.selectedCols.has(codonEnd);
+              if (isSelected) {
+                // Remove entire codon
+                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.delete(c);
+              } else {
+                // Add entire codon
+                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.add(c);
+              }
+            } else {
+              try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
+            }
             this.anchorCol = col; 
           } else { 
-            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } 
+            try { 
+              this.selectedCols.clear(); 
+              if (this.codonMode || this.aminoAcidMode) {
+                const codonEnd = this.snapToCodonEnd(col);
+                for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
+              } else {
+                this.selectedCols.add(col);
+              }
+            } catch (_) { } 
             this.anchorCol = col; 
           }
           this.isColSelecting = true; 
@@ -639,7 +727,12 @@
           if (e.button !== 0) return;
           try { this.clearRectSelection(); } catch (_) { }
           try { this.selectedRows.clear(); } catch (_) { }
-          const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
+          let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
+          
+          // Snap to codon boundary in codon or amino acid mode
+          if (this.codonMode || this.aminoAcidMode) {
+            col = this.snapToCodonStart(col);
+          }
           
           if (e.shiftKey && this.selectedCols.size > 0) {
             // Shift-click: expand selection to include this column
@@ -656,11 +749,31 @@
           
           if (e.shiftKey && this.selectedCols.size > 0) {
             // Already handled above
-          } else if (e.metaKey) { 
-            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { } 
+          } else if (e.metaKey) {
+            // Cmd-click: toggle selection of codon (or single column in non-codon mode)
+            if (this.codonMode || this.aminoAcidMode) {
+              const codonStart = this.snapToCodonStart(col);
+              const codonEnd = this.snapToCodonEnd(col);
+              const isSelected = this.selectedCols.has(codonStart) || this.selectedCols.has(codonStart + 1) || this.selectedCols.has(codonEnd);
+              if (isSelected) {
+                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.delete(c);
+              } else {
+                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.add(c);
+              }
+            } else {
+              try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
+            }
             this.anchorCol = col; 
           } else { 
-            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { } 
+            try { 
+              this.selectedCols.clear(); 
+              if (this.codonMode || this.aminoAcidMode) {
+                const codonEnd = this.snapToCodonEnd(col);
+                for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
+              } else {
+                this.selectedCols.add(col);
+              }
+            } catch (_) { } 
             this.anchorCol = col; 
           }
           this.isColSelecting = true; 
@@ -2795,7 +2908,7 @@
               continue;
             }
           } else if (aminoAcidMode && translatedSeq) {
-            // In amino acid mode, display amino acids
+            // In amino acid mode, display amino acids centered in the codon box
             // Map nucleotide position to amino acid position
             const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
             if (aaPos >= 0 && aaPos < translatedSeq.length && (c - (readingFrame - 1)) % 3 === 0) {
@@ -2809,6 +2922,40 @@
               const isSameRef = refModeEnabled && refStr && refAA === base;
               const isRefRow = (typeof refIndex === 'number' && refIndex === r);
               color = isRefRow ? (AA_COLORS[base] || DEFAULT_AA_COLOR) : (isSameRef ? PALE_REF_COLOR : (AA_COLORS[base] || DEFAULT_AA_COLOR));
+              
+              // Calculate center position across all 3 codon nucleotides
+              const codonEnd = c + 2;
+              const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+              const codonRightPos = (colOffsets[codonEnd + 1] !== undefined) ? colOffsets[codonEnd + 1] : ((colOffsets[codonEnd] !== undefined ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+              const codonWidth = codonRightPos - codonLeftPos;
+              const xCenter = codonLeftPos + (codonWidth / 2) - visible.scrollLeft;
+              
+              // Draw the amino acid centered in the codon box
+              if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+                // Collapsed column
+                const w = Math.max(1, codonRightPos - codonLeftPos);
+                if (hideMode && w > 1) {
+                  ctx.fillStyle = HIDDEN_MARKER_COLOR;
+                  const topQ = Math.round(rawRowY * pr) / pr;
+                  const hQ = Math.round(ROW_HEIGHT * pr) / pr;
+                  ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                } else if (!hideMode) {
+                  ctx.fillStyle = color;
+                  const topCss = rawRowY + COMPRESSED_CELL_VPAD;
+                  const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
+                  const topQ = Math.round(topCss * pr) / pr;
+                  const hQ = Math.round(blockH * pr) / pr;
+                  ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                }
+              } else {
+                ctx.fillStyle = color;
+                // Center the text horizontally
+                const textWidth = CHAR_WIDTH;
+                ctx.fillText(ch, xCenter - textWidth / 2, y);
+              }
+              
+              // Skip the next two positions of the codon
+              continue;
             } else {
               // Not at codon start position in amino acid mode - skip drawing
               continue;
@@ -2997,12 +3144,34 @@
             continue; // Skip positions outside valid codon range
           }
         } else if (aminoAcidMode && translatedCons) {
-          // In amino acid mode, only draw at codon start positions
+          // In amino acid mode, draw amino acid centered in codon box
           const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
           if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
             ch = translatedCons.charAt(aaPos);
             base = ch.toUpperCase();
             color = AA_COLORS[base] || DEFAULT_AA_COLOR;
+            
+            // Calculate center position across all 3 codon nucleotides
+            const codonEnd = c + 2;
+            const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const codonRightPos = (colOffsets && typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((colOffsets && typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const codonWidth = codonRightPos - codonLeftPos;
+            const xCenter = codonLeftPos + (codonWidth / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            
+            // Draw the amino acid centered in the codon box
+            if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+              ctx.fillStyle = color;
+              const blockTop = CONSENSUS_TOP_PAD;
+              const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+              const w = Math.max(1, codonWidth);
+              ctx.fillRect(xCenter - w/2, blockTop, w, blockH);
+            } else {
+              ctx.fillStyle = color;
+              // Center the text horizontally
+              const textWidth = CHAR_WIDTH;
+              ctx.fillText(ch, xCenter - textWidth / 2, baselineY);
+            }
+            continue; // Skip the next two positions of the codon
           } else {
             continue; // Skip non-codon-start positions
           }
