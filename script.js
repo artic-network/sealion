@@ -957,7 +957,7 @@
     });
   });
 
-  // Amino acid mode controls
+  // Show mode controls
   const nucleotideModeBtn = document.getElementById('nucleotide-mode-btn');
   if (nucleotideModeBtn) {
     nucleotideModeBtn.addEventListener('click', () => {
@@ -970,36 +970,124 @@
     });
   }
 
-  const readingFrameBtns = document.querySelectorAll('.reading-frame-btn');
-  readingFrameBtns.forEach(btn => {
+  const aminoAcidModeBtn = document.getElementById('amino-acid-mode-btn');
+  if (aminoAcidModeBtn) {
+    aminoAcidModeBtn.addEventListener('click', () => {
+      if (!viewer) return;
+      viewer.aminoAcidMode = true;
+      viewer.codonMode = false;
+      viewer.cancelRender();
+      viewer.scheduleRender();
+      console.info(`Switched to amino acid mode, reading frame ${viewer.readingFrame}`);
+    });
+  }
+
+  const codonModeBtn = document.getElementById('codon-mode-btn');
+  if (codonModeBtn) {
+    codonModeBtn.addEventListener('click', () => {
+      if (!viewer) return;
+      viewer.aminoAcidMode = false;
+      viewer.codonMode = true;
+      viewer.cancelRender();
+      viewer.scheduleRender();
+      console.info(`Switched to codon mode, reading frame ${viewer.readingFrame}`);
+    });
+  }
+
+  // Function to update reading frame UI
+  function updateReadingFrameUI() {
+    if (!viewer) return;
+    const readingFrameSelectors = document.querySelectorAll('.reading-frame-selector');
+    readingFrameSelectors.forEach(btn => {
+      const frame = parseInt(btn.getAttribute('data-frame'), 10);
+      const icon = btn.querySelector('i');
+      if (frame === viewer.readingFrame) {
+        icon.className = 'bi bi-check-circle-fill';
+      } else {
+        icon.className = `bi bi-${frame}-circle`;
+      }
+    });
+  }
+
+  // Reading frame selector
+  const readingFrameSelectors = document.querySelectorAll('.reading-frame-selector');
+  readingFrameSelectors.forEach(btn => {
     btn.addEventListener('click', () => {
       if (!viewer) return;
       const frame = parseInt(btn.getAttribute('data-frame'), 10);
       if (frame >= 1 && frame <= 3) {
-        viewer.aminoAcidMode = true;
-        viewer.codonMode = false;
         viewer.readingFrame = frame;
+        updateReadingFrameUI();
         viewer.cancelRender();
         viewer.scheduleRender();
-        console.info(`Switched to amino acid mode, reading frame ${frame}`);
+        const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+        console.info(`Set reading frame ${frame} (${mode} mode)`);
       }
     });
   });
+  
+  // Initialize reading frame UI
+  updateReadingFrameUI();
 
-  const codonFrameBtns = document.querySelectorAll('.codon-frame-btn');
-  codonFrameBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      if (!viewer) return;
-      const frame = parseInt(btn.getAttribute('data-frame'), 10);
-      if (frame >= 1 && frame <= 3) {
+  // Keyboard shortcuts for mode switching
+  document.addEventListener('keydown', (e) => {
+    if (!viewer) return;
+    
+    // Check for Command key (Mac) or Ctrl key (Windows/Linux)
+    if (!e.metaKey && !e.ctrlKey) return;
+    
+    // Command/Ctrl + \ to cycle through nucleotide → codon → amino acid modes
+    if (e.key === '\\') {
+      e.preventDefault();
+      
+      if (!viewer.aminoAcidMode && !viewer.codonMode) {
+        // Currently in nucleotide mode, switch to codon mode
         viewer.aminoAcidMode = false;
         viewer.codonMode = true;
-        viewer.readingFrame = frame;
         viewer.cancelRender();
         viewer.scheduleRender();
-        console.info(`Switched to codon mode, reading frame ${frame}`);
+        console.info(`Switched to codon mode, reading frame ${viewer.readingFrame}`);
+      } else if (viewer.codonMode) {
+        // Currently in codon mode, switch to amino acid mode
+        viewer.aminoAcidMode = true;
+        viewer.codonMode = false;
+        viewer.cancelRender();
+        viewer.scheduleRender();
+        console.info(`Switched to amino acid mode, reading frame ${viewer.readingFrame}`);
+      } else {
+        // Currently in amino acid mode, switch to nucleotide mode
+        viewer.aminoAcidMode = false;
+        viewer.codonMode = false;
+        viewer.cancelRender();
+        viewer.scheduleRender();
+        console.info('Switched to nucleotide mode');
       }
-    });
+      return;
+    }
+    
+    // Command/Ctrl + ] to shift up a reading frame (1→2→3→1)
+    if (e.key === ']') {
+      e.preventDefault();
+      viewer.readingFrame = (viewer.readingFrame % 3) + 1;
+      updateReadingFrameUI();
+      viewer.cancelRender();
+      viewer.scheduleRender();
+      const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+      console.info(`Shifted to reading frame ${viewer.readingFrame} (${mode} mode)`);
+      return;
+    }
+    
+    // Command/Ctrl + [ to shift down a reading frame (3→2→1→3)
+    if (e.key === '[') {
+      e.preventDefault();
+      viewer.readingFrame = viewer.readingFrame === 1 ? 3 : viewer.readingFrame - 1;
+      updateReadingFrameUI();
+      viewer.cancelRender();
+      viewer.scheduleRender();
+      const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+      console.info(`Shifted to reading frame ${viewer.readingFrame} (${mode} mode)`);
+      return;
+    }
   });
 
   // Sort by original order button

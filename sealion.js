@@ -1594,8 +1594,8 @@
         const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : FONT);
         const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
         try {
-          if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const metrics = ctx.measureText('Mg'); if (metrics && typeof metrics.actualBoundingBoxAscent === 'number') { const ascent = metrics.actualBoundingBoxAscent; const descent = metrics.actualBoundingBoxDescent || 0; this.seqTextVertOffset = Math.round((ROW_HEIGHT - (ascent + descent)) / 2 + ascent); } else { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2); } }
-        } catch (e) { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2); }
+          if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const metrics = ctx.measureText('Mg'); if (metrics && typeof metrics.actualBoundingBoxAscent === 'number') { const ascent = metrics.actualBoundingBoxAscent; const descent = metrics.actualBoundingBoxDescent || 0; this.seqTextVertOffset = Math.round((ROW_HEIGHT - (ascent + descent)) / 2 + ascent) + 1; } else { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2) + 1; } }
+        } catch (e) { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2) + 1; }
         try {
           if (labelCanvas) { const ctx2 = labelCanvas.getContext('2d'); ctx2.font = LABEL_FONT; const metrics2 = ctx2.measureText('Mg'); if (metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number') { const ascent2 = metrics2.actualBoundingBoxAscent; const descent2 = metrics2.actualBoundingBoxDescent || 0; this.labelTextVertOffset = Math.round((ROW_HEIGHT - (ascent2 + descent2)) / 2 + ascent2); } else { this.labelTextVertOffset = Math.round(ROW_HEIGHT / 2); } }
         } catch (e) { this.labelTextVertOffset = Math.round(ROW_HEIGHT / 2); }
@@ -2953,7 +2953,8 @@
               // Calculate center position across all 3 codon nucleotides
               const codonEnd = c + 2;
               const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-              const codonRightPos = (colOffsets[codonEnd + 1] !== undefined) ? colOffsets[codonEnd + 1] : ((colOffsets[codonEnd] !== undefined ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+              const codonEndLeftPos = (colOffsets[codonEnd] !== undefined) ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+              const codonRightPos = codonEndLeftPos + CHAR_WIDTH + EXPANDED_RIGHT_PAD;
               const codonWidth = codonRightPos - codonLeftPos;
               const xCenter = codonLeftPos + (codonWidth / 2) - visible.scrollLeft;
               
@@ -2975,8 +2976,32 @@
                   ctx.fillRect(xCenter - w/2, topQ, w, hQ);
                 }
               } else {
+                // Draw rounded rectangle background with gaps
+                const hGap = 0.75; // Horizontal gap in pixels
+                const vGap = 0.75; // Vertical gap in pixels (smaller)
+                const bgWidth = codonWidth - (hGap * 2);
+                const bgHeight = ROW_HEIGHT - (vGap * 2);
+                const bgX = xCenter - bgWidth / 2;
+                const bgY = rawRowY + vGap;
+                const radius = 3; // Corner radius for rounded rectangle
+                
+                // Create translucent version of color
+                const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+                let bgColor = color;
+                if (rgbMatch) {
+                  const r = parseInt(rgbMatch[1], 16);
+                  const g = parseInt(rgbMatch[2], 16);
+                  const b = parseInt(rgbMatch[3], 16);
+                  bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
+                }
+                
+                ctx.fillStyle = bgColor;
+                ctx.beginPath();
+                ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
+                ctx.fill();
+                
+                // Draw the text on top
                 ctx.fillStyle = color;
-                // Center the text horizontally
                 const textWidth = CHAR_WIDTH;
                 ctx.fillText(ch, xCenter - textWidth / 2, y);
               }
@@ -3188,7 +3213,8 @@
             // Calculate center position across all 3 codon nucleotides
             const codonEnd = c + 2;
             const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const codonRightPos = (colOffsets && typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((colOffsets && typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const codonEndLeftPos = (colOffsets && typeof colOffsets[codonEnd] !== 'undefined') ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const codonRightPos = codonEndLeftPos + CHAR_WIDTH + EXPANDED_RIGHT_PAD;
             const codonWidth = codonRightPos - codonLeftPos;
             const xCenter = codonLeftPos + (codonWidth / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
             
@@ -3200,8 +3226,32 @@
               const w = Math.max(1, codonWidth);
               ctx.fillRect(xCenter - w/2, blockTop, w, blockH);
             } else {
+              // Draw rounded rectangle background with gaps
+              const hGap = 0.75; // Horizontal gap in pixels
+              const vGap = 0.75; // Vertical gap in pixels (smaller)
+              const bgWidth = codonWidth - (hGap * 2);
+              const bgHeight = cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD) - (vGap * 2);
+              const bgX = xCenter - bgWidth / 2;
+              const bgY = CONSENSUS_TOP_PAD + vGap;
+              const radius = 3; // Corner radius for rounded rectangle
+              
+              // Create translucent version of color
+              const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+              let bgColor = color;
+              if (rgbMatch) {
+                const r = parseInt(rgbMatch[1], 16);
+                const g = parseInt(rgbMatch[2], 16);
+                const b = parseInt(rgbMatch[3], 16);
+                bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
+              }
+              
+              ctx.fillStyle = bgColor;
+              ctx.beginPath();
+              ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
+              ctx.fill();
+              
+              // Draw the text on top
               ctx.fillStyle = color;
-              // Center the text horizontally
               const textWidth = CHAR_WIDTH;
               ctx.fillText(ch, xCenter - textWidth / 2, baselineY);
             }
