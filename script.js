@@ -253,6 +253,15 @@
         console.warn('Failed to load nucleotide color scheme preference:', e);
       }
 
+      // Load saved amino acid color scheme preference from localStorage
+      try {
+        if (typeof viewer.loadAminoAcidColorScheme === 'function') {
+          viewer.loadAminoAcidColorScheme();
+        }
+      } catch (e) {
+        console.warn('Failed to load amino acid color scheme preference:', e);
+      }
+
       // Load saved tags from localStorage
       if (typeof viewer.loadTags === 'function') {
         viewer.loadTags();
@@ -932,6 +941,18 @@
       if (viewer && typeof viewer.setNucleotideColorScheme === 'function') {
         viewer.setNucleotideColorScheme(scheme);
         console.info(`Nucleotide color scheme changed to: ${scheme}`);
+      }
+    });
+  });
+
+  // Amino acid color scheme buttons
+  const aminoAcidColorSchemeBtns = document.querySelectorAll('.amino-acid-color-scheme-btn');
+  aminoAcidColorSchemeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const scheme = btn.getAttribute('data-scheme');
+      if (viewer && typeof viewer.setAminoAcidColorScheme === 'function') {
+        viewer.setAminoAcidColorScheme(scheme);
+        console.info(`Amino acid color scheme changed to: ${scheme}`);
       }
     });
   });

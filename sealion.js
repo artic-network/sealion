@@ -2475,12 +2475,39 @@
         headerCtx.save();
         headerCtx.globalAlpha = 0.14;
         headerCtx.fillStyle = this.HEADER_SELECTION;
-        for (const c of selectedCols) {
-          if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
-          const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-          const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD) + CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD)));
-          headerCtx.fillRect(x, 0, w, headerH);
+        
+        // In amino acid or codon mode, group selections by codon and draw entire codon boxes
+        if (this.aminoAcidMode || this.codonMode) {
+          const drawnCodons = new Set();
+          
+          for (const c of selectedCols) {
+            if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
+            
+            // Find the codon this column belongs to
+            const codonStart = this.snapToCodonStart(c);
+            
+            // Only draw each codon once
+            if (drawnCodons.has(codonStart)) continue;
+            drawnCodons.add(codonStart);
+            
+            // Draw the entire codon box
+            const codonEnd = codonStart + 2;
+            const leftOff = (colOffsets && typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const rightOff = (colOffsets && typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((colOffsets && typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = rightOff - leftOff;
+            headerCtx.fillRect(x, 0, w, headerH);
+          }
+        } else {
+          // Normal mode: draw each column individually
+          for (const c of selectedCols) {
+            if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
+            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD) + CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD)));
+            headerCtx.fillRect(x, 0, w, headerH);
+          }
         }
+        
         headerCtx.restore();
       } catch (e) { /* ignore overlay errors */ }
     }
@@ -3008,8 +3035,15 @@
         try {
           const rlo = Math.max(0, Math.min(rectStartRow, rectEndRow));
           const rhi = Math.min(rowCount - 1, Math.max(rectStartRow, rectEndRow));
-          const clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
-          const chi = Math.min(maxSeqLen - 1, Math.max(rectStartCol, rectEndCol));
+          let clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
+          let chi = Math.min(maxSeqLen - 1, Math.max(rectStartCol, rectEndCol));
+          
+          // Snap visual rectangle to codon boundaries in amino acid or codon mode
+          if (aminoAcidMode || codonMode) {
+            clo = this.snapToCodonStart(clo);
+            chi = this.snapToCodonEnd(chi);
+          }
+          
           if (rhi >= visible.firstRow && rlo <= visible.lastRow && chi >= visible.rawFirstCol && clo <= visible.rawLastCol) {
             const topY = (rlo - visible.firstRow) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
             const bottomY = (rhi - visible.firstRow + 1) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
@@ -3259,14 +3293,42 @@
         ctx.save();
         ctx.globalAlpha = 0.14;
         ctx.fillStyle = this.SEQ_COL_SELECTION;
-        for (const c of selectedCols) {
-          if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
-          const leftOff = (typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-          const rightOff = (typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (leftOff + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
-          const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-          const w = Math.max(1, rightOff - leftOff);
-          ctx.fillRect(x, 0, w, cssH);
+        
+        // In amino acid or codon mode, group selections by codon and draw entire codon boxes
+        if (this.aminoAcidMode || this.codonMode) {
+          const frame = this.readingFrame || 1;
+          const drawnCodons = new Set();
+          
+          for (const c of selectedCols) {
+            if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
+            
+            // Find the codon this column belongs to
+            const codonStart = this.snapToCodonStart(c);
+            
+            // Only draw each codon once
+            if (drawnCodons.has(codonStart)) continue;
+            drawnCodons.add(codonStart);
+            
+            // Draw the entire codon box
+            const codonEnd = codonStart + 2;
+            const leftOff = (typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const rightOff = (typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = Math.max(1, rightOff - leftOff);
+            ctx.fillRect(x, 0, w, cssH);
+          }
+        } else {
+          // Normal mode: draw each column individually
+          for (const c of selectedCols) {
+            if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
+            const leftOff = (typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+            const rightOff = (typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (leftOff + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = Math.max(1, rightOff - leftOff);
+            ctx.fillRect(x, 0, w, cssH);
+          }
         }
+        
         ctx.restore();
       } catch (e) { /* tolerate overlay errors */ }
     }
@@ -4270,6 +4332,15 @@
           document.documentElement.classList.remove('dark-mode');
         }
         
+        // Update amino acid colors for current scheme
+        if (this.aminoAcidColorScheme) {
+          const scheme = SealionViewer.AMINO_ACID_COLOR_SCHEMES[this.aminoAcidColorScheme];
+          if (scheme) {
+            this.AA_COLORS = this.darkMode ? { ...scheme.darkColors } : { ...scheme.lightColors };
+            this.DEFAULT_AA_COLOR = this.darkMode ? scheme.darkDefault : scheme.lightDefault;
+          }
+        }
+        
         // Save dark mode preference to localStorage
         try {
           localStorage.setItem('sealion_dark_mode', this.darkMode ? 'true' : 'false');
@@ -4682,6 +4753,50 @@
       }
     }
 
+    // Set amino acid color scheme
+    setAminoAcidColorScheme(schemeName) {
+      try {
+        const schemes = SealionViewer.AMINO_ACID_COLOR_SCHEMES;
+        if (!schemes[schemeName]) {
+          console.warn('Unknown amino acid color scheme:', schemeName);
+          return;
+        }
+        
+        this.aminoAcidColorScheme = schemeName;
+        const scheme = schemes[schemeName];
+        
+        // Set colors based on current dark mode state
+        this.AA_COLORS = this.darkMode ? { ...scheme.darkColors } : { ...scheme.lightColors };
+        this.DEFAULT_AA_COLOR = this.darkMode ? scheme.darkDefault : scheme.lightDefault;
+        
+        // Save preference to localStorage
+        try {
+          localStorage.setItem('sealion_amino_acid_color_scheme', schemeName);
+        } catch (e) {
+          console.warn('Failed to save amino acid color scheme preference:', e);
+        }
+        
+        console.info('Amino acid color scheme set to:', scheme.name);
+        if (typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+      } catch (e) {
+        console.warn('setAminoAcidColorScheme failed', e);
+      }
+    }
+
+    // Load amino acid color scheme from localStorage
+    loadAminoAcidColorScheme() {
+      try {
+        const stored = localStorage.getItem('sealion_amino_acid_color_scheme');
+        if (stored && SealionViewer.AMINO_ACID_COLOR_SCHEMES[stored]) {
+          this.setAminoAcidColorScheme(stored);
+        }
+      } catch (e) {
+        console.warn('Failed to load amino acid color scheme:', e);
+      }
+    }
+
     // Expose class on window for easy staged consumption from existing code.
   }
 
@@ -4802,6 +4917,7 @@
     aminoAcidMode: false,
     codonMode: false,
     readingFrame: 1,
+    aminoAcidColorScheme: 'zappo',
     // Amino acid color scheme (Zappo scheme - grouped by chemical properties)
     // Optimized for high contrast on light backgrounds
     AA_COLORS: {
@@ -4940,6 +5056,100 @@
     'verity': {
       name: 'Verity',
       colors: { 'A': '#FF1493', 'C': '#FF69B4', 'G': '#DB7093', 'T': '#C71585' }
+    }
+  };
+
+  // Amino acid color schemes
+  SealionViewer.AMINO_ACID_COLOR_SCHEMES = {
+    'zappo': {
+      name: 'Zappo',
+      lightColors: {
+        // Hydrophobic/aliphatic (pink)
+        'A': '#e91e63', 'I': '#e91e63', 'L': '#e91e63', 'M': '#e91e63', 'V': '#e91e63',
+        // Aromatic (orange)
+        'F': '#ff6f00', 'W': '#ff6f00', 'Y': '#ff6f00',
+        // Positive (blue)
+        'K': '#2962ff', 'R': '#2962ff', 'H': '#2962ff',
+        // Negative (red)
+        'D': '#d50000', 'E': '#d50000',
+        // Hydrophilic (green)
+        'N': '#00c853', 'Q': '#00c853', 'S': '#00c853', 'T': '#00c853',
+        // Special conformational (magenta)
+        'G': '#aa00ff', 'P': '#aa00ff',
+        // Cysteine (yellow/gold)
+        'C': '#ffd600',
+        // Stop codon (black)
+        '*': '#000000',
+        // Unknown (grey)
+        'X': '#757575'
+      },
+      darkColors: {
+        // Hydrophobic/aliphatic (bright pink)
+        'A': '#ff80ab', 'I': '#ff80ab', 'L': '#ff80ab', 'M': '#ff80ab', 'V': '#ff80ab',
+        // Aromatic (bright orange)
+        'F': '#ffab40', 'W': '#ffab40', 'Y': '#ffab40',
+        // Positive (bright blue)
+        'K': '#448aff', 'R': '#448aff', 'H': '#448aff',
+        // Negative (bright red)
+        'D': '#ff5252', 'E': '#ff5252',
+        // Hydrophilic (bright green)
+        'N': '#69f0ae', 'Q': '#69f0ae', 'S': '#69f0ae', 'T': '#69f0ae',
+        // Special conformational (bright magenta)
+        'G': '#e040fb', 'P': '#e040fb',
+        // Cysteine (bright yellow)
+        'C': '#ffea00',
+        // Stop codon (white)
+        '*': '#ffffff',
+        // Unknown (light grey)
+        'X': '#bdbdbd'
+      },
+      lightDefault: '#757575',
+      darkDefault: '#bdbdbd'
+    },
+    'wes': {
+      name: 'Wes Anderson',
+      lightColors: {
+        // Hydrophobic/aliphatic (Moonrise Kingdom yellow)
+        'A': '#F4B942', 'I': '#F4B942', 'L': '#F4B942', 'M': '#F4B942', 'V': '#F4B942',
+        // Aromatic (Grand Budapest pink/coral)
+        'F': '#DD7373', 'W': '#DD7373', 'Y': '#DD7373',
+        // Positive (Bottle Rocket teal)
+        'K': '#0B775E', 'R': '#0B775E', 'H': '#0B775E',
+        // Negative (Royal Tenenbaums red)
+        'D': '#C23B22', 'E': '#C23B22',
+        // Hydrophilic (French Dispatch blue)
+        'N': '#45b7d1', 'Q': '#45b7d1', 'S': '#45b7d1', 'T': '#45b7d1',
+        // Special conformational (Darjeeling purple)
+        'G': '#35274A', 'P': '#35274A',
+        // Cysteine (Isle of Dogs mustard)
+        'C': '#E3B448',
+        // Stop codon (black)
+        '*': '#2C1810',
+        // Unknown (grey)
+        'X': '#8B7E74'
+      },
+      darkColors: {
+        // Hydrophobic/aliphatic (bright Moonrise yellow)
+        'A': '#FFD369', 'I': '#FFD369', 'L': '#FFD369', 'M': '#FFD369', 'V': '#FFD369',
+        // Aromatic (bright coral/pink)
+        'F': '#FF9999', 'W': '#FF9999', 'Y': '#FF9999',
+        // Positive (bright teal)
+        'K': '#1ABC9C', 'R': '#1ABC9C', 'H': '#1ABC9C',
+        // Negative (bright red)
+        'D': '#E74C3C', 'E': '#E74C3C',
+        // Hydrophilic (bright sky blue)
+        'N': '#87CEEB', 'Q': '#87CEEB', 'S': '#87CEEB', 'T': '#87CEEB',
+        // Special conformational (lavender)
+        'G': '#B19CD9', 'P': '#B19CD9',
+        // Cysteine (golden)
+        'C': '#F4D03F',
+        // Stop codon (light cream)
+        '*': '#F5E6D3',
+        // Unknown (light grey)
+        'X': '#BDC3C7'
+      },
+      lightDefault: '#8B7E74',
+      darkDefault: '#BDC3C7'
     }
   };
 
