@@ -169,8 +169,8 @@
             // Scroll to first match if any
             if (this.selectedRows.size > 0 && this.scroller) {
               const firstMatch = Math.min(...Array.from(this.selectedRows));
-              const ROW_HEIGHT = this.ROW_HEIGHT || 20;
-              const targetTop = firstMatch * ROW_HEIGHT;
+              const rowHeight = this.ROW_HEIGHT || 20;
+              const targetTop = firstMatch * rowHeight;
               this.scroller.scrollTop = targetTop;
             }
             
@@ -179,114 +179,17 @@
         });
       }
 
-      // Merge provided options with class defaults and set instance-level
-      // visual constants. This centralizes fonts, sizes, colours and other
-      // appearance-related settings so they can be passed from the app
-      // (script.js) when constructing the viewer.
-      try {
-        const cfg = Object.assign({}, SealionViewer.DEFAULTS || {}, (options || {}));
-        // fonts & sizes
-        this.FONT = cfg.FONT;
-        this.HEADER_FONT = cfg.HEADER_FONT;
-        this.FONT_SIZE = cfg.FONT_SIZE;
-        this.fontSize = cfg.FONT_SIZE; // Current sequence font size
-        this.labelFontSize = cfg.FONT_SIZE; // Current label font size
-        this.initialLabelFontSize = cfg.FONT_SIZE; // Track initial label font size for scaling logic
-        this.labelFont = cfg.FONT; // Label font string
-        this.LABEL_WIDTH = cfg.LABEL_WIDTH;
-        this.ROW_HEIGHT = cfg.ROW_HEIGHT;
-        this.ROW_PADDING = cfg.ROW_PADDING;
-        this.CONSENSUS_TOP_PAD = cfg.CONSENSUS_TOP_PAD;
-        this.CONSENSUS_BOTTOM_PAD = cfg.CONSENSUS_BOTTOM_PAD;
-        this.OVERVIEW_TOP_PAD = cfg.OVERVIEW_TOP_PAD;
-        this.OVERVIEW_BOTTOM_PAD = cfg.OVERVIEW_BOTTOM_PAD;
-        // layout/padding
-        this.EXPANDED_RIGHT_PAD = cfg.EXPANDED_RIGHT_PAD;
-        this.REDUCED_COL_WIDTH = cfg.REDUCED_COL_WIDTH;
-        this.HIDDEN_MARKER_WIDTH = cfg.HIDDEN_MARKER_WIDTH;
-        this.HIDDEN_MARKER_COLOR = cfg.HIDDEN_MARKER_COLOR;
-        this.COMPRESSED_CELL_VPAD = cfg.COMPRESSED_CELL_VPAD;
-        // rendering/behaviour
-        this.BUFFER_ROWS = cfg.BUFFER_ROWS;
-        this.BUFFER_COLS = cfg.BUFFER_COLS;
-        this.MASK_ANIM_MS = cfg.MASK_ANIM_MS;
-        // colours
-        this.BASE_COLORS = cfg.BASE_COLORS;
-        this.DEFAULT_BASE_COLOR = cfg.DEFAULT_BASE_COLOR;
-        this.PALE_REF_COLOR = cfg.PALE_REF_COLOR;
-        this.REF_ACCENT = cfg.REF_ACCENT;
-        // canvas colors
-        this.OVERVIEW_BG = cfg.OVERVIEW_BG;
-        this.OVERVIEW_EXPANDED_COL = cfg.OVERVIEW_EXPANDED_COL;
-        this.OVERVIEW_COLLAPSED_COL = cfg.OVERVIEW_COLLAPSED_COL;
-        this.OVERVIEW_VIEWPORT = cfg.OVERVIEW_VIEWPORT;
-        this.OVERVIEW_DIFF_COL = cfg.OVERVIEW_DIFF_COL || SealionViewer.DEFAULTS.OVERVIEW_DIFF_COL;
-        this.HEADER_BG = cfg.HEADER_BG;
-        this.HEADER_TEXT = cfg.HEADER_TEXT;
-        this.HEADER_STROKE = cfg.HEADER_STROKE;
-        this.HEADER_SELECTION = cfg.HEADER_SELECTION;
-        this.CONSENSUS_BG = cfg.CONSENSUS_BG;
-        this.CONSENSUS_SEPARATOR = cfg.CONSENSUS_SEPARATOR;
-        this.LABELS_BG = cfg.LABELS_BG;
-        this.LABELS_TEXT = cfg.LABELS_TEXT;
-        this.LABELS_HEADER_TEXT = cfg.LABELS_HEADER_TEXT;
-        // index styling
-        this.INDEX_FONT_STYLE = cfg.INDEX_FONT_STYLE;
-        this.INDEX_COLOR = cfg.INDEX_COLOR;
-        this.INDEX_RIGHT_ALIGN_POS = cfg.INDEX_RIGHT_ALIGN_POS;
-        this.LABEL_START_POS = cfg.LABEL_START_POS;
-        this.SEQ_ROW_SELECTION = cfg.SEQ_ROW_SELECTION;
-        this.SEQ_EVEN_ROW = cfg.SEQ_EVEN_ROW;
-        this.SEQ_ODD_ROW = cfg.SEQ_ODD_ROW;
-        this.SEQ_COL_SELECTION = cfg.SEQ_COL_SELECTION;
-        // initial mask preference
-        this.maskEnabled = (typeof cfg.MASK_ENABLED === 'boolean') ? cfg.MASK_ENABLED : this.maskEnabled;
-        // snap-to-character scrolling preference
-        this.snapEnabled = (typeof cfg.SNAP_ENABLED === 'boolean') ? cfg.SNAP_ENABLED : true;
-        // amino acid mode settings
-        this.aminoAcidMode = (typeof cfg.AMINO_ACID_MODE === 'boolean') ? cfg.AMINO_ACID_MODE : false;
-        this.codonMode = (typeof cfg.CODON_MODE === 'boolean') ? cfg.CODON_MODE : false;
-        this.readingFrame = (typeof cfg.READING_FRAME === 'number') ? cfg.READING_FRAME : 1;
-        
-        // Initialize color schemes
-        this.nucleotideColorScheme = cfg.NUCLEOTIDE_COLOR_SCHEME || SealionViewer.DEFAULTS.NUCLEOTIDE_COLOR_SCHEME;
-        this.aminoAcidColorScheme = cfg.AMINO_ACID_COLOR_SCHEME || SealionViewer.DEFAULTS.AMINO_ACID_COLOR_SCHEME;
-        
-        // Set initial nucleotide colors based on scheme
-        const nucScheme = SealionViewer.NUCLEOTIDE_COLOR_SCHEMES[this.nucleotideColorScheme];
-        if (nucScheme) {
-          this.BASE_COLORS = { ...nucScheme.lightColors };
-          this.DEFAULT_BASE_COLOR = nucScheme.lightDefault;
-        }
-        
-        // Set initial amino acid colors based on scheme
-        const aaScheme = SealionViewer.AMINO_ACID_COLOR_SCHEMES[this.aminoAcidColorScheme];
-        if (aaScheme) {
-          this.AA_COLORS = { ...aaScheme.lightColors };
-          this.DEFAULT_AA_COLOR = aaScheme.lightDefault;
-        }
-        
-        // label tagging system
-        this.TAG_COLORS = cfg.TAG_COLORS || SealionViewer.DEFAULTS.TAG_COLORS;
-        this.TAG_NAMES = cfg.TAG_NAMES || SealionViewer.DEFAULTS.TAG_NAMES;
-        this.TAG_BACKGROUND_ALPHA = (typeof cfg.TAG_BACKGROUND_ALPHA === 'number') ? cfg.TAG_BACKGROUND_ALPHA : 0.25;
-        this.TAG_SEQ_BACKGROUND_ALPHA = (typeof cfg.TAG_SEQ_BACKGROUND_ALPHA === 'number') ? cfg.TAG_SEQ_BACKGROUND_ALPHA : 0.15;
-        this.TAG_TEXT_COLOR = (typeof cfg.TAG_TEXT_COLOR === 'boolean') ? cfg.TAG_TEXT_COLOR : true;
-        this.labelTags = new Map(); // Map of label string -> tag color index
-        // site bookmark system
-        this.BOOKMARK_COLORS = cfg.BOOKMARK_COLORS || SealionViewer.DEFAULTS.BOOKMARK_COLORS;
-        this.BOOKMARK_NAMES = cfg.BOOKMARK_NAMES || SealionViewer.DEFAULTS.BOOKMARK_NAMES;
-        this.BOOKMARK_ALPHA = (typeof cfg.BOOKMARK_ALPHA === 'number') ? cfg.BOOKMARK_ALPHA : 0.3;
-        this.BOOKMARK_COL_ALPHA = (typeof cfg.BOOKMARK_COL_ALPHA === 'number') ? cfg.BOOKMARK_COL_ALPHA : 0.15;
-        this.siteBookmarks = new Map(); // Map of column index -> bookmark color index
-        // overview caching for performance
-        this._overviewCache = null; // cached canvas for overview content (bars, differences, bookmarks)
-        this._overviewCacheInvalid = true; // flag to trigger cache rebuild
-        this._overviewCacheParams = null; // parameters used to build the cache
-        // dark mode
-        this.darkMode = (typeof cfg.darkMode === 'boolean') ? cfg.darkMode : false;
-        this._lightModeColors = {}; // store original light mode colors
-      } catch (_) { }
+      // Initialize collections that should not be reset by setOptions
+      this.labelTags = new Map(); // Map of label string -> tag color index
+      this.siteBookmarks = new Map(); // Map of column index -> bookmark color index
+      this._overviewCache = null; // cached canvas for overview content (bars, differences, bookmarks)
+      this._overviewCacheInvalid = true; // flag to trigger cache rebuild
+      this._overviewCacheParams = null; // parameters used to build the cache
+      this._lightModeColors = {}; // store original light mode colors
+
+      // Apply defaults first, then override with provided options
+      this.setOptions(SealionViewer.DEFAULTS);
+      if (options) this.setOptions(options);
 
       // Keep canvases sized when the container or scroller change size.
       try {
@@ -311,6 +214,129 @@
         try { doResize(); } catch (_) { }
       } catch (_) { }
 
+    }
+
+    // Set or update options for this viewer instance. This method allows
+    // configuring visual constants, colors, fonts, and other settings.
+    // Can be called after construction to change specific options.
+    setOptions(options) {
+      if (!options) return;
+      
+      try {
+        // fonts & sizes
+        if (typeof options.FONT !== 'undefined') this.FONT = options.FONT;
+        if (typeof options.HEADER_FONT !== 'undefined') this.HEADER_FONT = options.HEADER_FONT;
+        if (typeof options.FONT_SIZE !== 'undefined') {
+          this.FONT_SIZE = options.FONT_SIZE;
+          this.fontSize = options.FONT_SIZE; // Current sequence font size
+          this.labelFontSize = options.FONT_SIZE; // Current label font size
+          this.initialLabelFontSize = options.FONT_SIZE; // Track initial label font size for scaling logic
+        }
+        if (typeof options.FONT !== 'undefined') this.labelFont = options.FONT; // Label font string
+        if (typeof options.LABEL_WIDTH !== 'undefined') this.LABEL_WIDTH = options.LABEL_WIDTH;
+        if (typeof options.ROW_HEIGHT !== 'undefined') this.ROW_HEIGHT = options.ROW_HEIGHT;
+        if (typeof options.ROW_PADDING !== 'undefined') this.ROW_PADDING = options.ROW_PADDING;
+        if (typeof options.CONSENSUS_TOP_PAD !== 'undefined') this.CONSENSUS_TOP_PAD = options.CONSENSUS_TOP_PAD;
+        if (typeof options.CONSENSUS_BOTTOM_PAD !== 'undefined') this.CONSENSUS_BOTTOM_PAD = options.CONSENSUS_BOTTOM_PAD;
+        if (typeof options.OVERVIEW_TOP_PAD !== 'undefined') this.OVERVIEW_TOP_PAD = options.OVERVIEW_TOP_PAD;
+        if (typeof options.OVERVIEW_BOTTOM_PAD !== 'undefined') this.OVERVIEW_BOTTOM_PAD = options.OVERVIEW_BOTTOM_PAD;
+        
+        // layout/padding
+        if (typeof options.EXPANDED_RIGHT_PAD !== 'undefined') this.EXPANDED_RIGHT_PAD = options.EXPANDED_RIGHT_PAD;
+        if (typeof options.REDUCED_COL_WIDTH !== 'undefined') this.REDUCED_COL_WIDTH = options.REDUCED_COL_WIDTH;
+        if (typeof options.HIDDEN_MARKER_WIDTH !== 'undefined') this.HIDDEN_MARKER_WIDTH = options.HIDDEN_MARKER_WIDTH;
+        if (typeof options.HIDDEN_MARKER_COLOR !== 'undefined') this.HIDDEN_MARKER_COLOR = options.HIDDEN_MARKER_COLOR;
+        if (typeof options.COMPRESSED_CELL_VPAD !== 'undefined') this.COMPRESSED_CELL_VPAD = options.COMPRESSED_CELL_VPAD;
+        
+        // rendering/behaviour
+        if (typeof options.BUFFER_ROWS !== 'undefined') this.BUFFER_ROWS = options.BUFFER_ROWS;
+        if (typeof options.BUFFER_COLS !== 'undefined') this.BUFFER_COLS = options.BUFFER_COLS;
+        if (typeof options.MASK_ANIM_MS !== 'undefined') this.MASK_ANIM_MS = options.MASK_ANIM_MS;
+        
+        // colours
+        if (typeof options.BASE_COLORS !== 'undefined') this.BASE_COLORS = options.BASE_COLORS;
+        if (typeof options.DEFAULT_BASE_COLOR !== 'undefined') this.DEFAULT_BASE_COLOR = options.DEFAULT_BASE_COLOR;
+        if (typeof options.PALE_REF_COLOR !== 'undefined') this.PALE_REF_COLOR = options.PALE_REF_COLOR;
+        if (typeof options.REF_ACCENT !== 'undefined') this.REF_ACCENT = options.REF_ACCENT;
+        
+        // canvas colors
+        if (typeof options.OVERVIEW_BG !== 'undefined') this.OVERVIEW_BG = options.OVERVIEW_BG;
+        if (typeof options.OVERVIEW_EXPANDED_COL !== 'undefined') this.OVERVIEW_EXPANDED_COL = options.OVERVIEW_EXPANDED_COL;
+        if (typeof options.OVERVIEW_COLLAPSED_COL !== 'undefined') this.OVERVIEW_COLLAPSED_COL = options.OVERVIEW_COLLAPSED_COL;
+        if (typeof options.OVERVIEW_VIEWPORT !== 'undefined') this.OVERVIEW_VIEWPORT = options.OVERVIEW_VIEWPORT;
+        if (typeof options.OVERVIEW_DIFF_COL !== 'undefined') this.OVERVIEW_DIFF_COL = options.OVERVIEW_DIFF_COL;
+        if (typeof options.HEADER_BG !== 'undefined') this.HEADER_BG = options.HEADER_BG;
+        if (typeof options.HEADER_TEXT !== 'undefined') this.HEADER_TEXT = options.HEADER_TEXT;
+        if (typeof options.HEADER_STROKE !== 'undefined') this.HEADER_STROKE = options.HEADER_STROKE;
+        if (typeof options.HEADER_SELECTION !== 'undefined') this.HEADER_SELECTION = options.HEADER_SELECTION;
+        if (typeof options.CONSENSUS_BG !== 'undefined') this.CONSENSUS_BG = options.CONSENSUS_BG;
+        if (typeof options.CONSENSUS_SEPARATOR !== 'undefined') this.CONSENSUS_SEPARATOR = options.CONSENSUS_SEPARATOR;
+        if (typeof options.LABELS_BG !== 'undefined') this.LABELS_BG = options.LABELS_BG;
+        if (typeof options.LABELS_TEXT !== 'undefined') this.LABELS_TEXT = options.LABELS_TEXT;
+        if (typeof options.LABELS_HEADER_TEXT !== 'undefined') this.LABELS_HEADER_TEXT = options.LABELS_HEADER_TEXT;
+        
+        // index styling
+        if (typeof options.INDEX_FONT_STYLE !== 'undefined') this.INDEX_FONT_STYLE = options.INDEX_FONT_STYLE;
+        if (typeof options.INDEX_COLOR !== 'undefined') this.INDEX_COLOR = options.INDEX_COLOR;
+        if (typeof options.INDEX_RIGHT_ALIGN_POS !== 'undefined') this.INDEX_RIGHT_ALIGN_POS = options.INDEX_RIGHT_ALIGN_POS;
+        if (typeof options.LABEL_START_POS !== 'undefined') this.LABEL_START_POS = options.LABEL_START_POS;
+        if (typeof options.SEQ_ROW_SELECTION !== 'undefined') this.SEQ_ROW_SELECTION = options.SEQ_ROW_SELECTION;
+        if (typeof options.SEQ_EVEN_ROW !== 'undefined') this.SEQ_EVEN_ROW = options.SEQ_EVEN_ROW;
+        if (typeof options.SEQ_ODD_ROW !== 'undefined') this.SEQ_ODD_ROW = options.SEQ_ODD_ROW;
+        if (typeof options.SEQ_COL_SELECTION !== 'undefined') this.SEQ_COL_SELECTION = options.SEQ_COL_SELECTION;
+        
+        // mask preference
+        if (typeof options.MASK_ENABLED === 'boolean') this.maskEnabled = options.MASK_ENABLED;
+        
+        // snap-to-character scrolling preference
+        if (typeof options.SNAP_ENABLED === 'boolean') {
+          this.snapEnabled = options.SNAP_ENABLED;
+        } else if (typeof this.snapEnabled === 'undefined') {
+          this.snapEnabled = true;
+        }
+        
+        // amino acid mode settings
+        if (typeof options.AMINO_ACID_MODE === 'boolean') this.aminoAcidMode = options.AMINO_ACID_MODE;
+        if (typeof options.CODON_MODE === 'boolean') this.codonMode = options.CODON_MODE;
+        if (typeof options.READING_FRAME === 'number') this.readingFrame = options.READING_FRAME;
+        
+        // color schemes
+        if (typeof options.NUCLEOTIDE_COLOR_SCHEME !== 'undefined') {
+          this.nucleotideColorScheme = options.NUCLEOTIDE_COLOR_SCHEME;
+          const nucScheme = SealionViewer.NUCLEOTIDE_COLOR_SCHEMES[this.nucleotideColorScheme];
+          if (nucScheme) {
+            this.BASE_COLORS = { ...nucScheme.lightColors };
+            this.DEFAULT_BASE_COLOR = nucScheme.lightDefault;
+          }
+        }
+        
+        if (typeof options.AMINO_ACID_COLOR_SCHEME !== 'undefined') {
+          this.aminoAcidColorScheme = options.AMINO_ACID_COLOR_SCHEME;
+          const aaScheme = SealionViewer.AMINO_ACID_COLOR_SCHEMES[this.aminoAcidColorScheme];
+          if (aaScheme) {
+            this.AA_COLORS = { ...aaScheme.lightColors };
+            this.DEFAULT_AA_COLOR = aaScheme.lightDefault;
+          }
+        }
+        
+        // label tagging system
+        if (typeof options.TAG_COLORS !== 'undefined') this.TAG_COLORS = options.TAG_COLORS;
+        if (typeof options.TAG_NAMES !== 'undefined') this.TAG_NAMES = options.TAG_NAMES;
+        if (typeof options.TAG_BACKGROUND_ALPHA === 'number') this.TAG_BACKGROUND_ALPHA = options.TAG_BACKGROUND_ALPHA;
+        if (typeof options.TAG_SEQ_BACKGROUND_ALPHA === 'number') this.TAG_SEQ_BACKGROUND_ALPHA = options.TAG_SEQ_BACKGROUND_ALPHA;
+        if (typeof options.TAG_TEXT_COLOR === 'boolean') this.TAG_TEXT_COLOR = options.TAG_TEXT_COLOR;
+        
+        // site bookmark system
+        if (typeof options.BOOKMARK_COLORS !== 'undefined') this.BOOKMARK_COLORS = options.BOOKMARK_COLORS;
+        if (typeof options.BOOKMARK_NAMES !== 'undefined') this.BOOKMARK_NAMES = options.BOOKMARK_NAMES;
+        if (typeof options.BOOKMARK_ALPHA === 'number') this.BOOKMARK_ALPHA = options.BOOKMARK_ALPHA;
+        if (typeof options.BOOKMARK_COL_ALPHA === 'number') this.BOOKMARK_COL_ALPHA = options.BOOKMARK_COL_ALPHA;
+        
+        // dark mode
+        if (typeof options.darkMode === 'boolean') this.darkMode = options.darkMode;
+      } catch (e) {
+        console.warn('SealionViewer.setOptions failed', e);
+      }
     }
 
     // Set or update the alignment data for this viewer instance. This method
@@ -420,8 +446,8 @@
           let labelDragStartX = 0;
           let labelDragStartWidth = (typeof this.LABEL_WIDTH === 'number') ? this.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 260);
           let labelDragRafHandle = null;
-          const MIN_LABEL_WIDTH = 80;
-          const MAX_LABEL_WIDTH = 1200;
+          const minLabelWidth = 80;
+          const maxLabelWidth = 1200;
           labelDividerEl.addEventListener('mousedown', (e) => {
             if (e.button !== 0) return;
             isLabelDragging = true;
@@ -433,7 +459,7 @@
           window.addEventListener('mousemove', (e) => {
             if (!isLabelDragging) return;
             const dx = e.clientX - labelDragStartX;
-            let nw = Math.max(MIN_LABEL_WIDTH, Math.min(MAX_LABEL_WIDTH, Math.round(labelDragStartWidth + dx)));
+            let nw = Math.max(minLabelWidth, Math.min(maxLabelWidth, Math.round(labelDragStartWidth + dx)));
             if (nw === this.LABEL_WIDTH) return;
             try { this.LABEL_WIDTH = nw; } catch (_) { }
             try { document.documentElement.style.setProperty('--label-width', this.LABEL_WIDTH + 'px'); } catch (_) { }
@@ -898,7 +924,7 @@
         let lastClickTime = 0;
         let lastClickRow = -1;
         let lastClickCol = -1;
-        const DOUBLE_CLICK_THRESHOLD = 500; // ms
+        const doubleClickThreshold = 500; // ms
         
         seqCanvas.addEventListener('wheel', (e) => {
           if (!scroller) return;
@@ -931,7 +957,7 @@
             
             // Detect double-click by checking if this click is at the same position within threshold
             const now = Date.now();
-            const isDoubleClick = (now - lastClickTime < DOUBLE_CLICK_THRESHOLD) && 
+            const isDoubleClick = (now - lastClickTime < doubleClickThreshold) && 
                                   (row === lastClickRow) && 
                                   (col === lastClickCol);
             
@@ -1606,15 +1632,15 @@
       try {
         const seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
         const labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
-        const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
-        const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : FONT);
-        const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+        const font = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+        const labelFont = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : font);
+        const rowHeight = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
         try {
-          if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const metrics = ctx.measureText('Mg'); if (metrics && typeof metrics.actualBoundingBoxAscent === 'number') { const ascent = metrics.actualBoundingBoxAscent; const descent = metrics.actualBoundingBoxDescent || 0; this.seqTextVertOffset = Math.round((ROW_HEIGHT - (ascent + descent)) / 2 + ascent) + 1; } else { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2) + 1; } }
-        } catch (e) { this.seqTextVertOffset = Math.round(ROW_HEIGHT / 2) + 1; }
+          if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = font; const metrics = ctx.measureText('Mg'); if (metrics && typeof metrics.actualBoundingBoxAscent === 'number') { const ascent = metrics.actualBoundingBoxAscent; const descent = metrics.actualBoundingBoxDescent || 0; this.seqTextVertOffset = Math.round((rowHeight - (ascent + descent)) / 2 + ascent) + 1; } else { this.seqTextVertOffset = Math.round(rowHeight / 2) + 1; } }
+        } catch (e) { this.seqTextVertOffset = Math.round(rowHeight / 2) + 1; }
         try {
-          if (labelCanvas) { const ctx2 = labelCanvas.getContext('2d'); ctx2.font = LABEL_FONT; const metrics2 = ctx2.measureText('Mg'); if (metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number') { const ascent2 = metrics2.actualBoundingBoxAscent; const descent2 = metrics2.actualBoundingBoxDescent || 0; this.labelTextVertOffset = Math.round((ROW_HEIGHT - (ascent2 + descent2)) / 2 + ascent2); } else { this.labelTextVertOffset = Math.round(ROW_HEIGHT / 2); } }
-        } catch (e) { this.labelTextVertOffset = Math.round(ROW_HEIGHT / 2); }
+          if (labelCanvas) { const ctx2 = labelCanvas.getContext('2d'); ctx2.font = labelFont; const metrics2 = ctx2.measureText('Mg'); if (metrics2 && typeof metrics2.actualBoundingBoxAscent === 'number') { const ascent2 = metrics2.actualBoundingBoxAscent; const descent2 = metrics2.actualBoundingBoxDescent || 0; this.labelTextVertOffset = Math.round((rowHeight - (ascent2 + descent2)) / 2 + ascent2); } else { this.labelTextVertOffset = Math.round(rowHeight / 2); } }
+        } catch (e) { this.labelTextVertOffset = Math.round(rowHeight / 2); }
         try { if (window) window.seqTextVertOffset = this.seqTextVertOffset; } catch (_) { }
         try { if (window) window.labelTextVertOffset = this.labelTextVertOffset; } catch (_) { }
         return { seqTextVertOffset: this.seqTextVertOffset, labelTextVertOffset: this.labelTextVertOffset };
@@ -1629,23 +1655,23 @@
         opts = opts || {};
         const seqCanvas = this.seqCanvas || (document.getElementById ? document.getElementById('seq-canvas') : null);
         const labelCanvas = this.labelCanvas || (document.getElementById ? document.getElementById('labels-canvas') : null);
-        const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
-        const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : FONT);
+        const font = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+        const labelFont = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : ((this.labelFont) ? this.labelFont : font);
         let seqHeight = 0, labHeight = 0;
-        if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = FONT; const seqMetrics = ctx.measureText('Mg'); if (seqMetrics && typeof seqMetrics.actualBoundingBoxAscent === 'number') { seqHeight = Math.ceil((seqMetrics.actualBoundingBoxAscent || 0) + (seqMetrics.actualBoundingBoxDescent || 0)); } else { const m = FONT.match(/(\d+)px/); const px = m ? parseInt(m[1], 10) : 14; seqHeight = Math.round(px * 1.2); } }
-        if (labelCanvas) { const ctx2 = labelCanvas.getContext('2d'); ctx2.font = LABEL_FONT; const labMetrics = ctx2.measureText('Mg'); if (labMetrics && typeof labMetrics.actualBoundingBoxAscent === 'number') { labHeight = Math.ceil((labMetrics.actualBoundingBoxAscent || 0) + (labMetrics.actualBoundingBoxDescent || 0)); } else { const m2 = LABEL_FONT.match(/(\d+)px/); const px2 = m2 ? parseInt(m2[1], 10) : 14; labHeight = Math.round(px2 * 1.2); } }
+        if (seqCanvas) { const ctx = seqCanvas.getContext('2d'); ctx.font = font; const seqMetrics = ctx.measureText('Mg'); if (seqMetrics && typeof seqMetrics.actualBoundingBoxAscent === 'number') { seqHeight = Math.ceil((seqMetrics.actualBoundingBoxAscent || 0) + (seqMetrics.actualBoundingBoxDescent || 0)); } else { const m = font.match(/(\d+)px/); const px = m ? parseInt(m[1], 10) : 14; seqHeight = Math.round(px * 1.2); } }
+        if (labelCanvas) { const ctx2 = labelCanvas.getContext('2d'); ctx2.font = labelFont; const labMetrics = ctx2.measureText('Mg'); if (labMetrics && typeof labMetrics.actualBoundingBoxAscent === 'number') { labHeight = Math.ceil((labMetrics.actualBoundingBoxAscent || 0) + (labMetrics.actualBoundingBoxDescent || 0)); } else { const m2 = labelFont.match(/(\d+)px/); const px2 = m2 ? parseInt(m2[1], 10) : 14; labHeight = Math.round(px2 * 1.2); } }
         const newRow = Math.max(8, Math.ceil(Math.max(seqHeight || 0, labHeight || 0) + ((opts && typeof opts.ROW_PADDING === 'number') ? opts.ROW_PADDING : (window && typeof window.ROW_PADDING === 'number' ? window.ROW_PADDING : 6))));
         this.ROW_HEIGHT = newRow;
         try { if (window) window.ROW_HEIGHT = newRow; } catch (_) { }
         try { document.documentElement.style.setProperty('--row-height', newRow + 'px'); } catch (_) { }
         // Calculate consensus height based on sequence font
-        const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || 4);
-        const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || 8);
-        const newConsensusHeight = Math.max(16, Math.ceil(seqHeight + CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+        const consensusTopPad = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || 4);
+        const consensusBottomPad = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || 8);
+        const newConsensusHeight = Math.max(16, Math.ceil(seqHeight + consensusTopPad + consensusBottomPad));
         this.CONSENSUS_HEIGHT = newConsensusHeight;
         try { if (window) window.CONSENSUS_HEIGHT = newConsensusHeight; } catch (_) { }
         // Update vertical text offsets for the new row height and fonts
-        try { this.measureTextVerticalOffset({ FONT: FONT, LABEL_FONT: LABEL_FONT, ROW_HEIGHT: newRow }); } catch (_) { }
+        try { this.measureTextVerticalOffset({ FONT: font, LABEL_FONT: labelFont, ROW_HEIGHT: newRow }); } catch (_) { }
         if (opts && opts.apply) {
           try { this.setCanvasCSSSizes(opts); } catch (_) { }
           try { this.resizeBackings(opts); } catch (_) { }
@@ -1833,25 +1859,25 @@
         // 3. window.LABEL_WIDTH (legacy global)
         // 4. CSS variable --label-width (document-level stylesheet)
         // 5. fallback default 260
-        let LABEL_WIDTH;
-        if (typeof opts.LABEL_WIDTH === 'number') LABEL_WIDTH = opts.LABEL_WIDTH;
-        else if (typeof this.LABEL_WIDTH === 'number') LABEL_WIDTH = this.LABEL_WIDTH;
-        else if (window && typeof window.LABEL_WIDTH === 'number') LABEL_WIDTH = window.LABEL_WIDTH;
+        let labelWidth;
+        if (typeof opts.LABEL_WIDTH === 'number') labelWidth = opts.LABEL_WIDTH;
+        else if (typeof this.LABEL_WIDTH === 'number') labelWidth = this.LABEL_WIDTH;
+        else if (window && typeof window.LABEL_WIDTH === 'number') labelWidth = window.LABEL_WIDTH;
         else {
           try {
             const cssVal = getComputedStyle(document.documentElement).getPropertyValue('--label-width') || '';
             const parsed = parseInt(cssVal.replace('px', '').trim(), 10);
-            LABEL_WIDTH = Number.isFinite(parsed) && parsed > 0 ? parsed : 260;
-          } catch (_) { LABEL_WIDTH = 260; }
+            labelWidth = Number.isFinite(parsed) && parsed > 0 ? parsed : 260;
+          } catch (_) { labelWidth = 260; }
         }
-        const ROW_HEIGHT = (typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+        const rowHeight = (typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
 
-        if (labelCanvas) labelCanvas.style.width = LABEL_WIDTH + 'px';
+        if (labelCanvas) labelCanvas.style.width = labelWidth + 'px';
         try { if (labelCanvas) { labelCanvas.style.position = labelCanvas.style.position || 'absolute'; labelCanvas.style.left = '0px'; labelCanvas.style.top = '0px'; labelCanvas.style.zIndex = '1'; } } catch (_) { }
 
         const viewportHeight = Math.max(1, (scroller && scroller.clientHeight) ? scroller.clientHeight : window.innerHeight);
         const viewportWidth = Math.max(1, (scroller && scroller.clientWidth) ? scroller.clientWidth : window.innerWidth);
-        const totalHeight = (this.alignment && this.alignment.length) ? this.alignment.length * ROW_HEIGHT : (window && typeof window.rowCount === 'number' ? window.rowCount * ROW_HEIGHT : 0);
+        const totalHeight = (this.alignment && this.alignment.length) ? this.alignment.length * rowHeight : (window && typeof window.rowCount === 'number' ? window.rowCount * rowHeight : 0);
 
         if (labelCanvas) labelCanvas.style.height = viewportHeight + 'px';
         // ensure spacer width is set from current colOffsets if available
@@ -1862,10 +1888,10 @@
         if (headerCanvas) { headerCanvas.style.width = viewportWidth + 'px'; headerCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.style.width = hdrW + 'px'; overviewCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const cssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.style.width = cssWc + 'px'; consensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
-        if (labelFilterBox) { labelFilterBox.style.width = LABEL_WIDTH + 'px'; }
-        if (labelsHeaderDiv) { labelsHeaderDiv.style.width = LABEL_WIDTH + 'px'; labelsHeaderDiv.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
+        if (labelFilterBox) { labelFilterBox.style.width = labelWidth + 'px'; }
+        if (labelsHeaderDiv) { labelsHeaderDiv.style.width = labelWidth + 'px'; labelsHeaderDiv.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         const labelsConsensusDiv = this.labelsConsensusDiv || (opts && opts.labelsConsensusDiv) || (document.getElementById ? document.getElementById('labels-consensus-div') : null);
-        if (labelsConsensusDiv) { labelsConsensusDiv.style.width = LABEL_WIDTH + 'px'; labelsConsensusDiv.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
+        if (labelsConsensusDiv) { labelsConsensusDiv.style.width = labelWidth + 'px'; labelsConsensusDiv.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
 
         // Update CSS custom properties for dynamic heights
         const overviewHeight = (window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48;
@@ -2065,10 +2091,10 @@
       // accept state from options (fall back to class-held values)
       const colOffsets = (opts && opts.colOffsets) ? opts.colOffsets : (this.colOffsets || []);
       const maxSeqLen = (opts && Number.isFinite(opts.maxSeqLen)) ? opts.maxSeqLen : Math.max(0, (colOffsets.length - 1));
-      const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
-      const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
-      const OVERVIEW_TOP_PAD = (opts && typeof opts.OVERVIEW_TOP_PAD !== 'undefined') ? opts.OVERVIEW_TOP_PAD : (this.OVERVIEW_TOP_PAD !== undefined ? this.OVERVIEW_TOP_PAD : 4);
-      const OVERVIEW_BOTTOM_PAD = (opts && typeof opts.OVERVIEW_BOTTOM_PAD !== 'undefined') ? opts.OVERVIEW_BOTTOM_PAD : (this.OVERVIEW_BOTTOM_PAD !== undefined ? this.OVERVIEW_BOTTOM_PAD : 4);
+      const charWidth = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
+      const expandedRightPad = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
+      const overviewTopPad = (opts && typeof opts.OVERVIEW_TOP_PAD !== 'undefined') ? opts.OVERVIEW_TOP_PAD : (this.OVERVIEW_TOP_PAD !== undefined ? this.OVERVIEW_TOP_PAD : 4);
+      const overviewBottomPad = (opts && typeof opts.OVERVIEW_BOTTOM_PAD !== 'undefined') ? opts.OVERVIEW_BOTTOM_PAD : (this.OVERVIEW_BOTTOM_PAD !== undefined ? this.OVERVIEW_BOTTOM_PAD : 4);
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
       const refStr = (opts && opts.refStr) ? opts.refStr : null;
@@ -2122,16 +2148,16 @@
         cacheCtx.fillStyle = this.OVERVIEW_BG;
         cacheCtx.fillRect(0, 0, cssW, cssH);
 
-        const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+        const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (charWidth + expandedRightPad));
         const totalWidth = Math.max(1, rawTotal);
         const scale = cssW / totalWidth;
 
         // draw compressed/uncompressed bars with padding at top and bottom
-        const barH = Math.max(4, cssH - (OVERVIEW_TOP_PAD + OVERVIEW_BOTTOM_PAD));
-        const barY = OVERVIEW_TOP_PAD;
+        const barH = Math.max(4, cssH - (overviewTopPad + overviewBottomPad));
+        const barY = overviewTopPad;
         for (let c = 0; c < maxSeqLen; c++) {
-          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
           const x = Math.round(left * scale);
           const nextX = Math.round(right * scale);
           const w = Math.max(1, nextX - x);
@@ -2162,8 +2188,8 @@
             }
             
             if (hasDifference) {
-              const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-              const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+              const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+              const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
               const x = Math.round(left * scale);
               const nextX = Math.round(right * scale);
               const w = Math.max(1, nextX - x);
@@ -2206,10 +2232,10 @@
               // Calculate pixel positions using the same scale as the overview bars
               const leftPixel = (colOffsets && typeof colOffsets[startPos] !== 'undefined') 
                 ? colOffsets[startPos] 
-                : (startPos * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+                : (startPos * (charWidth + expandedRightPad));
               const rightPixel = (colOffsets && typeof colOffsets[endPos] !== 'undefined') 
-                ? colOffsets[endPos] + CHAR_WIDTH 
-                : ((endPos + 1) * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+                ? colOffsets[endPos] + charWidth 
+                : ((endPos + 1) * (charWidth + expandedRightPad));
               
               const x = Math.round(leftPixel * scale);
               const endX = Math.round(rightPixel * scale);
@@ -2274,8 +2300,8 @@
             const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
             if (!bookmarkColor) continue;
             
-            const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+            const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
             const x = Math.round(left * scale);
             const nextX = Math.round(right * scale);
             const w = Math.max(1, nextX - x);
@@ -2301,7 +2327,7 @@
       ctx.drawImage(this._overviewCache, 0, 0, cssW, cssH);
 
       // draw viewport rect (scaled) on top - this changes every frame during scroll
-      const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
+      const rawTotal = (colOffsets && colOffsets[maxSeqLen]) ? colOffsets[maxSeqLen] : (maxSeqLen * (charWidth + expandedRightPad));
       const totalWidth = Math.max(1, rawTotal);
       const scale = cssW / totalWidth;
       
@@ -2326,12 +2352,12 @@
       const pr = this.pr || (window.devicePixelRatio || 1);
       const rect = canvas.getBoundingClientRect();
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
-      const HEADER_FONT = (opts && opts.HEADER_FONT) ? opts.HEADER_FONT : ((window && window.HEADER_FONT) ? window.HEADER_FONT : '12px sans-serif');
-      const HEADER_HEIGHT = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : ((window && typeof window.HEADER_HEIGHT !== 'undefined') ? window.HEADER_HEIGHT : 30);
+      const headerFont = (opts && opts.HEADER_FONT) ? opts.HEADER_FONT : ((window && window.HEADER_FONT) ? window.HEADER_FONT : '12px sans-serif');
+      const headerHeight = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : ((window && typeof window.HEADER_HEIGHT !== 'undefined') ? window.HEADER_HEIGHT : 30);
       const colOffsets = (opts && opts.colOffsets) ? opts.colOffsets : (this.colOffsets || []);
       const maxSeqLen = (opts && Number.isFinite(opts.maxSeqLen)) ? opts.maxSeqLen : Math.max(0, (colOffsets.length - 1));
-      const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
-      const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
+      const charWidth = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
+      const expandedRightPad = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
       const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (window && window.selectedCols) ? window.selectedCols : new Set();
       // Amino acid mode settings
       const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
@@ -2339,17 +2365,17 @@
       const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
 
       // clear header area
-      ctx.clearRect(0, 0, cssW, HEADER_HEIGHT);
-      ctx.font = HEADER_FONT;
+      ctx.clearRect(0, 0, cssW, headerHeight);
+      ctx.font = headerFont;
       ctx.textBaseline = 'alphabetic';
 
       // background
       ctx.fillStyle = this.HEADER_BG;
-      ctx.fillRect(0, 0, cssW, HEADER_HEIGHT);
+      ctx.fillRect(0, 0, cssW, headerHeight);
 
       // draw column selection overlay under ticks if any
       if (selectedCols && selectedCols.size > 0) {
-        try { this._drawHeaderColumnOverlay(ctx, visible, { HEADER_HEIGHT, colOffsets, CHAR_WIDTH, EXPANDED_RIGHT_PAD, selectedCols }); } catch (_) { }
+        try { this._drawHeaderColumnOverlay(ctx, visible, { HEADER_HEIGHT: headerHeight, colOffsets, CHAR_WIDTH: charWidth, EXPANDED_RIGHT_PAD: expandedRightPad, selectedCols }); } catch (_) { }
       }
 
       // Determine visible column range (use rawFirst/rawLast for precise tick placement)
@@ -2357,8 +2383,8 @@
       const end = Math.min(maxSeqLen - 1, (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : Math.min(maxSeqLen - 1, start + 100)) + 1);
 
       // Adaptive tick step based on actual visual spacing
-      const totalVisualWidth = (colOffsets && typeof colOffsets[maxSeqLen] !== 'undefined') ? colOffsets[maxSeqLen] : (maxSeqLen * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-      const avgBasePx = (maxSeqLen > 0) ? (totalVisualWidth / maxSeqLen) : CHAR_WIDTH;
+      const totalVisualWidth = (colOffsets && typeof colOffsets[maxSeqLen] !== 'undefined') ? colOffsets[maxSeqLen] : (maxSeqLen * (charWidth + expandedRightPad));
+      const avgBasePx = (maxSeqLen > 0) ? (totalVisualWidth / maxSeqLen) : charWidth;
       
       // Calculate actual visual spacing by sampling visible columns
       let actualAvgPx = avgBasePx;
@@ -2378,17 +2404,17 @@
       }
       
       // Use higher minimum spacing for collapsed columns to prevent label overlap
-      const MIN_TICK_PX = actualAvgPx < 5 ? 80 : 48;
+      const minTickPx = actualAvgPx < 5 ? 80 : 48;
       
       function chooseTickStep(avgPx) {
         if (avgPx <= 0) return 10;
         const candidates = [1, 2, 5];
-        const raw = MIN_TICK_PX / avgPx;
+        const raw = minTickPx / avgPx;
         const pow = Math.max(0, Math.floor(Math.log10(raw)) - 1);
         for (let p = pow; p <= pow + 5; p++) {
           for (const c of candidates) {
             const step = c * Math.pow(10, p);
-            if (step * avgPx >= MIN_TICK_PX) return step;
+            if (step * avgPx >= minTickPx) return step;
           }
         }
         return Math.max(10, Math.ceil(raw));
@@ -2405,9 +2431,9 @@
         step = chooseTickStep(actualAvgPx);
       }
       
-      const smallTickH = Math.max(2, Math.round(HEADER_HEIGHT * 0.28));
-      const largeTickH = Math.max(3, Math.round(HEADER_HEIGHT * 0.6));
-      const bottom = HEADER_HEIGHT;
+      const smallTickH = Math.max(2, Math.round(headerHeight * 0.28));
+      const largeTickH = Math.max(3, Math.round(headerHeight * 0.6));
+      const bottom = headerHeight;
       ctx.strokeStyle = this.HEADER_STROKE;
       ctx.lineWidth = 1;
       ctx.fillStyle = this.HEADER_TEXT;
@@ -2429,12 +2455,12 @@
           isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
         }
         
-        const colLeft = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-        const colRight = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+        const colLeft = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+        const colRight = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (colLeft + charWidth + expandedRightPad);
         const centerLocal = ((colLeft + colRight) / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
         const x = Math.round(centerLocal) + 0.5;
         
-        const tickH = isMajor ? largeTickH : (isMinor ? Math.max(2, Math.round(HEADER_HEIGHT * 0.4)) : smallTickH);
+        const tickH = isMajor ? largeTickH : (isMinor ? Math.max(2, Math.round(headerHeight * 0.4)) : smallTickH);
         ctx.beginPath();
         ctx.moveTo(x, bottom - tickH);
         ctx.lineTo(x, bottom - 1);
@@ -2445,11 +2471,11 @@
           let labelY;
           try {
             const metrics = ctx.measureText(label);
-            const descent = (metrics && typeof metrics.actualBoundingBoxDescent === 'number') ? metrics.actualBoundingBoxDescent : Math.max(2, Math.round(HEADER_HEIGHT * 0.18));
+            const descent = (metrics && typeof metrics.actualBoundingBoxDescent === 'number') ? metrics.actualBoundingBoxDescent : Math.max(2, Math.round(headerHeight * 0.18));
             const padding = 2;
             labelY = Math.round((bottom - tickH) - padding - descent);
           } catch (e) {
-            labelY = Math.round(HEADER_HEIGHT / 2);
+            labelY = Math.round(headerHeight / 2);
           }
           ctx.fillText(label, labelX, labelY);
         }
@@ -2459,12 +2485,12 @@
     // internal helper: draw header column selection overlay using an existing header context
     _drawHeaderColumnOverlay(headerCtx, visible, opts) {
       try {
-        const HEADER_HEIGHT = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : 30;
+        const headerHeight = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : 30;
         const colOffsets = (opts && opts.colOffsets) ? opts.colOffsets : (this.colOffsets || []);
-        const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
-        const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
+        const charWidth = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
+        const expandedRightPad = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
         const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : new Set();
-        const headerH = HEADER_HEIGHT;
+        const headerH = headerHeight;
         
         // Draw bookmarks first (behind selection)
         if (this.siteBookmarks && this.siteBookmarks.size > 0) {
@@ -2474,8 +2500,8 @@
             const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
             if (!bookmarkColor) continue;
             
-            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD) + CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD)));
+            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + charWidth + expandedRightPad : (c * (charWidth + expandedRightPad) + charWidth + expandedRightPad))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad)));
             
             // Parse hex color and apply alpha
             const r = parseInt(bookmarkColor.slice(1, 3), 16);
@@ -2507,8 +2533,8 @@
             
             // Draw the entire codon box
             const codonEnd = codonStart + 2;
-            const leftOff = (colOffsets && typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const rightOff = (colOffsets && typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((colOffsets && typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const leftOff = (colOffsets && typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (charWidth + expandedRightPad));
+            const rightOff = (colOffsets && typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((colOffsets && typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad))) + charWidth + expandedRightPad);
             const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
             const w = rightOff - leftOff;
             headerCtx.fillRect(x, 0, w, headerH);
@@ -2517,8 +2543,8 @@
           // Normal mode: draw each column individually
           for (const c of selectedCols) {
             if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
-            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + CHAR_WIDTH + EXPANDED_RIGHT_PAD : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD) + CHAR_WIDTH + EXPANDED_RIGHT_PAD))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD)));
+            const x = ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad))) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = ((colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] + charWidth + expandedRightPad : (c * (charWidth + expandedRightPad) + charWidth + expandedRightPad))) - ((colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad)));
             headerCtx.fillRect(x, 0, w, headerH);
           }
         }
@@ -2535,26 +2561,26 @@
       const pr = this.pr || (window.devicePixelRatio || 1);
       const rect = canvas.getBoundingClientRect();
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
-      const HEADER_FONT = (opts && opts.HEADER_FONT) ? opts.HEADER_FONT : ((window && window.HEADER_FONT) ? window.HEADER_FONT : '12px sans-serif');
-      const HEADER_HEIGHT = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : ((window && typeof window.HEADER_HEIGHT !== 'undefined') ? window.HEADER_HEIGHT : 30);
-      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
-      const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
-      const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
-      const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
+      const headerFont = (opts && opts.HEADER_FONT) ? opts.HEADER_FONT : ((window && window.HEADER_FONT) ? window.HEADER_FONT : '12px sans-serif');
+      const headerHeight = (opts && typeof opts.HEADER_HEIGHT !== 'undefined') ? opts.HEADER_HEIGHT : ((window && typeof window.HEADER_HEIGHT !== 'undefined') ? window.HEADER_HEIGHT : 30);
+      const labelFont = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+      const consensusTopPad = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
+      const consensusBottomPad = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
+      const consensusHeight = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
 
-      ctx.clearRect(0, 0, cssW, HEADER_HEIGHT);
+      ctx.clearRect(0, 0, cssW, headerHeight);
       ctx.fillStyle = this.LABELS_BG;
-      ctx.fillRect(0, 0, cssW, HEADER_HEIGHT);
+      ctx.fillRect(0, 0, cssW, headerHeight);
 
       // Use label font for "consensus" text
-      ctx.font = LABEL_FONT;
+      ctx.font = labelFont;
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = this.LABELS_HEADER_TEXT;
 
       const title = 'ruler';
 
       // Calculate vertical centering like consensus row does
-      const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+      const innerH = Math.max(1, consensusHeight - (consensusTopPad + consensusBottomPad));
       let ascent = 0, descent = 0;
       try {
         const m = ctx.measureText('Mg');
@@ -2563,7 +2589,7 @@
           descent = m.actualBoundingBoxDescent || 0;
         }
       } catch (e) { }
-      const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
+      const baselineY = Math.round(consensusTopPad + (innerH - (ascent + descent)) / 2 + ascent);
 
       // Measure text width for right justification
       const textWidth = ctx.measureText(title).width;
@@ -2580,14 +2606,14 @@
       const rect = canvas.getBoundingClientRect();
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
       const cssH = rect && rect.height ? rect.height : Math.max(1, canvas.height / pr);
-      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+      const labelFont = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
 
       ctx.clearRect(0, 0, cssW, cssH);
       ctx.fillStyle = this.LABELS_BG;
       ctx.fillRect(0, 0, cssW, cssH);
 
       // Use label font for text
-      ctx.font = LABEL_FONT;
+      ctx.font = labelFont;
       ctx.textBaseline = 'middle';
       ctx.fillStyle = this.LABELS_HEADER_TEXT;
 
@@ -2610,24 +2636,24 @@
       const pr = this.pr || (window.devicePixelRatio || 1);
       const rect = canvas.getBoundingClientRect();
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
-      const LABEL_FONT = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
-      const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
-      const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
-      const CONSENSUS_HEIGHT = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
+      const labelFont = (opts && opts.LABEL_FONT) ? opts.LABEL_FONT : (this.labelFont || (window && window.LABEL_FONT) ? window.LABEL_FONT : '12px monospace');
+      const consensusTopPad = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : (this.CONSENSUS_TOP_PAD || (window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
+      const consensusBottomPad = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : (this.CONSENSUS_BOTTOM_PAD || (window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
+      const consensusHeight = (opts && typeof opts.CONSENSUS_HEIGHT !== 'undefined') ? opts.CONSENSUS_HEIGHT : (this.CONSENSUS_HEIGHT || (window && typeof window.CONSENSUS_HEIGHT !== 'undefined') ? window.CONSENSUS_HEIGHT : 20);
 
-      ctx.clearRect(0, 0, cssW, CONSENSUS_HEIGHT);
+      ctx.clearRect(0, 0, cssW, consensusHeight);
       ctx.fillStyle = this.LABELS_BG;
-      ctx.fillRect(0, 0, cssW, CONSENSUS_HEIGHT);
+      ctx.fillRect(0, 0, cssW, consensusHeight);
 
       // Use label font for "consensus" text
-      ctx.font = LABEL_FONT;
+      ctx.font = labelFont;
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = this.LABELS_HEADER_TEXT;
 
       const title = 'consensus: ';
 
       // Calculate vertical centering like consensus row does
-      const innerH = Math.max(1, CONSENSUS_HEIGHT - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+      const innerH = Math.max(1, consensusHeight - (consensusTopPad + consensusBottomPad));
       let ascent = 0, descent = 0;
       try {
         const m = ctx.measureText('Mg');
@@ -2636,7 +2662,7 @@
           descent = m.actualBoundingBoxDescent || 0;
         }
       } catch (e) { }
-      const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
+      const baselineY = Math.round(consensusTopPad + (innerH - (ascent + descent)) / 2 + ascent);
 
       // Measure text width for right justification
       const textWidth = ctx.measureText(title).width;
@@ -2660,17 +2686,17 @@
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
       const cssH = rect && rect.height ? rect.height : Math.max(1, canvas.height / pr);
 
-      const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
-      const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
-      const LABEL_WIDTH = (opts && typeof opts.LABEL_WIDTH === 'number') ? opts.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 200);
-      const labelTextVertOffset = (opts && typeof opts.labelTextVertOffset === 'number') ? opts.labelTextVertOffset : ((window && typeof window.labelTextVertOffset === 'number') ? window.labelTextVertOffset : Math.round(ROW_HEIGHT / 2));
+      const font = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+      const rowHeight = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+      const labelWidth = (opts && typeof opts.LABEL_WIDTH === 'number') ? opts.LABEL_WIDTH : ((window && typeof window.LABEL_WIDTH === 'number') ? window.LABEL_WIDTH : 200);
+      const labelTextVertOffset = (opts && typeof opts.labelTextVertOffset === 'number') ? opts.labelTextVertOffset : ((window && typeof window.labelTextVertOffset === 'number') ? window.labelTextVertOffset : Math.round(rowHeight / 2));
       const selectedRows = (opts && opts.selectedRows) ? opts.selectedRows : (window && window.selectedRows) ? window.selectedRows : new Set();
       const rows = (opts && opts.rows) ? opts.rows : (window && window.rows) ? window.rows : [];
       const refIndex = (opts && typeof opts.refIndex === 'number') ? opts.refIndex : (window && typeof window.refIndex === 'number') ? window.refIndex : null;
-      const REF_ACCENT = (opts && opts.REF_ACCENT) ? opts.REF_ACCENT : (window && window.REF_ACCENT) ? window.REF_ACCENT : '#ffcc00';
+      const refAccent = (opts && opts.REF_ACCENT) ? opts.REF_ACCENT : (window && window.REF_ACCENT) ? window.REF_ACCENT : '#ffcc00';
 
       // prepare context
-      ctx.font = FONT;
+      ctx.font = font;
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = this.LABELS_TEXT;
 
@@ -2683,9 +2709,9 @@
       const scrollTop = (visible && typeof visible.scrollTop === 'number') ? visible.scrollTop : 0;
 
       for (let i = first; i <= last; i++) {
-        const rawRowY = (i * ROW_HEIGHT) - scrollTop;
+        const rawRowY = (i * rowHeight) - scrollTop;
         const rowY = Math.round(rawRowY * pr) / pr;
-        const rowH = Math.round(ROW_HEIGHT * pr) / pr;
+        const rowH = Math.round(rowHeight * pr) / pr;
         const label = (rows[i] && rows[i].label) ? rows[i].label : '';
         
         // Check if this row has a tag
@@ -2699,7 +2725,7 @@
         } else {
           ctx.fillStyle = this.SEQ_ODD_ROW;
         }
-        ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
+        ctx.fillRect(0, rowY, labelWidth, rowH);
         
         // Apply tag background if present
         if (tagColor && this.TAG_BACKGROUND_ALPHA > 0) {
@@ -2708,18 +2734,18 @@
           const g = parseInt(tagColor.slice(3, 5), 16);
           const b = parseInt(tagColor.slice(5, 7), 16);
           ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${this.TAG_BACKGROUND_ALPHA})`;
-          ctx.fillRect(0, rowY, LABEL_WIDTH, rowH);
+          ctx.fillRect(0, rowY, labelWidth, rowH);
         }
         
         // reference accent
         if (typeof refIndex === 'number' && i === refIndex) {
-          try { ctx.fillStyle = REF_ACCENT; ctx.fillRect(0, rowY, 4, rowH); } catch (_) { }
+          try { ctx.fillStyle = refAccent; ctx.fillRect(0, rowY, 4, rowH); } catch (_) { }
         }
         // draw original index number in italics (right-aligned), starting from 1
         const originalIndex = (rows[i] && typeof rows[i].originalIndex === 'number') ? rows[i].originalIndex + 1 : i + 1;
         const indexText = String(originalIndex);
         const indexFontStyle = this.INDEX_FONT_STYLE || 'italic';
-        ctx.font = indexFontStyle + ' ' + FONT;
+        ctx.font = indexFontStyle + ' ' + font;
         ctx.textAlign = 'right';
         ctx.fillStyle = this.INDEX_COLOR || '#888888';
         const y = Math.round((rawRowY + labelTextVertOffset) * pr) / pr;
@@ -2727,7 +2753,7 @@
         ctx.fillText(indexText, indexAlignPos, y);
 
         // draw label text
-        ctx.font = FONT; // restore normal font
+        ctx.font = font; // restore normal font
         ctx.textAlign = 'left';
         // Apply tag text color if enabled and tag is present
         if (tagColor && this.TAG_TEXT_COLOR) {
@@ -2742,15 +2768,15 @@
       // Draw drop indicator if dragging
       if (this.labelDragState && this.labelDragState.isDragging && this.labelDragState.dropIndicatorRow !== null) {
         const dropRow = this.labelDragState.dropIndicatorRow;
-        const dropY = (dropRow * ROW_HEIGHT) - scrollTop;
+        const dropY = (dropRow * rowHeight) - scrollTop;
         
         // Only draw if in visible range
-        if (dropY >= -ROW_HEIGHT && dropY <= cssH + ROW_HEIGHT) {
+        if (dropY >= -rowHeight && dropY <= cssH + rowHeight) {
           ctx.strokeStyle = '#007bff';
           ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.moveTo(0, Math.round(dropY));
-          ctx.lineTo(LABEL_WIDTH, Math.round(dropY));
+          ctx.lineTo(labelWidth, Math.round(dropY));
           ctx.stroke();
           
           // Draw arrow indicators on both ends
@@ -2765,9 +2791,9 @@
           ctx.fill();
           // Right arrow
           ctx.beginPath();
-          ctx.moveTo(LABEL_WIDTH, Math.round(dropY));
-          ctx.lineTo(LABEL_WIDTH - arrowSize, Math.round(dropY - arrowSize));
-          ctx.lineTo(LABEL_WIDTH - arrowSize, Math.round(dropY + arrowSize));
+          ctx.moveTo(labelWidth, Math.round(dropY));
+          ctx.lineTo(labelWidth - arrowSize, Math.round(dropY - arrowSize));
+          ctx.lineTo(labelWidth - arrowSize, Math.round(dropY + arrowSize));
           ctx.closePath();
           ctx.fill();
         }
@@ -2788,10 +2814,10 @@
       const cssW = rect && rect.width ? rect.width : Math.max(1, canvas.width / pr);
       const cssH = rect && rect.height ? rect.height : Math.max(1, canvas.height / pr);
 
-      const FONT = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
-      const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
-      const CHAR_WIDTH = (opts && typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
-      const EXPANDED_RIGHT_PAD = (opts && typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : ((window && typeof window.EXPANDED_RIGHT_PAD === 'number') ? window.EXPANDED_RIGHT_PAD : 2);
+      const font = (opts && opts.FONT) ? opts.FONT : ((window && window.FONT) ? window.FONT : '12px monospace');
+      const rowHeight = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+      const charWidth = (opts && typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
+      const expandedRightPad = (opts && typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : ((window && typeof window.EXPANDED_RIGHT_PAD === 'number') ? window.EXPANDED_RIGHT_PAD : 2);
 
       // Prefer column offsets passed via opts during migration, otherwise use
       // the instance value. If the instance is missing offsets (staged
@@ -2810,18 +2836,18 @@
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : (window && window.maskStr) ? window.maskStr : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : ((window && typeof window.maskEnabled === 'boolean') ? window.maskEnabled : false);
       const hideMode = (opts && typeof opts.hideMode === 'boolean') ? opts.hideMode : (this.hideMode || false);
-      const HIDDEN_MARKER_COLOR = (opts && opts.HIDDEN_MARKER_COLOR) ? opts.HIDDEN_MARKER_COLOR : (this.HIDDEN_MARKER_COLOR || '#d0d0d0');
-      const BASE_COLORS = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
-      const DEFAULT_BASE_COLOR = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
-      const PALE_REF_COLOR = (opts && opts.PALE_REF_COLOR) ? opts.PALE_REF_COLOR : (window && window.PALE_REF_COLOR) ? window.PALE_REF_COLOR : '#bfc9d6';
+      const hiddenMarkerColor = (opts && opts.HIDDEN_MARKER_COLOR) ? opts.HIDDEN_MARKER_COLOR : (this.HIDDEN_MARKER_COLOR || '#d0d0d0');
+      const baseColors = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
+      const defaultBaseColor = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
+      const paleRefColor = (opts && opts.PALE_REF_COLOR) ? opts.PALE_REF_COLOR : (window && window.PALE_REF_COLOR) ? window.PALE_REF_COLOR : '#bfc9d6';
       // Amino acid mode settings
       const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
       const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
       const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
-      const AA_COLORS = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
-      const DEFAULT_AA_COLOR = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
-      const COMPRESSED_CELL_VPAD = (opts && typeof opts.COMPRESSED_CELL_VPAD === 'number') ? opts.COMPRESSED_CELL_VPAD : ((window && typeof window.COMPRESSED_CELL_VPAD === 'number') ? window.COMPRESSED_CELL_VPAD : 2);
-      const seqTextVertOffset = (opts && typeof opts.seqTextVertOffset === 'number') ? opts.seqTextVertOffset : ((window && typeof window.seqTextVertOffset === 'number') ? window.seqTextVertOffset : Math.round(ROW_HEIGHT / 2));
+      const aaColors = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
+      const defaultAaColor = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
+      const compressedCellVpad = (opts && typeof opts.COMPRESSED_CELL_VPAD === 'number') ? opts.COMPRESSED_CELL_VPAD : ((window && typeof window.COMPRESSED_CELL_VPAD === 'number') ? window.COMPRESSED_CELL_VPAD : 2);
+      const seqTextVertOffset = (opts && typeof opts.seqTextVertOffset === 'number') ? opts.seqTextVertOffset : ((window && typeof window.seqTextVertOffset === 'number') ? window.seqTextVertOffset : Math.round(rowHeight / 2));
       const rowCount = (opts && typeof opts.rowCount === 'number') ? opts.rowCount : ((window && typeof window.rowCount === 'number') ? window.rowCount : rows.length);
       const maxSeqLen = (opts && typeof opts.maxSeqLen === 'number') ? opts.maxSeqLen : ((window && typeof window.maxSeqLen === 'number') ? window.maxSeqLen : Math.max(0, (colOffsets.length - 1)));
       const isRectSelecting = (opts && typeof opts.isRectSelecting === 'boolean') ? opts.isRectSelecting : ((window && typeof window.isRectSelecting === 'boolean') ? window.isRectSelecting : false);
@@ -2831,7 +2857,7 @@
       const rectEndCol = (opts && typeof opts.rectEndCol === 'number') ? opts.rectEndCol : (window && typeof window.rectEndCol === 'number') ? window.rectEndCol : null;
 
       ctx.clearRect(0, 0, cssW, cssH);
-      ctx.font = FONT;
+      ctx.font = font;
       ctx.textBaseline = 'alphabetic';
       ctx.fillStyle = '#000';
 
@@ -2844,9 +2870,9 @@
         } else {
           ctx.fillStyle = this.SEQ_ODD_ROW;
         }
-        const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
+        const rawRowY = (r * rowHeight) - visible.scrollTop;
         const rowY = Math.round(rawRowY * pr) / pr;
-        const rowH = Math.round(ROW_HEIGHT * pr) / pr;
+        const rowH = Math.round(rowHeight * pr) / pr;
         ctx.fillRect(0, rowY, visible.viewW, rowH);
         
         // Apply tag background if present
@@ -2874,8 +2900,8 @@
           const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
           if (!bookmarkColor) continue;
           
-          const colLeft = (colOffsets[colIdx] !== undefined) ? colOffsets[colIdx] : (colIdx * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-          const colRight = (colOffsets[colIdx + 1] !== undefined) ? colOffsets[colIdx + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const colLeft = (colOffsets[colIdx] !== undefined) ? colOffsets[colIdx] : (colIdx * (charWidth + expandedRightPad));
+          const colRight = (colOffsets[colIdx + 1] !== undefined) ? colOffsets[colIdx + 1] : (colLeft + charWidth + expandedRightPad);
           const x = colLeft - visible.scrollLeft;
           const w = Math.max(1, colRight - colLeft);
           
@@ -2886,8 +2912,8 @@
           ctx.fillStyle = `rgba(${r_val}, ${g_val}, ${b_val}, ${this.BOOKMARK_COL_ALPHA})`;
           
           // Draw full column height
-          const firstRowY = Math.round(((visible.firstRow * ROW_HEIGHT) - visible.scrollTop) * pr) / pr;
-          const lastRowY = Math.round((((visible.lastRow + 1) * ROW_HEIGHT) - visible.scrollTop) * pr) / pr;
+          const firstRowY = Math.round(((visible.firstRow * rowHeight) - visible.scrollTop) * pr) / pr;
+          const lastRowY = Math.round((((visible.lastRow + 1) * rowHeight) - visible.scrollTop) * pr) / pr;
           const colH = lastRowY - firstRowY;
           ctx.fillRect(x, firstRowY, w, colH);
         }
@@ -2899,7 +2925,7 @@
         try {
           // prefer passing current offsets so the overlay can avoid reading
           // instance state during staged migration
-          this.drawColumnSelectionOverlay(canvas, visible, { CHAR_WIDTH, EXPANDED_RIGHT_PAD, selectedCols, colOffsets });
+          this.drawColumnSelectionOverlay(canvas, visible, { CHAR_WIDTH: charWidth, EXPANDED_RIGHT_PAD: expandedRightPad, selectedCols, colOffsets });
         } catch (e) { }
       }
 
@@ -2911,7 +2937,7 @@
       }
       
       for (let r = visible.firstRow; r <= visible.lastRow; r++) {
-        const rawRowY = (r * ROW_HEIGHT) - visible.scrollTop;
+        const rawRowY = (r * rowHeight) - visible.scrollTop;
         const y = Math.round((rawRowY + seqTextVertOffset) * pr) / pr;
         const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
         ctx.fillStyle = '#000';
@@ -2944,7 +2970,7 @@
               
               const isSameRef = refModeEnabled && refStr && refAA === aa;
               const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-              color = isRefRow ? (AA_COLORS[aa] || DEFAULT_AA_COLOR) : (isSameRef ? PALE_REF_COLOR : (AA_COLORS[aa] || DEFAULT_AA_COLOR));
+              color = isRefRow ? (aaColors[aa] || defaultAaColor) : (isSameRef ? paleRefColor : (aaColors[aa] || defaultAaColor));
             } else {
               // Outside valid codon range - skip
               continue;
@@ -2963,13 +2989,13 @@
               
               const isSameRef = refModeEnabled && refStr && refAA === base;
               const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-              color = isRefRow ? (AA_COLORS[base] || DEFAULT_AA_COLOR) : (isSameRef ? PALE_REF_COLOR : (AA_COLORS[base] || DEFAULT_AA_COLOR));
+              color = isRefRow ? (aaColors[base] || defaultAaColor) : (isSameRef ? paleRefColor : (aaColors[base] || defaultAaColor));
               
               // Calculate center position across all 3 codon nucleotides
               const codonEnd = c + 2;
-              const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-              const codonEndLeftPos = (colOffsets[codonEnd] !== undefined) ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-              const codonRightPos = codonEndLeftPos + CHAR_WIDTH + EXPANDED_RIGHT_PAD;
+              const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+              const codonEndLeftPos = (colOffsets[codonEnd] !== undefined) ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
+              const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
               const codonWidth = codonRightPos - codonLeftPos;
               const xCenter = codonLeftPos + (codonWidth / 2) - visible.scrollLeft;
               
@@ -2978,14 +3004,14 @@
                 // Collapsed column
                 const w = Math.max(1, codonRightPos - codonLeftPos);
                 if (hideMode && w > 1) {
-                  ctx.fillStyle = HIDDEN_MARKER_COLOR;
+                  ctx.fillStyle = hiddenMarkerColor;
                   const topQ = Math.round(rawRowY * pr) / pr;
-                  const hQ = Math.round(ROW_HEIGHT * pr) / pr;
+                  const hQ = Math.round(rowHeight * pr) / pr;
                   ctx.fillRect(xCenter - w/2, topQ, w, hQ);
                 } else if (!hideMode) {
                   ctx.fillStyle = color;
-                  const topCss = rawRowY + COMPRESSED_CELL_VPAD;
-                  const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
+                  const topCss = rawRowY + compressedCellVpad;
+                  const blockH = Math.max(1, rowHeight - (compressedCellVpad * 2));
                   const topQ = Math.round(topCss * pr) / pr;
                   const hQ = Math.round(blockH * pr) / pr;
                   ctx.fillRect(xCenter - w/2, topQ, w, hQ);
@@ -2995,7 +3021,7 @@
                 const hGap = 0.75; // Horizontal gap in pixels
                 const vGap = 0.75; // Vertical gap in pixels (smaller)
                 const bgWidth = codonWidth - (hGap * 2);
-                const bgHeight = ROW_HEIGHT - (vGap * 2);
+                const bgHeight = rowHeight - (vGap * 2);
                 const bgX = xCenter - bgWidth / 2;
                 const bgY = rawRowY + vGap;
                 const radius = 3; // Corner radius for rounded rectangle
@@ -3017,7 +3043,7 @@
                 
                 // Draw the text on top
                 ctx.fillStyle = color;
-                const textWidth = CHAR_WIDTH;
+                const textWidth = charWidth;
                 ctx.fillText(ch, xCenter - textWidth / 2, y);
               }
               
@@ -3035,11 +3061,11 @@
             const refChar = (refStr && refStr.charAt(c)) ? refStr.charAt(c).toUpperCase() : null;
             const isSameRef = refModeEnabled && refStr && refChar === base;
             const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-            color = isRefRow ? (BASE_COLORS[base] || DEFAULT_BASE_COLOR) : (isSameRef ? PALE_REF_COLOR : (BASE_COLORS[base] || DEFAULT_BASE_COLOR));
+            color = isRefRow ? (baseColors[base] || defaultBaseColor) : (isSameRef ? paleRefColor : (baseColors[base] || defaultBaseColor));
           }
           
-          const colLeft = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-          const colRight = (colOffsets[c + 1] !== undefined) ? colOffsets[c + 1] : (colLeft + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const colLeft = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+          const colRight = (colOffsets[c + 1] !== undefined) ? colOffsets[c + 1] : (colLeft + charWidth + expandedRightPad);
           const x = colLeft - visible.scrollLeft;
           const w = Math.max(1, colRight - colLeft);
           
@@ -3047,15 +3073,15 @@
             // Collapsed column
             if (hideMode && w > 1) {
               // This is a marker position in hide mode - draw pale grey marker at full row height
-              ctx.fillStyle = HIDDEN_MARKER_COLOR;
+              ctx.fillStyle = hiddenMarkerColor;
               const topQ = Math.round(rawRowY * pr) / pr;
-              const hQ = Math.round(ROW_HEIGHT * pr) / pr;
+              const hQ = Math.round(rowHeight * pr) / pr;
               ctx.fillRect(x, topQ, w, hQ);
             } else if (!hideMode) {
               // Normal collapse mode - draw colored block
               ctx.fillStyle = color;
-              const topCss = rawRowY + COMPRESSED_CELL_VPAD;
-              const blockH = Math.max(1, ROW_HEIGHT - (COMPRESSED_CELL_VPAD * 2));
+              const topCss = rawRowY + compressedCellVpad;
+              const blockH = Math.max(1, rowHeight - (compressedCellVpad * 2));
               const topQ = Math.round(topCss * pr) / pr;
               const hQ = Math.round(blockH * pr) / pr;
               ctx.fillRect(x, topQ, w, hQ);
@@ -3064,7 +3090,7 @@
           } else {
             ctx.fillStyle = color;
             // Center the text in the column
-            const textOffset = Math.round((w - CHAR_WIDTH) / 2);
+            const textOffset = Math.round((w - charWidth) / 2);
             ctx.fillText(ch, x + textOffset, y);
           }
         }
@@ -3085,10 +3111,10 @@
           }
           
           if (rhi >= visible.firstRow && rlo <= visible.lastRow && chi >= visible.rawFirstCol && clo <= visible.rawLastCol) {
-            const topY = (rlo - visible.firstRow) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
-            const bottomY = (rhi - visible.firstRow + 1) * ROW_HEIGHT - (visible.scrollTop - visible.firstRow * ROW_HEIGHT);
+            const topY = (rlo - visible.firstRow) * rowHeight - (visible.scrollTop - visible.firstRow * rowHeight);
+            const bottomY = (rhi - visible.firstRow + 1) * rowHeight - (visible.scrollTop - visible.firstRow * rowHeight);
             const leftX = (colOffsets[clo] || 0) - visible.scrollLeft;
-            const rightX = (colOffsets[chi + 1] || (colOffsets[chi] + CHAR_WIDTH + EXPANDED_RIGHT_PAD)) - visible.scrollLeft;
+            const rightX = (colOffsets[chi + 1] || (colOffsets[chi] + charWidth + expandedRightPad)) - visible.scrollLeft;
             const dpr = this.pr || (window.devicePixelRatio || 1);
             const t = Math.round(topY * dpr) / dpr;
             const b = Math.round(bottomY * dpr) / dpr;
@@ -3134,28 +3160,28 @@
       const sepY = Math.max(0.5, cssH - 0.5);
       ctx.beginPath(); ctx.moveTo(0, sepY); ctx.lineTo(cssW, sepY); ctx.stroke();
 
-      const FONT = (opts && opts.FONT) ? opts.FONT : (window && window.FONT) ? window.FONT : '12px monospace';
-      const CONSENSUS_TOP_PAD = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : ((window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
-      const CONSENSUS_BOTTOM_PAD = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : ((window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
+      const font = (opts && opts.FONT) ? opts.FONT : (window && window.FONT) ? window.FONT : '12px monospace';
+      const consensusTopPad = (opts && typeof opts.CONSENSUS_TOP_PAD !== 'undefined') ? opts.CONSENSUS_TOP_PAD : ((window && typeof window.CONSENSUS_TOP_PAD !== 'undefined') ? window.CONSENSUS_TOP_PAD : 4);
+      const consensusBottomPad = (opts && typeof opts.CONSENSUS_BOTTOM_PAD !== 'undefined') ? opts.CONSENSUS_BOTTOM_PAD : ((window && typeof window.CONSENSUS_BOTTOM_PAD !== 'undefined') ? window.CONSENSUS_BOTTOM_PAD : 8);
       const colOffsets = (opts && opts.colOffsets) ? opts.colOffsets : (this.colOffsets || []);
       const maxSeqLen = (opts && Number.isFinite(opts.maxSeqLen)) ? opts.maxSeqLen : Math.max(0, (colOffsets.length - 1));
-      const CHAR_WIDTH = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
-      const EXPANDED_RIGHT_PAD = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
+      const charWidth = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
+      const expandedRightPad = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
       const maskStr = (opts && opts.maskStr) ? opts.maskStr : (window && window.mask) ? window.mask : '';
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
-      const BASE_COLORS = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
-      const DEFAULT_BASE_COLOR = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
+      const baseColors = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
+      const defaultBaseColor = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
       // Amino acid mode settings
       const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
       const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
       const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
-      const AA_COLORS = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
-      const DEFAULT_AA_COLOR = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
+      const aaColors = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
+      const defaultAaColor = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
 
-      ctx.font = FONT;
+      ctx.font = font;
       ctx.textBaseline = 'alphabetic';
 
-      const innerH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+      const innerH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
       let ascent = 0, descent = 0;
       try {
         const m = ctx.measureText('Mg');
@@ -3164,7 +3190,7 @@
           descent = m.actualBoundingBoxDescent || 0;
         }
       } catch (e) { }
-      const baselineY = Math.round(CONSENSUS_TOP_PAD + (innerH - (ascent + descent)) / 2 + ascent);
+      const baselineY = Math.round(consensusTopPad + (innerH - (ascent + descent)) / 2 + ascent);
 
       // consensus string: prefer opts.consensus, else window.displayedSequence (may be consensus or reference genome), else compute consensus
       const cons = (opts && opts.consensus) ? opts.consensus : 
@@ -3193,7 +3219,7 @@
             ch = (cons.charAt(c) || 'N');
             base = ch ? ch.charAt(0).toUpperCase() : '';
             const aa = translatedCons.charAt(aaPos);
-            color = AA_COLORS[aa] || DEFAULT_AA_COLOR;
+            color = aaColors[aa] || defaultAaColor;
           } else {
             continue; // Skip positions outside valid codon range
           }
@@ -3203,21 +3229,21 @@
           if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
             ch = translatedCons.charAt(aaPos);
             base = ch.toUpperCase();
-            color = AA_COLORS[base] || DEFAULT_AA_COLOR;
+            color = aaColors[base] || defaultAaColor;
             
             // Calculate center position across all 3 codon nucleotides
             const codonEnd = c + 2;
-            const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const codonEndLeftPos = (colOffsets && typeof colOffsets[codonEnd] !== 'undefined') ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const codonRightPos = codonEndLeftPos + CHAR_WIDTH + EXPANDED_RIGHT_PAD;
+            const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+            const codonEndLeftPos = (colOffsets && typeof colOffsets[codonEnd] !== 'undefined') ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
+            const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
             const codonWidth = codonRightPos - codonLeftPos;
             const xCenter = codonLeftPos + (codonWidth / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
             
             // Draw the amino acid centered in the codon box
             if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
               ctx.fillStyle = color;
-              const blockTop = CONSENSUS_TOP_PAD;
-              const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+              const blockTop = consensusTopPad;
+              const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
               const w = Math.max(1, codonWidth);
               ctx.fillRect(xCenter - w/2, blockTop, w, blockH);
             } else {
@@ -3225,11 +3251,11 @@
               const hGap = 0.75; // Horizontal gap in pixels
               const vGap = 0.75; // Vertical gap in pixels (smaller)
               const bgWidth = codonWidth - (hGap * 2);
-              const bgHeight = ROW_HEIGHT - (vGap * 2);
+              const bgHeight = rowHeight - (vGap * 2);
               const bgX = xCenter - bgWidth / 2;
               // Center the lozenge vertically in the consensus row
-              const consensusRowHeight = cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD);
-              const bgY = CONSENSUS_TOP_PAD + (consensusRowHeight - bgHeight) / 2;
+              const consensusRowHeight = cssH - (consensusTopPad + consensusBottomPad);
+              const bgY = consensusTopPad + (consensusRowHeight - bgHeight) / 2;
               const radius = 3; // Corner radius for rounded rectangle
               
               // Create translucent version of color
@@ -3249,7 +3275,7 @@
               
               // Draw the text on top
               ctx.fillStyle = color;
-              const textWidth = CHAR_WIDTH;
+              const textWidth = charWidth;
               ctx.fillText(ch, xCenter - textWidth / 2, baselineY);
             }
             continue; // Skip the next two positions of the codon
@@ -3259,23 +3285,23 @@
         } else {
           ch = (cons.charAt(c) || 'N');
           base = ch ? ch.charAt(0).toUpperCase() : '';
-          color = BASE_COLORS[base] || DEFAULT_BASE_COLOR;
+          color = baseColors[base] || defaultBaseColor;
         }
         
-        const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-        const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+        const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+        const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
         const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
         const w = Math.max(1, right - left);
         
         if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
           ctx.fillStyle = color;
-          const blockTop = CONSENSUS_TOP_PAD;
-          const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+          const blockTop = consensusTopPad;
+          const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
           ctx.fillRect(x, blockTop, w, blockH);
         } else {
           ctx.fillStyle = color;
           // Center the text in the column
-          const textOffset = Math.round((w - CHAR_WIDTH) / 2);
+          const textOffset = Math.round((w - charWidth) / 2);
           ctx.fillText(ch, x + textOffset, baselineY);
         }
       }
@@ -3288,8 +3314,8 @@
           const bookmarkColor = (bookmarkIdx >= 0 && bookmarkIdx < this.BOOKMARK_COLORS.length) ? this.BOOKMARK_COLORS[bookmarkIdx] : null;
           if (!bookmarkColor) continue;
           
-          const left = (colOffsets && typeof colOffsets[colIdx] !== 'undefined') ? colOffsets[colIdx] : (colIdx * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-          const right = (colOffsets && typeof colOffsets[colIdx + 1] !== 'undefined') ? colOffsets[colIdx + 1] : (left + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+          const left = (colOffsets && typeof colOffsets[colIdx] !== 'undefined') ? colOffsets[colIdx] : (colIdx * (charWidth + expandedRightPad));
+          const right = (colOffsets && typeof colOffsets[colIdx + 1] !== 'undefined') ? colOffsets[colIdx + 1] : (left + charWidth + expandedRightPad);
           const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
           const w = Math.max(1, right - left);
           
@@ -3310,7 +3336,7 @@
       const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()));
       if (selectedCols && selectedCols.size > 0) {
         try {
-          this.drawColumnSelectionOverlay(canvas, visible, { CHAR_WIDTH, EXPANDED_RIGHT_PAD, selectedCols, colOffsets });
+          this.drawColumnSelectionOverlay(canvas, visible, { CHAR_WIDTH: charWidth, EXPANDED_RIGHT_PAD: expandedRightPad, selectedCols, colOffsets });
         } catch (e) { }
       }
     }
@@ -3330,8 +3356,8 @@
         } else {
           return;
         }
-        const CHAR_WIDTH = (opts && typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
-        const EXPANDED_RIGHT_PAD = (opts && typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
+        const charWidth = (opts && typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
+        const expandedRightPad = (opts && typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
         const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (window && window.selectedCols) ? window.selectedCols : new Set();
         // Prefer column offsets passed in opts during migration; fall back to instance offsets
         const colOffsets = (opts && opts.colOffsets) ? opts.colOffsets : (this.colOffsets || []);
@@ -3357,8 +3383,8 @@
             
             // Draw the entire codon box
             const codonEnd = codonStart + 2;
-            const leftOff = (typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const rightOff = (typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (CHAR_WIDTH + EXPANDED_RIGHT_PAD))) + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const leftOff = (typeof colOffsets[codonStart] !== 'undefined') ? colOffsets[codonStart] : (codonStart * (charWidth + expandedRightPad));
+            const rightOff = (typeof colOffsets[codonEnd + 1] !== 'undefined') ? colOffsets[codonEnd + 1] : ((typeof colOffsets[codonEnd] !== 'undefined' ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad))) + charWidth + expandedRightPad);
             const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
             const w = Math.max(1, rightOff - leftOff);
             ctx.fillRect(x, 0, w, cssH);
@@ -3367,8 +3393,8 @@
           // Normal mode: draw each column individually
           for (const c of selectedCols) {
             if (c < (visible && typeof visible.rawFirstCol === 'number' ? visible.rawFirstCol : 0) - 1 || c > (visible && typeof visible.rawLastCol === 'number' ? visible.rawLastCol : 0) + 1) continue;
-            const leftOff = (typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (CHAR_WIDTH + EXPANDED_RIGHT_PAD));
-            const rightOff = (typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (leftOff + CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const leftOff = (typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+            const rightOff = (typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (leftOff + charWidth + expandedRightPad);
             const x = leftOff - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
             const w = Math.max(1, rightOff - leftOff);
             ctx.fillRect(x, 0, w, cssH);
@@ -3401,10 +3427,10 @@
       try {
         opts = opts || {};
         const maxSeqLen = (typeof opts.maxSeqLen === 'number') ? opts.maxSeqLen : Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0);
-        const CHAR_WIDTH = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
-        const EXPANDED_RIGHT_PAD = (typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
-        const REDUCED_COL_WIDTH = (typeof opts.REDUCED_COL_WIDTH === 'number') ? opts.REDUCED_COL_WIDTH : ((window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1);
-        const HIDDEN_MARKER_WIDTH = (typeof opts.HIDDEN_MARKER_WIDTH === 'number') ? opts.HIDDEN_MARKER_WIDTH : (this.HIDDEN_MARKER_WIDTH || 4);
+        const charWidth = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
+        const expandedRightPad = (typeof opts.EXPANDED_RIGHT_PAD === 'number') ? opts.EXPANDED_RIGHT_PAD : 2;
+        const reducedColWidth = (typeof opts.REDUCED_COL_WIDTH === 'number') ? opts.REDUCED_COL_WIDTH : ((window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1);
+        const hiddenMarkerWidth = (typeof opts.HIDDEN_MARKER_WIDTH === 'number') ? opts.HIDDEN_MARKER_WIDTH : (this.HIDDEN_MARKER_WIDTH || 4);
         const maskStr = (typeof opts.maskStr === 'string') ? opts.maskStr : ((window && typeof window.maskStr === 'string') ? window.maskStr : null);
         const hideMode = (typeof opts.hideMode === 'boolean') ? opts.hideMode : (this.hideMode || false);
 
@@ -3430,7 +3456,7 @@
               
               // Backfill collapsed region with minimal widths
               for (let j = regionStart; j <= regionEnd; j++) {
-                const w = (j === regionMid) ? HIDDEN_MARKER_WIDTH : 0;
+                const w = (j === regionMid) ? hiddenMarkerWidth : 0;
                 out[j + 1] = out[j] + w;
               }
               
@@ -3440,7 +3466,7 @@
             
             if (!isCollapsed) {
               // Expanded column
-              const w = CHAR_WIDTH + EXPANDED_RIGHT_PAD;
+              const w = charWidth + expandedRightPad;
               out[i + 1] = out[i] + w;
             }
           }
@@ -3451,15 +3477,15 @@
             const regionMid = Math.floor((regionStart + regionEnd) / 2);
             
             for (let j = regionStart; j <= regionEnd; j++) {
-              const w = (j === regionMid) ? HIDDEN_MARKER_WIDTH : 0;
+              const w = (j === regionMid) ? hiddenMarkerWidth : 0;
               out[j + 1] = out[j] + w;
             }
           }
         } else {
-          // Normal mode: collapsed columns have REDUCED_COL_WIDTH
+          // Normal mode: collapsed columns have reducedColWidth
           for (let i = 0; i < maxSeqLen; i++) {
             const useReduced = !!maskEnabled && maskStr && maskStr.charAt(i) === '0';
-            const w = useReduced ? REDUCED_COL_WIDTH : (CHAR_WIDTH + EXPANDED_RIGHT_PAD);
+            const w = useReduced ? reducedColWidth : (charWidth + expandedRightPad);
             out[i + 1] = out[i] + w;
           }
         }
@@ -3479,10 +3505,10 @@
     computeVisible(scroller, opts) {
       try {
         opts = opts || {};
-        const ROW_HEIGHT = (typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
-        const BUFFER_ROWS = (typeof opts.BUFFER_ROWS === 'number') ? opts.BUFFER_ROWS : ((window && typeof window.BUFFER_ROWS === 'number') ? window.BUFFER_ROWS : 2);
-        const BUFFER_COLS = (typeof opts.BUFFER_COLS === 'number') ? opts.BUFFER_COLS : ((window && typeof window.BUFFER_COLS === 'number') ? window.BUFFER_COLS : 5);
-        const CHAR_WIDTH = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
+        const rowHeight = (typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : ((window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20);
+        const bufferRows = (typeof opts.BUFFER_ROWS === 'number') ? opts.BUFFER_ROWS : ((window && typeof window.BUFFER_ROWS === 'number') ? window.BUFFER_ROWS : 2);
+        const bufferCols = (typeof opts.BUFFER_COLS === 'number') ? opts.BUFFER_COLS : ((window && typeof window.BUFFER_COLS === 'number') ? window.BUFFER_COLS : 5);
+        const charWidth = (typeof opts.CHAR_WIDTH === 'number') ? opts.CHAR_WIDTH : (this.charWidth || 8);
         const maxSeqLen = (typeof opts.maxSeqLen === 'number') ? opts.maxSeqLen : Math.max(0, (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : 0);
         const rowCount = (typeof opts.rowCount === 'number') ? opts.rowCount : ((this.alignment && this.alignment.length) ? this.alignment.length : ((window && typeof window.rowCount === 'number') ? window.rowCount : 0));
         const viewH = scroller ? scroller.clientHeight : (window && window.innerHeight) ? window.innerHeight : 0;
@@ -3490,10 +3516,10 @@
         const scrollTop = scroller ? scroller.scrollTop : 0;
         const scrollLeft = scroller ? scroller.scrollLeft : 0;
 
-        const firstRowNoBuffer = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT));
-        const lastRowNoBuffer = Math.min(rowCount - 1, Math.floor((scrollTop + viewH) / ROW_HEIGHT));
-        let firstRow = Math.max(0, firstRowNoBuffer - BUFFER_ROWS);
-        let lastRow = Math.min(rowCount - 1, lastRowNoBuffer + BUFFER_ROWS);
+        const firstRowNoBuffer = Math.max(0, Math.floor(scrollTop / rowHeight));
+        const lastRowNoBuffer = Math.min(rowCount - 1, Math.floor((scrollTop + viewH) / rowHeight));
+        let firstRow = Math.max(0, firstRowNoBuffer - bufferRows);
+        let lastRow = Math.min(rowCount - 1, lastRowNoBuffer + bufferRows);
 
         // Ensure offsets exist before computing columns; persist computed offsets
         const colOffsets = this.colOffsets && this.colOffsets.length ? this.colOffsets : this.buildColOffsetsFor((opts && !!opts.MASK_ENABLED) ? opts.MASK_ENABLED : true, opts);
@@ -3503,8 +3529,8 @@
         const rawFirstCol = this.colIndexFromCssOffset(scrollLeft);
         const rawLastCol = this.colIndexFromCssOffset(scrollLeft + viewW - 1);
 
-        const leftBuffer = (rawFirstCol >= BUFFER_COLS) ? BUFFER_COLS : 0;
-        const rightBuffer = BUFFER_COLS;
+        const leftBuffer = (rawFirstCol >= bufferCols) ? bufferCols : 0;
+        const rightBuffer = bufferCols;
         const firstCol = Math.max(0, rawFirstCol - leftBuffer);
         const lastCol = Math.min(maxSeqLen - 1, rawLastCol + rightBuffer);
 
@@ -3793,14 +3819,14 @@
       try {
         const labelCanvas = (opts && opts.labelCanvas) ? opts.labelCanvas : (document.getElementById ? document.getElementById('labels-canvas') : null);
         const scroller = (opts && opts.scroller) ? opts.scroller : (document.getElementById ? document.getElementById('alignment-scroll') : null);
-        const ROW_HEIGHT = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : (window && typeof window.ROW_HEIGHT === 'number' ? window.ROW_HEIGHT : 20);
+        const rowHeight = (opts && typeof opts.ROW_HEIGHT === 'number') ? opts.ROW_HEIGHT : (window && typeof window.ROW_HEIGHT === 'number' ? window.ROW_HEIGHT : 20);
         const rowCount = (opts && typeof opts.rowCount === 'number') ? opts.rowCount : (window && typeof window.rowCount === 'number' ? window.rowCount : 0);
         if (!labelCanvas) return 0;
         const rect = labelCanvas.getBoundingClientRect();
         const y = clientY - rect.top; // css pixels within canvas
         const scrollTop = scroller ? scroller.scrollTop : (window && window.scrollTop ? window.scrollTop : 0);
         const absY = scrollTop + y;
-        let row = Math.floor(absY / ROW_HEIGHT);
+        let row = Math.floor(absY / rowHeight);
         if (row < 0) row = 0;
         if (rowCount && row >= rowCount) row = Math.max(0, rowCount - 1);
         return row;
@@ -3931,8 +3957,8 @@
       const wantLeft = (typeof targetLeft === 'number') ? Math.max(0, Math.min(targetLeft, Math.max(0, totalWidth - (sc ? sc.clientWidth : 0)))) : startLeft;
       // Compute vertical bounds using this.alignment when available; fall back to window.rowCount
       const rowCount = (this.alignment && this.alignment.length) ? this.alignment.length : (window && typeof window.rowCount === 'number' ? window.rowCount : 0);
-      const ROW_HEIGHT = (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20;
-      const maxTop = Math.max(0, rowCount * ROW_HEIGHT - (sc ? sc.clientHeight : window.innerHeight));
+      const rowHeight = (window && typeof window.ROW_HEIGHT === 'number') ? window.ROW_HEIGHT : 20;
+      const maxTop = Math.max(0, rowCount * rowHeight - (sc ? sc.clientHeight : window.innerHeight));
       const wantTop = (typeof targetTop === 'number') ? Math.max(0, Math.min(targetTop, maxTop)) : startTop;
       const deltaLeft = wantLeft - startLeft;
       const deltaTop = wantTop - startTop;
@@ -3956,13 +3982,13 @@
       const cur = sc.scrollLeft || 0;
       const offsets = this.colOffsets || [];
       const maxSeqLen = Math.max(0, offsets.length - 1);
-      const CHAR_WIDTH = this.charWidth || 8;
+      const charWidth = this.charWidth || 8;
       // fallback to character-grid snap when offsets not available
       if (!offsets || offsets.length < 2) {
         let target;
-        if (cur > startLeft) target = Math.ceil(cur / CHAR_WIDTH) * CHAR_WIDTH;
-        else if (cur < startLeft) target = Math.floor(cur / CHAR_WIDTH) * CHAR_WIDTH;
-        else target = Math.round(cur / CHAR_WIDTH) * CHAR_WIDTH;
+        if (cur > startLeft) target = Math.ceil(cur / charWidth) * charWidth;
+        else if (cur < startLeft) target = Math.floor(cur / charWidth) * charWidth;
+        else target = Math.round(cur / charWidth) * charWidth;
         if (target !== cur) { if (sc) sc.scrollLeft = target; }
         return;
       }
@@ -3976,7 +4002,7 @@
       } else {
         const idx = this.colIndexFromCssOffset(cur);
         const leftB = offsets[idx];
-        const rightB = offsets[idx + 1] || (leftB + CHAR_WIDTH);
+        const rightB = offsets[idx + 1] || (leftB + charWidth);
         target = (cur - leftB) < (rightB - cur) ? leftB : rightB;
       }
       if (target !== cur) { if (sc) sc.scrollLeft = target; }
@@ -4157,8 +4183,8 @@
         // Only scroll vertically if no rows are selected (searching all sequences)
         // When rows are selected, keep the current vertical scroll position
         if (firstDiffRow !== -1 && this.scroller && selectedRows.size === 0) {
-          const ROW_HEIGHT = this.ROW_HEIGHT || (window && window.ROW_HEIGHT) || 20;
-          const targetScrollTop = firstDiffRow * ROW_HEIGHT;
+          const rowHeight = this.ROW_HEIGHT || (window && window.ROW_HEIGHT) || 20;
+          const targetScrollTop = firstDiffRow * rowHeight;
           this.scroller.scrollTop = targetScrollTop;
         }
         
@@ -4237,8 +4263,8 @@
         // Only scroll vertically if no rows are selected (searching all sequences)
         // When rows are selected, keep the current vertical scroll position
         if (firstDiffRow !== -1 && this.scroller && selectedRows.size === 0) {
-          const ROW_HEIGHT = this.ROW_HEIGHT || (window && window.ROW_HEIGHT) || 20;
-          const targetScrollTop = firstDiffRow * ROW_HEIGHT;
+          const rowHeight = this.ROW_HEIGHT || (window && window.ROW_HEIGHT) || 20;
+          const targetScrollTop = firstDiffRow * rowHeight;
           this.scroller.scrollTop = targetScrollTop;
         }
         
@@ -4265,16 +4291,16 @@
         console.info('SealionViewer: mask animation start', { toEnabled: !!toEnabled });
         const from = (this.colOffsets && this.colOffsets.slice) ? this.colOffsets.slice() : [];
         const maskStr = (window && typeof window.maskStr === 'string') ? window.maskStr : (window && typeof window.mask === 'string') ? window.mask : null;
-        const REDUCED_COL_WIDTH = (window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1;
-        const EXPANDED_RIGHT_PAD = (window && typeof window.EXPANDED_RIGHT_PAD === 'number') ? window.EXPANDED_RIGHT_PAD : 2;
-        const to = this.buildColOffsetsFor(toEnabled, { maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0), CHAR_WIDTH: this.charWidth, REDUCED_COL_WIDTH: REDUCED_COL_WIDTH, EXPANDED_RIGHT_PAD: EXPANDED_RIGHT_PAD, maskStr: maskStr });
+        const reducedColWidth = (window && typeof window.REDUCED_COL_WIDTH === 'number') ? window.REDUCED_COL_WIDTH : 1;
+        const expandedRightPad = (window && typeof window.EXPANDED_RIGHT_PAD === 'number') ? window.EXPANDED_RIGHT_PAD : 2;
+        const to = this.buildColOffsetsFor(toEnabled, { maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (window && typeof window.maxSeqLen === 'number' ? window.maxSeqLen : 0), CHAR_WIDTH: this.charWidth, REDUCED_COL_WIDTH: reducedColWidth, EXPANDED_RIGHT_PAD: expandedRightPad, maskStr: maskStr });
         const start = performance.now();
-        const DURATION = (window && typeof window.MASK_ANIM_MS === 'number') ? window.MASK_ANIM_MS : 220;
+        const duration = (window && typeof window.MASK_ANIM_MS === 'number') ? window.MASK_ANIM_MS : 220;
         const that = this;
         function easeOutQuad(t) { return 1 - (1 - t) * (1 - t); }
         function tick(now) {
           try {
-            const dt = Math.min(1, (now - start) / DURATION);
+            const dt = Math.min(1, (now - start) / duration);
             const eased = easeOutQuad(dt);
             const maxIdx = Math.max((from && from.length) ? from.length - 1 : 0, (to && to.length) ? to.length - 1 : 0);
             // interpolate into this.colOffsets as CSS pixels (float values allowed during animation)
@@ -4294,7 +4320,7 @@
               that.maskEnabled = !!toEnabled;
               try { window.maskEnabled = !!that.maskEnabled; } catch (_) { }
               // rebuild definitive integer offsets and resize backings
-              try { const out = that.buildColOffsetsFor(!!that.maskEnabled, { maxSeqLen: (to && to.length) ? to.length - 1 : 0, CHAR_WIDTH: that.charWidth, REDUCED_COL_WIDTH: REDUCED_COL_WIDTH, EXPANDED_RIGHT_PAD: EXPANDED_RIGHT_PAD, maskStr: maskStr }); that.colOffsets = out; } catch (_) { }
+              try { const out = that.buildColOffsetsFor(!!that.maskEnabled, { maxSeqLen: (to && to.length) ? to.length - 1 : 0, CHAR_WIDTH: that.charWidth, REDUCED_COL_WIDTH: reducedColWidth, EXPANDED_RIGHT_PAD: expandedRightPad, maskStr: maskStr }); that.colOffsets = out; } catch (_) { }
               try { that.setCanvasCSSSizes(); } catch (_) { }
               try { that.resizeBackings(); } catch (_) { }
               that.invalidateOverviewCache();
