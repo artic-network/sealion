@@ -642,6 +642,49 @@ class Alignment {
   }
 }
 
+// Universal genetic code translation table
+Alignment.GENETIC_CODE = {
+  'TTT': 'F', 'TTC': 'F', 'TTA': 'L', 'TTG': 'L',
+  'TCT': 'S', 'TCC': 'S', 'TCA': 'S', 'TCG': 'S',
+  'TAT': 'Y', 'TAC': 'Y', 'TAA': '*', 'TAG': '*',
+  'TGT': 'C', 'TGC': 'C', 'TGA': '*', 'TGG': 'W',
+  'CTT': 'L', 'CTC': 'L', 'CTA': 'L', 'CTG': 'L',
+  'CCT': 'P', 'CCC': 'P', 'CCA': 'P', 'CCG': 'P',
+  'CAT': 'H', 'CAC': 'H', 'CAA': 'Q', 'CAG': 'Q',
+  'CGT': 'R', 'CGC': 'R', 'CGA': 'R', 'CGG': 'R',
+  'ATT': 'I', 'ATC': 'I', 'ATA': 'I', 'ATG': 'M',
+  'ACT': 'T', 'ACC': 'T', 'ACA': 'T', 'ACG': 'T',
+  'AAT': 'N', 'AAC': 'N', 'AAA': 'K', 'AAG': 'K',
+  'AGT': 'S', 'AGC': 'S', 'AGA': 'R', 'AGG': 'R',
+  'GTT': 'V', 'GTC': 'V', 'GTA': 'V', 'GTG': 'V',
+  'GCT': 'A', 'GCC': 'A', 'GCA': 'A', 'GCG': 'A',
+  'GAT': 'D', 'GAC': 'D', 'GAA': 'E', 'GAG': 'E',
+  'GGT': 'G', 'GGC': 'G', 'GGA': 'G', 'GGG': 'G'
+};
+
+// Translate a nucleotide sequence to amino acids
+// seq: nucleotide sequence string
+// frame: reading frame (1, 2, or 3)
+// Returns: amino acid sequence string
+Alignment.translateSequence = function(seq, frame) {
+  if (!seq || typeof seq !== 'string') return '';
+  frame = frame || 1;
+  const startPos = frame - 1; // Convert to 0-indexed
+  let protein = '';
+  
+  for (let i = startPos; i + 2 < seq.length; i += 3) {
+    const codon = seq.substring(i, i + 3).toUpperCase().replace(/U/g, 'T');
+    if (codon.length === 3 && !/[^ACGT]/.test(codon)) {
+      const aa = Alignment.GENETIC_CODE[codon] || 'X';
+      protein += aa;
+    } else {
+      protein += 'X'; // Unknown/ambiguous
+    }
+  }
+  
+  return protein;
+};
+
 // Export for use in other scripts
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = Alignment;
