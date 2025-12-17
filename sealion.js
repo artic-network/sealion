@@ -339,6 +339,242 @@
       }
     }
 
+    // Get current viewer state. Returns an object containing all state information
+    // that can be persisted (e.g., to localStorage) and restored later.
+    // State includes viewing modes, color schemes, viewport position, and selections.
+    getState() {
+      const state = {
+        // Viewing modes
+        aminoAcidMode: this.aminoAcidMode || false,
+        codonMode: this.codonMode || false,
+        readingFrame: this.readingFrame || 1,
+        maskEnabled: this.maskEnabled || false,
+        hideMode: this.hideMode || false,
+        refModeEnabled: this.refModeEnabled || false,
+        snapEnabled: this.snapEnabled !== false, // default true
+        darkMode: this.darkMode || false,
+        
+        // Color schemes
+        nucleotideColorScheme: this.nucleotideColorScheme || 'default',
+        aminoAcidColorScheme: this.aminoAcidColorScheme || 'default',
+        
+        // Font sizes (current, not initial)
+        fontSize: this.fontSize || this.FONT_SIZE || 12,
+        labelFontSize: this.labelFontSize || this.FONT_SIZE || 12,
+        
+        // Reference settings
+        refIndex: (typeof this.refIndex === 'number') ? this.refIndex : null,
+        
+        // Column collapsing
+        maskStr: this.maskStr || null,
+        
+        // Viewport position
+        scrollLeft: this.scroller ? this.scroller.scrollLeft : 0,
+        scrollTop: this.scroller ? this.scroller.scrollTop : 0,
+        
+        // Label width (user may have resized)
+        labelWidth: this.LABEL_WIDTH || 260,
+        
+        // Selections (convert Sets to arrays for JSON serialization)
+        selectedRows: this.selectedRows ? Array.from(this.selectedRows) : [],
+        selectedCols: this.selectedCols ? Array.from(this.selectedCols) : [],
+        
+        // Tags and bookmarks (convert Maps to arrays of entries)
+        labelTags: this.labelTags ? Array.from(this.labelTags.entries()) : [],
+        siteBookmarks: this.siteBookmarks ? Array.from(this.siteBookmarks.entries()) : []
+      };
+      
+      return state;
+    }
+
+    // Set viewer state from a previously saved state object (e.g., from localStorage).
+    // Updates the viewer to match the provided state and triggers a re-render.
+    // Only sets properties that are present in the state object.
+    setState(state) {
+      if (!state) return;
+      
+      try {
+        let needsRebuild = false;
+        let needsRerender = false;
+        
+        // Viewing modes
+        if (typeof state.aminoAcidMode === 'boolean' && state.aminoAcidMode !== this.aminoAcidMode) {
+          this.aminoAcidMode = state.aminoAcidMode;
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.codonMode === 'boolean' && state.codonMode !== this.codonMode) {
+          this.codonMode = state.codonMode;
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.readingFrame === 'number' && state.readingFrame !== this.readingFrame) {
+          this.readingFrame = state.readingFrame;
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.maskEnabled === 'boolean' && state.maskEnabled !== this.maskEnabled) {
+          this.maskEnabled = state.maskEnabled;
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.hideMode === 'boolean' && state.hideMode !== this.hideMode) {
+          this.hideMode = state.hideMode;
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.refModeEnabled === 'boolean') {
+          this.refModeEnabled = state.refModeEnabled;
+          needsRerender = true;
+        }
+        if (typeof state.snapEnabled === 'boolean') {
+          this.snapEnabled = state.snapEnabled;
+        }
+        if (typeof state.darkMode === 'boolean' && state.darkMode !== this.darkMode) {
+          this.darkMode = state.darkMode;
+          // Toggle dark mode if needed
+          if (typeof this.toggleDarkMode === 'function') {
+            this.toggleDarkMode(state.darkMode);
+          }
+          needsRerender = true;
+        }
+        
+        // Color schemes
+        if (typeof state.nucleotideColorScheme === 'string' && state.nucleotideColorScheme !== this.nucleotideColorScheme) {
+          this.nucleotideColorScheme = state.nucleotideColorScheme;
+          const nucScheme = SealionViewer.NUCLEOTIDE_COLOR_SCHEMES[this.nucleotideColorScheme];
+          if (nucScheme) {
+            this.BASE_COLORS = this.darkMode ? { ...nucScheme.darkColors } : { ...nucScheme.lightColors };
+            this.DEFAULT_BASE_COLOR = this.darkMode ? nucScheme.darkDefault : nucScheme.lightDefault;
+          }
+          needsRerender = true;
+        }
+        if (typeof state.aminoAcidColorScheme === 'string' && state.aminoAcidColorScheme !== this.aminoAcidColorScheme) {
+          this.aminoAcidColorScheme = state.aminoAcidColorScheme;
+          const aaScheme = SealionViewer.AMINO_ACID_COLOR_SCHEMES[this.aminoAcidColorScheme];
+          if (aaScheme) {
+            this.AA_COLORS = this.darkMode ? { ...aaScheme.darkColors } : { ...aaScheme.lightColors };
+            this.DEFAULT_AA_COLOR = this.darkMode ? aaScheme.darkDefault : aaScheme.lightDefault;
+          }
+          needsRerender = true;
+        }
+        
+        // Font sizes
+        if (typeof state.fontSize === 'number' && state.fontSize !== this.fontSize) {
+          this.fontSize = state.fontSize;
+          // Update the actual font string
+          this.FONT = this.fontSize + 'px monospace';
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.labelFontSize === 'number' && state.labelFontSize !== this.labelFontSize) {
+          this.labelFontSize = state.labelFontSize;
+          this.labelFont = this.labelFontSize + 'px monospace';
+          needsRerender = true;
+        }
+        
+        // Reference settings
+        if (typeof state.refIndex === 'number' || state.refIndex === null) {
+          this.refIndex = state.refIndex;
+          needsRerender = true;
+        }
+        
+        // Column collapsing
+        if (typeof state.maskStr === 'string' || state.maskStr === null) {
+          this.maskStr = state.maskStr;
+          // Also update window.mask for compatibility
+          if (typeof window !== 'undefined') {
+            window.mask = state.maskStr;
+            window.maskStr = state.maskStr;
+          }
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        
+        // Label width
+        if (typeof state.labelWidth === 'number' && state.labelWidth !== this.LABEL_WIDTH) {
+          this.LABEL_WIDTH = state.labelWidth;
+          // Update CSS variable
+          if (typeof document !== 'undefined') {
+            try {
+              document.documentElement.style.setProperty('--label-width', state.labelWidth + 'px');
+            } catch (_) {}
+          }
+          if (typeof this.setCanvasCSSSizes === 'function') {
+            this.setCanvasCSSSizes();
+          }
+          needsRerender = true;
+        }
+        
+        // Selections (convert arrays back to Sets)
+        if (Array.isArray(state.selectedRows)) {
+          this.selectedRows = this.selectedRows || new Set();
+          this.selectedRows.clear();
+          state.selectedRows.forEach(r => this.selectedRows.add(r));
+          needsRerender = true;
+        }
+        if (Array.isArray(state.selectedCols)) {
+          this.selectedCols = this.selectedCols || new Set();
+          this.selectedCols.clear();
+          state.selectedCols.forEach(c => this.selectedCols.add(c));
+          needsRerender = true;
+        }
+        
+        // Tags and bookmarks (convert arrays back to Maps)
+        if (Array.isArray(state.labelTags)) {
+          this.labelTags = this.labelTags || new Map();
+          this.labelTags.clear();
+          state.labelTags.forEach(([key, value]) => this.labelTags.set(key, value));
+          needsRerender = true;
+        }
+        if (Array.isArray(state.siteBookmarks)) {
+          this.siteBookmarks = this.siteBookmarks || new Map();
+          this.siteBookmarks.clear();
+          state.siteBookmarks.forEach(([key, value]) => this.siteBookmarks.set(key, value));
+          this._overviewCacheInvalid = true; // bookmarks affect overview
+          needsRerender = true;
+        }
+        
+        // Rebuild column offsets if needed (for mask, amino acid mode, font size changes)
+        if (needsRebuild && typeof this.buildColOffsetsFor === 'function' && this.alignment) {
+          const maxSeqLen = Math.max(...this.alignment.map(row => row.sequence ? row.sequence.length : 0));
+          this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
+            maxSeqLen: maxSeqLen,
+            CHAR_WIDTH: this.charWidth,
+            EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD || 2,
+            REDUCED_COL_WIDTH: this.REDUCED_COL_WIDTH || 1,
+            HIDDEN_MARKER_WIDTH: this.HIDDEN_MARKER_WIDTH || 4,
+            hideMode: this.hideMode || false,
+            maskStr: this.maskStr
+          });
+          
+          // Resize backings for new font/layout
+          if (typeof this.resizeBackings === 'function') {
+            this.resizeBackings();
+          }
+        }
+        
+        // Viewport position (restore scroll after other updates)
+        if (this.scroller) {
+          if (typeof state.scrollLeft === 'number') {
+            this.scroller.scrollLeft = state.scrollLeft;
+          }
+          if (typeof state.scrollTop === 'number') {
+            this.scroller.scrollTop = state.scrollTop;
+          }
+        }
+        
+        // Trigger re-render if any state changed
+        if (needsRerender && typeof this.scheduleRender === 'function') {
+          this.scheduleRender();
+        }
+        
+        console.info('SealionViewer.setState: state restored');
+      } catch (e) {
+        console.warn('SealionViewer.setState failed', e);
+      }
+    }
+
     // Set or update the alignment data for this viewer instance. This method
     // allows changing the alignment after construction. It rebuilds column
     // offsets, updates sizing, and schedules a render.
