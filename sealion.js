@@ -5253,8 +5253,8 @@
     'aine': {
       name: 'Áine',
       // Palette inspired by colours used in Áine O'Toole's figures and slides
-      lightColors: { 'A': '#2b8cbe', 'C': '#66c2a5', 'G': '#fc8d62', 'T': '#8da0cb' },
-      darkColors: { 'A': '#4eb3d3', 'C': '#99d8c9', 'G': '#ffb482', 'T': '#b3b3e6' },
+      lightColors: { 'A': '#66c2a5', 'C': '#2b8cbe', 'G': '#fc8d62', 'T': '#8da0cb' },
+      darkColors: { 'A': '#99d8c9', 'C': '#4eb3d3', 'G': '#ffb482', 'T': '#b3b3e6' },
       lightDefault: '#666',
       darkDefault: '#aaa'
     }
