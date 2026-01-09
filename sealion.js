@@ -5138,8 +5138,8 @@
     OVERVIEW_BOTTOM_PAD: 8,
     EXPANDED_RIGHT_PAD: 2,
     REDUCED_COL_WIDTH: 1,
-    HIDDEN_MARKER_WIDTH: 4,
-    HIDDEN_MARKER_COLOR: '#d0d0d0',
+    HIDDEN_MARKER_WIDTH: 1,
+    HIDDEN_MARKER_COLOR: '#e0e0e0',
     COMPRESSED_CELL_VPAD: 2,
     BUFFER_ROWS: 2,
     BUFFER_COLS: 5,
@@ -5168,14 +5168,14 @@
     LABELS_BG: '#f3f3f3',
     LABELS_TEXT: '#111',
     LABELS_HEADER_TEXT: '#333',
+    LABEL_START_POS: 56,
     // Index styling
     INDEX_FONT_STYLE: 'italic',
     INDEX_COLOR: '#888888',
     INDEX_RIGHT_ALIGN_POS: 50,
-    LABEL_START_POS: 56,
-    SEQ_ROW_SELECTION: 'rgba(180, 215, 255, 0.3)',
-    SEQ_EVEN_ROW: '#ccc',
+    SEQ_EVEN_ROW: '#fff',
     SEQ_ODD_ROW: '#fff',
+    SEQ_ROW_SELECTION: 'rgba(180, 215, 255, 0.3)',
     SEQ_COL_SELECTION: 'rgba(180, 215, 255, 0.3)',
     maskEnabled: true,
     snapEnabled: true,
@@ -5236,7 +5236,7 @@
       darkDefault: '#aaa'
     },
     'wes': {
-      name: 'Wes Anderson',
+      name: 'Wes',
       lightColors: { 'A': '#0B775E', 'C': '#35274A', 'G': '#DD7373', 'T': '#F4B942' },
       darkColors: { 'A': '#1ABC9C', 'C': '#B19CD9', 'G': '#FF9999', 'T': '#FFD369' },
       lightDefault: '#666',
@@ -5246,6 +5246,15 @@
       name: 'Verity',
       lightColors: { 'A': '#FF1493', 'C': '#FF69B4', 'G': '#DB7093', 'T': '#C71585' },
       darkColors: { 'A': '#FF69B4', 'C': '#FFB6C1', 'G': '#FFC0CB', 'T': '#FF1493' },
+      lightDefault: '#666',
+      darkDefault: '#aaa'
+    }
+    ,
+    'aine': {
+      name: 'Áine',
+      // Palette inspired by colours used in Áine O'Toole's figures and slides
+      lightColors: { 'A': '#2b8cbe', 'C': '#66c2a5', 'G': '#fc8d62', 'T': '#8da0cb' },
+      darkColors: { 'A': '#4eb3d3', 'C': '#99d8c9', 'G': '#ffb482', 'T': '#b3b3e6' },
       lightDefault: '#666',
       darkDefault: '#aaa'
     }
@@ -5299,7 +5308,7 @@
       darkDefault: '#bdbdbd'
     },
     'wes': {
-      name: 'Wes Anderson',
+      name: 'Wes',
       lightColors: {
         // Hydrophobic/aliphatic (Moonrise Kingdom yellow)
         'A': '#F4B942', 'I': '#F4B942', 'L': '#F4B942', 'M': '#F4B942', 'V': '#F4B942',

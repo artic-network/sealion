@@ -363,7 +363,10 @@
               return;
             }
             const col = Array.from(selectedCols)[0];
-            viewer.alignment.orderBySite(col);
+            viewer.alignment.orderBySite(col, false, {
+              aminoAcidMode: viewer.aminoAcidMode || false,
+              readingFrame: viewer.readingFrame || 1
+            });
             viewer.cancelRender();
             viewer.scheduleRender();
           });
@@ -376,7 +379,10 @@
               return;
             }
             const col = Array.from(selectedCols)[0];
-            viewer.alignment.orderBySite(col, true);
+            viewer.alignment.orderBySite(col, true, {
+              aminoAcidMode: viewer.aminoAcidMode || false,
+              readingFrame: viewer.readingFrame || 1
+            });
             viewer.cancelRender();
             viewer.scheduleRender();
           });
@@ -1131,7 +1137,10 @@
       // Use the first selected column for sorting
       const siteIndex = selectedCols[0];
 
-      viewer.alignment.orderBySite(siteIndex);
+      viewer.alignment.orderBySite(siteIndex, false, {
+        aminoAcidMode: viewer.aminoAcidMode || false,
+        readingFrame: viewer.readingFrame || 1
+      });
       viewer.cancelRender();
       viewer.scheduleRender();
     });
@@ -1167,7 +1176,10 @@
       // Use the first selected column for sorting
       const siteIndex = selectedCols[0];
 
-      alignment.orderBySite(siteIndex, true);
+      alignment.orderBySite(siteIndex, true, {
+        aminoAcidMode: viewer.aminoAcidMode || false,
+        readingFrame: viewer.readingFrame || 1
+      });
       viewer.alignment = alignment;
       viewer.cancelRender();
       viewer.scheduleRender();

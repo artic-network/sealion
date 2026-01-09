@@ -218,25 +218,60 @@ class Alignment {
 
   // Order sequences by character at a specific site (position)
   // Characters are ordered alphabetically, with gaps (-) sorted last
-  orderBySite(siteIndex, reverse = false) {
+  // If aminoAcidMode is true, translates to amino acids before sorting
+  orderBySite(siteIndex, reverse = false, options = {}) {
     if (siteIndex < 0 || siteIndex >= this.getMaxSeqLen()) {
       console.warn(`Alignment.orderBySite: siteIndex ${siteIndex} out of range [0, ${this.getMaxSeqLen()-1}]`);
       return;
     }
 
+    const aminoAcidMode = options.aminoAcidMode || false;
+    const readingFrame = options.readingFrame || 1;
+
     // Nucleotide sort order: A, C, G, T, N, -
     const nucleotideOrder = { 'A': 0, 'C': 1, 'G': 2, 'T': 3, 'N': 4, '-': 5 };
-    const getOrder = (char) => {
+    
+    // Amino acid sort order (alphabetical with common ones first, then gaps)
+    const aminoAcidOrder = {
+      'A': 0, 'C': 1, 'D': 2, 'E': 3, 'F': 4, 'G': 5, 'H': 6, 'I': 7, 
+      'K': 8, 'L': 9, 'M': 10, 'N': 11, 'P': 12, 'Q': 13, 'R': 14, 'S': 15,
+      'T': 16, 'V': 17, 'W': 18, 'Y': 19, '*': 20, 'X': 21, '-': 22
+    };
+    
+    const getOrder = (char, isAminoAcid) => {
       const upper = char.toUpperCase();
-      return nucleotideOrder.hasOwnProperty(upper) ? nucleotideOrder[upper] : 6;
+      if (isAminoAcid) {
+        return aminoAcidOrder.hasOwnProperty(upper) ? aminoAcidOrder[upper] : 23;
+      } else {
+        return nucleotideOrder.hasOwnProperty(upper) ? nucleotideOrder[upper] : 6;
+      }
     };
 
     this._currentOrder = this._sequences.slice().sort((a, b) => {
-      const charA = (siteIndex < a.sequence.length) ? a.sequence[siteIndex] : '-';
-      const charB = (siteIndex < b.sequence.length) ? b.sequence[siteIndex] : '-';
+      let charA, charB;
       
-      const orderA = getOrder(charA);
-      const orderB = getOrder(charB);
+      if (aminoAcidMode) {
+        // Translate sequences to amino acids and get the character at the site
+        // In amino acid mode, the siteIndex refers to the nucleotide position
+        // We need to determine which codon this nucleotide belongs to
+        const codonStart = Math.floor(siteIndex / 3) * 3;
+        const aaPosition = Math.floor(siteIndex / 3);
+        
+        // Translate each sequence
+        const translatedA = Alignment.translateSequence(a.sequence, readingFrame);
+        const translatedB = Alignment.translateSequence(b.sequence, readingFrame);
+        
+        // Get the amino acid at this position
+        charA = (aaPosition < translatedA.length) ? translatedA[aaPosition] : '-';
+        charB = (aaPosition < translatedB.length) ? translatedB[aaPosition] : '-';
+      } else {
+        // Use nucleotide characters directly
+        charA = (siteIndex < a.sequence.length) ? a.sequence[siteIndex] : '-';
+        charB = (siteIndex < b.sequence.length) ? b.sequence[siteIndex] : '-';
+      }
+      
+      const orderA = getOrder(charA, aminoAcidMode);
+      const orderB = getOrder(charB, aminoAcidMode);
       
       const result = orderA - orderB;
       return reverse ? -result : result;
