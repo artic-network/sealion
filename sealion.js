@@ -5258,6 +5258,15 @@
       lightDefault: '#666',
       darkDefault: '#aaa'
     }
+    ,
+    'samuel': {
+      name: 'Samuel',
+      // A and T: blue/green hues; G and C: red/yellow hues
+      lightColors: { 'A': '#2b8cbe', 'C': '#f4b942', 'G': '#d62728', 'T': '#66c2a5' },
+      darkColors: { 'A': '#4eb3d3', 'C': '#ffd369', 'G': '#ff6f5f', 'T': '#99d8c9' },
+      lightDefault: '#666',
+      darkDefault: '#aaa'
+    }
   };
 
   // Amino acid color schemes
