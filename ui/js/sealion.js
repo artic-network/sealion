@@ -64,6 +64,41 @@
     } catch (e) { }
   }
 
+  // ── Sealion app interface (for sealion-tauri.js and the command registry) ────
+  // window.sealion is set up here with stub implementations; concrete methods
+  // that rely on closures defined later in this file are filled in below.
+  // The Tauri adapter (sealion-tauri.js) may override pickFile and setSaveHandler.
+  {
+    const _prev = window.sealion || {};
+    window.sealion = {
+      // commands.js populates this before sealion.js runs (or it may already be
+      // set on the stub object created by commands.js).
+      commands: _prev.commands || null,
+
+      // Override in sealion-tauri.js for a native file-open dialog.
+      pickFile: () => { document.getElementById('open-file-btn')?.click(); },
+
+      // Filled in once the relevant setup blocks below have run.
+      loadFastaFromText:     null,
+      loadReferenceFromText: null,
+
+      // Lazily read IIFE-scoped variables — safe because these are only ever
+      // called after sealion-ready fires (i.e. after the IIFE has completed).
+      get hasAlignment() { return !!(window.alignment); },
+      openSearch: () => { try { openSearchModal(); } catch (_) {} },
+      findNext:   () => { try { if (viewer && viewer.nextMatch)       viewer.nextMatch();        } catch (_) {} },
+      findPrev:   () => { try { if (viewer && viewer.previousMatch)   viewer.previousMatch();    } catch (_) {} },
+
+      showErrorDialog(msg) { alert(msg); },
+      closeModal() {
+        try { if (fileModal)       fileModal.hide();       } catch (_) {}
+        try { if (refGenomeModal)  refGenomeModal.hide();  } catch (_) {}
+      },
+      setSaveHandler(fn) { window.sealion._saveHandler = fn; },
+      _saveHandler: null,
+    };
+  }
+
   // Start the initialization process
   initializeViewer();
 
@@ -299,6 +334,15 @@
       // Update global alignment reference
       alignment = alignmentInstance;
       try { window.alignment = alignmentInstance; } catch (_) { }
+
+      // Notify command registry that export / diff navigation are now available.
+      try {
+        if (window.sealion && window.sealion.commands) {
+          window.sealion.commands.setEnabled('export-alignment', true);
+          window.sealion.commands.setEnabled('next-diff', true);
+          window.sealion.commands.setEnabled('prev-diff', true);
+        }
+      } catch (_) {}
 
       // Get data dimensions
       const maxSeqLen = alignmentInstance.getMaxSeqLen();
@@ -701,7 +745,7 @@
   // so compression machinery is always enabled but starts uncompressed.
   // Evaluate and normalize lazily so global `mask` can be injected/edited at runtime.
   let maskStr = null;
-  // Populate maskStr from utils (js/utils.js); fall back to all '1's if helper missing
+  // Populate maskStr from utils (ui/js/utils.js); fall back to all '1's if helper missing
   try { maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); } catch (_) { maskStr = '1'.repeat(maxSeqLen); }
   // reference handling: evaluate lazily and expose
   let refStr = null;
@@ -2236,6 +2280,20 @@
           fastaText += sequence + '\n';
         }
         
+        // Use native save handler if provided (e.g. Tauri adapter)
+        if (window.sealion && window.sealion._saveHandler) {
+          const _ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+          const _rc  = rowIndices.length;
+          const _cc  = colIndices ? colIndices.length : 'all';
+          window.sealion._saveHandler({
+            content:    fastaText,
+            filename:   `alignment_${_rc}seqs_${_cc}sites_${_ts}.fasta`,
+            filterName: 'FASTA files',
+            extensions: ['fasta', 'fa'],
+          });
+          return;
+        }
+
         // Create a blob and download it
         const blob = new Blob([fastaText], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
@@ -2450,7 +2508,16 @@
           document.getElementById('fasta-example-panel').style.display = '';
         }
       }
-      
+
+      // Expose for Tauri adapter: load a FASTA alignment directly from text content.
+      window.sealion.loadFastaFromText = async (content, name) => {
+        await handleFileUpload(new File([content], name, { type: 'text/plain' }));
+      };
+      window.sealion.closeModal = () => {
+        try { fileModal.hide(); } catch (_) {}
+        try { if (refGenomeModal) refGenomeModal.hide(); } catch (_) {}
+      };
+
       // Function to load example data
       async function loadExampleData() {
         try {
@@ -2824,7 +2891,7 @@
           else if (url.endsWith('.gb') || url.endsWith('.gbk') || url.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
             // Use GenBank parser
             if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
-              throw new Error('GenBank parser not available. Please ensure js/utils.js is loaded.');
+              throw new Error('GenBank parser not available. Please ensure ui/js/utils.js is loaded.');
             }
             
             referenceGenomeData = window.SealionUtils.parseGenBankFile(text);
@@ -2888,7 +2955,7 @@
           else if (file.name.endsWith('.gb') || file.name.endsWith('.gbk') || file.name.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
             // Use GenBank parser
             if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
-              throw new Error('GenBank parser not available. Please ensure js/utils.js is loaded.');
+              throw new Error('GenBank parser not available. Please ensure ui/js/utils.js is loaded.');
             }
             
             referenceGenomeData = window.SealionUtils.parseGenBankFile(text);
@@ -2925,7 +2992,12 @@
           refGenomeLoading.style.display = 'none';
         }
       }
-      
+
+      // Expose for Tauri adapter: load reference genome directly from text content.
+      window.sealion.loadReferenceFromText = async (content, name) => {
+        await loadReferenceFromFile(new File([content], name, { type: 'text/plain' }));
+      };
+
       // Open modal when button clicked
       loadReferenceBtn.addEventListener('click', () => {
         // Reset modal state
@@ -3092,6 +3164,10 @@
       }
     } catch (_) { }
   }, 500);
+
+  // Notify sealion-tauri.js (and any other integrations) that the app
+  // interface is fully initialised and ready for use.
+  window.dispatchEvent(new CustomEvent('sealion-ready'));
 
 }
 

@@ -1,4 +1,4 @@
-// js/utils.js
+// ui/js/utils.js
 // Utility functions shared across the Sealion application.
 (function(exports){
   // Normalize and return a mask string of length `maxSeqLen`.
