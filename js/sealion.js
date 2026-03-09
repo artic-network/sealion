@@ -701,7 +701,7 @@
   // so compression machinery is always enabled but starts uncompressed.
   // Evaluate and normalize lazily so global `mask` can be injected/edited at runtime.
   let maskStr = null;
-  // Populate maskStr from utils (sealion/utils.js); fall back to all '1's if helper missing
+  // Populate maskStr from utils (js/utils.js); fall back to all '1's if helper missing
   try { maskStr = (window && window.refreshMaskStr) ? window.refreshMaskStr() : '1'.repeat(maxSeqLen); } catch (_) { maskStr = '1'.repeat(maxSeqLen); }
   // reference handling: evaluate lazily and expose
   let refStr = null;
@@ -2824,7 +2824,7 @@
           else if (url.endsWith('.gb') || url.endsWith('.gbk') || url.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
             // Use GenBank parser
             if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
-              throw new Error('GenBank parser not available. Please ensure sealion/utils.js is loaded.');
+              throw new Error('GenBank parser not available. Please ensure js/utils.js is loaded.');
             }
             
             referenceGenomeData = window.SealionUtils.parseGenBankFile(text);
@@ -2888,7 +2888,7 @@
           else if (file.name.endsWith('.gb') || file.name.endsWith('.gbk') || file.name.endsWith('.genbank') || text.trim().startsWith('LOCUS')) {
             // Use GenBank parser
             if (!window.SealionUtils || !window.SealionUtils.parseGenBankFile) {
-              throw new Error('GenBank parser not available. Please ensure sealion/utils.js is loaded.');
+              throw new Error('GenBank parser not available. Please ensure js/utils.js is loaded.');
             }
             
             referenceGenomeData = window.SealionUtils.parseGenBankFile(text);

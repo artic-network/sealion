@@ -1,6 +1,5 @@
-// sealion/utils.js
-// Small utilities extracted from script.js to centralize pure helpers.
-// These are safe, viewer-independent functions used during the staged migration.
+// js/utils.js
+// Utility functions shared across the Sealion application.
 (function(exports){
   // Normalize and return a mask string of length `maxSeqLen`.
   // Uses window.alignment and window.mask when called without arguments for
