@@ -1,6 +1,4 @@
 // sealion.js
-// Staged refactor: first-pass SealionViewer class (safe, non-breaking).
-// This file creates window.SealionViewer so existing code keeps working.
 
 (function () {
   'use strict';
@@ -3810,7 +3808,37 @@
       return this.alignment.computeConstantMaskAllowNAndGaps();
     }
 
-    // Find matches for query in alignment rows (label or sequence). Returns array of row indices.
+    // Find sequence matches using regex or literal pattern.
+    // Returns array of {row, startCol, endCol, matchText} sorted by row then startCol.
+    findSequenceMatches(query) {
+      try {
+        if (!query || !this.alignment) return [];
+        // Try to compile as regex; fall back to literal match
+        let regex;
+        try {
+          regex = new RegExp(query, 'gi');
+        } catch (e) {
+          regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+        }
+        const matches = [];
+        const rows = this.alignment;
+        for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+          const row = rows[rowIdx];
+          if (!row) continue;
+          const seqStr = row.sequence ? String(row.sequence) : '';
+          if (!seqStr) continue;
+          regex.lastIndex = 0;
+          let m;
+          while ((m = regex.exec(seqStr)) !== null) {
+            matches.push({ row: rowIdx, startCol: m.index, endCol: m.index + m[0].length - 1, matchText: m[0] });
+            if (m[0].length === 0) regex.lastIndex++; // avoid infinite loop on zero-length match
+          }
+        }
+        return matches;
+      } catch (e) { console.warn('SealionViewer.findSequenceMatches failed', e); return []; }
+    }
+
+    // Legacy: find matches by row (label or sequence contains query). Returns array of row indices.
     findMatches(q) {
       try {
         if (!q) return [];
@@ -3825,32 +3853,67 @@
       } catch (e) { console.warn('SealionViewer.findMatches failed', e); return []; }
     }
 
-    // Perform a search with the given query string
-    // Initializes searchMatches and currentMatchIndex, selects and scrolls to first match
-    performSearch(query) {
+    // Perform a sequence search. Finds all matches, starts navigation from (startRow, startCol).
+    // searchMatches entries are {row, startCol, endCol, matchText}.
+    performSearch(query, startRow, startCol) {
       try {
         if (!query || !query.trim()) {
           this.searchMatches = [];
           this.currentMatchIndex = -1;
-          return;
+          this.scheduleRender && this.scheduleRender();
+          return 0;
         }
 
-        this.searchMatches = this.findMatches(query);
-        this.currentMatchIndex = this.searchMatches.length > 0 ? 0 : -1;
+        this.searchQuery = query;
+        this.searchMatches = this.findSequenceMatches(query);
+        const count = this.searchMatches.length;
 
-        if (this.searchMatches.length > 0) {
-          // Select and scroll to first match
-          const matchRow = this.searchMatches[0];
-          if (typeof this.setSelectedRows === 'function') {
-            this.setSelectedRows([matchRow]);
-            this._scrollToRow(matchRow);
-            if (typeof this.scheduleRender === 'function') this.scheduleRender();
-          }
-          console.info(`Found ${this.searchMatches.length} match${this.searchMatches.length !== 1 ? 'es' : ''} for "${query}"`);
-        } else {
+        if (count === 0) {
+          this.currentMatchIndex = -1;
           console.info(`No matches found for "${query}"`);
+          this.scheduleRender && this.scheduleRender();
+          return 0;
         }
-      } catch (e) { console.warn('SealionViewer.performSearch failed', e); }
+
+        // Find first match at or after (startRow, startCol)
+        let idx = 0;
+        if (startRow !== undefined && startRow !== null) {
+          const sr = startRow;
+          const sc = startCol !== undefined && startCol !== null ? startCol : 0;
+          let found = false;
+          for (let i = 0; i < this.searchMatches.length; i++) {
+            const m = this.searchMatches[i];
+            if (m.row > sr || (m.row === sr && m.startCol >= sc)) {
+              idx = i;
+              found = true;
+              break;
+            }
+          }
+          if (!found) idx = 0; // wrap around
+        }
+
+        this.currentMatchIndex = idx;
+        this._navigateToMatch(idx);
+        console.info(`Found ${count} match${count !== 1 ? 'es' : ''} for "${query}" (at match ${idx + 1})`);
+        return count;
+      } catch (e) { console.warn('SealionViewer.performSearch failed', e); return 0; }
+    }
+
+    // Navigate to a specific match index
+    _navigateToMatch(idx) {
+      try {
+        const match = this.searchMatches && this.searchMatches[idx];
+        if (!match) return;
+        if (typeof this.setSelectedRows === 'function') this.setSelectedRows([match.row]);
+        if (typeof this.setSelectedCols === 'function') {
+          const cols = [];
+          for (let c = match.startCol; c <= match.endCol; c++) cols.push(c);
+          this.setSelectedCols(cols);
+        }
+        this._scrollToRow(match.row);
+        this._scrollToCol(match.startCol, match.endCol);
+        if (typeof this.scheduleRender === 'function') this.scheduleRender();
+      } catch (e) { console.warn('SealionViewer._navigateToMatch failed', e); }
     }
 
     // Navigate to the next search match (wraps around to beginning)
@@ -3862,14 +3925,7 @@
         }
 
         this.currentMatchIndex = (this.currentMatchIndex + 1) % this.searchMatches.length;
-        const matchRow = this.searchMatches[this.currentMatchIndex];
-
-        if (typeof this.setSelectedRows === 'function') {
-          this.setSelectedRows([matchRow]);
-          this._scrollToRow(matchRow);
-          if (typeof this.scheduleRender === 'function') this.scheduleRender();
-        }
-
+        this._navigateToMatch(this.currentMatchIndex);
         console.info(`Match ${this.currentMatchIndex + 1} of ${this.searchMatches.length}`);
       } catch (e) { console.warn('SealionViewer.nextMatch failed', e); }
     }
@@ -3883,14 +3939,7 @@
         }
 
         this.currentMatchIndex = (this.currentMatchIndex - 1 + this.searchMatches.length) % this.searchMatches.length;
-        const matchRow = this.searchMatches[this.currentMatchIndex];
-
-        if (typeof this.setSelectedRows === 'function') {
-          this.setSelectedRows([matchRow]);
-          this._scrollToRow(matchRow);
-          if (typeof this.scheduleRender === 'function') this.scheduleRender();
-        }
-
+        this._navigateToMatch(this.currentMatchIndex);
         console.info(`Match ${this.currentMatchIndex + 1} of ${this.searchMatches.length}`);
       } catch (e) { console.warn('SealionViewer.previousMatch failed', e); }
     }
@@ -3906,6 +3955,32 @@
           scroller.scrollTop = Math.max(0, targetTop - viewportHeight / 2);
         }
       } catch (e) { console.warn('SealionViewer._scrollToRow failed', e); }
+    }
+
+    // Helper: scroll horizontally so that the column range [startCol, endCol] is visible
+    _scrollToCol(startCol, endCol) {
+      try {
+        const scroller = this.scroller;
+        if (!scroller) return;
+        let targetLeft = 0;
+        if (this.colOffsets && this.colOffsets.length > startCol) {
+          targetLeft = this.colOffsets[startCol];
+        } else {
+          // Estimate using charWidth
+          const cw = this.charWidth || (this.opts && this.opts.charWidth) || 10;
+          targetLeft = startCol * cw;
+        }
+        const viewportWidth = scroller.clientWidth || 0;
+        const newScrollLeft = Math.max(0, targetLeft - viewportWidth / 3);
+        // Only scroll if the column is out of view
+        const currentLeft = scroller.scrollLeft;
+        let matchEndLeft = targetLeft;
+        if (this.colOffsets && endCol !== undefined && this.colOffsets.length > endCol + 1) {
+          matchEndLeft = this.colOffsets[endCol + 1];
+        }
+        const isVisible = currentLeft <= targetLeft && matchEndLeft <= currentLeft + viewportWidth;
+        if (!isVisible) scroller.scrollLeft = newScrollLeft;
+      } catch (e) { console.warn('SealionViewer._scrollToCol failed', e); }
     }
 
     // Helper: show CDS tooltip

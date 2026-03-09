@@ -392,13 +392,20 @@
               </div>              
             </div>
             
-            <!-- Search -->
-            <!-- <form class="d-flex" role="search" onsubmit="return false;">
-              <input class="form-control me-2" type="search" id="search-input" placeholder="Search sequences" aria-label="Search">
-              <button class="btn btn-outline-primary" id="search-next" type="button">
-                <i class="bi bi-search"></i>
-              </button>
-            </form> -->
+            <!-- Sequence Search Controls -->
+            <div class="nav-item ms-2">
+              <div class="btn-group" role="group" aria-label="Sequence search">
+                <button class="btn btn-sm btn-outline-secondary" id="seq-search-btn" type="button" title="Search sequence (Cmd-F)">
+                  <i class="bi bi-search"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="find-prev-btn" type="button" title="Previous match (Shift-Cmd-G)">
+                  <i class="bi bi-chevron-left"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="find-next-btn" type="button" title="Next match (Cmd-G)">
+                  <i class="bi bi-chevron-right"></i>
+                </button>
+              </div>
+            </div>
             
             <!-- Dark Mode Toggle -->
             <div class="nav-item ms-2">
@@ -423,6 +430,30 @@
       <!-- initialization status is shown in a centered overlay (#center-status) managed by the main script -->
 
       <div id="sealion"></div>
+
+      <!-- Search Modal -->
+      <div class="modal fade" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="searchModalLabel"><i class="bi bi-search me-2"></i>Search Sequence</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label for="seq-search-input" class="form-label">Search pattern (nucleotide or amino acid)</label>
+                <textarea class="form-control font-monospace" id="seq-search-input" rows="3" placeholder="Enter sequence or regex pattern…" spellcheck="false" autocomplete="off"></textarea>
+                <div class="form-text">Supports regex patterns (e.g. <code>ATG[CGT]+</code>). Case-insensitive. Searches in currently selected sequence first.</div>
+              </div>
+              <div id="seq-search-status" class="small"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <button type="button" class="btn btn-primary" id="seq-search-find-btn"><i class="bi bi-search me-1"></i>Find</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Help Modal -->
       <div class="modal fade" id="helpModal" tabindex="-1" aria-labelledby="helpModalLabel" aria-hidden="true">

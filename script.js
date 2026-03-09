@@ -117,6 +117,99 @@
     });
   }
 
+  // ── Sequence Search ──────────────────────────────────────────────────────
+  const _searchModalEl = document.getElementById('searchModal');
+  const seqSearchModal = _searchModalEl ? new bootstrap.Modal(_searchModalEl) : null;
+  const seqSearchBtn = document.getElementById('seq-search-btn');
+  const seqSearchInput = document.getElementById('seq-search-input');
+  const seqSearchFindBtn = document.getElementById('seq-search-find-btn');
+  const seqSearchStatus = document.getElementById('seq-search-status');
+  const findNextBtn = document.getElementById('find-next-btn');
+  const findPrevBtn = document.getElementById('find-prev-btn');
+
+  /** Open the search modal and focus the input */
+  function openSearchModal() {
+    if (!seqSearchModal) return;
+    // Clear previous status message
+    if (seqSearchStatus) { seqSearchStatus.textContent = ''; seqSearchStatus.className = 'small'; }
+    seqSearchModal.show();
+    // Focus the textarea after the modal transition completes
+    setTimeout(() => { if (seqSearchInput) seqSearchInput.focus(); }, 400);
+  }
+
+  /** Run the search from the modal and navigate to the first hit */
+  function performSearchFromModal() {
+    if (!viewer) return;
+    const query = seqSearchInput ? seqSearchInput.value.trim() : '';
+    if (!query) {
+      if (seqSearchStatus) { seqSearchStatus.textContent = 'Please enter a search pattern.'; seqSearchStatus.className = 'small text-warning'; }
+      return;
+    }
+    // Determine start position: begin just after current column selection in the selected row
+    let startRow = null, startCol = null;
+    try {
+      const selRows = viewer.getSelectedRows ? Array.from(viewer.getSelectedRows()) : [];
+      const selCols = viewer.getSelectedCols ? Array.from(viewer.getSelectedCols()) : [];
+      if (selRows.length > 0) startRow = Math.min(...selRows);
+      if (selCols.length > 0) startCol = Math.max(...selCols) + 1; // start after current selection
+    } catch (_) {}
+
+    const count = viewer.performSearch(query, startRow, startCol);
+
+    if (seqSearchStatus) {
+      if (count === 0) {
+        seqSearchStatus.textContent = 'No matches found.';
+        seqSearchStatus.className = 'small text-danger';
+      } else {
+        const idx = (viewer.currentMatchIndex !== undefined && viewer.currentMatchIndex >= 0)
+          ? viewer.currentMatchIndex + 1 : 1;
+        seqSearchStatus.textContent = `Match ${idx} of ${count}.`;
+        seqSearchStatus.className = 'small text-success';
+      }
+    }
+
+    if (count > 0 && seqSearchModal) {
+      seqSearchModal.hide(); // close the dialog on a successful find
+    }
+  }
+
+  if (seqSearchBtn) seqSearchBtn.addEventListener('click', openSearchModal);
+
+  if (seqSearchFindBtn) seqSearchFindBtn.addEventListener('click', performSearchFromModal);
+
+  if (seqSearchInput) {
+    // Enter in the textarea triggers Find; Shift+Enter is a normal newline
+    seqSearchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        performSearchFromModal();
+      }
+    });
+  }
+
+  if (findNextBtn) {
+    findNextBtn.addEventListener('click', () => {
+      if (!viewer) return;
+      if (viewer.searchMatches && viewer.searchMatches.length > 0) {
+        viewer.nextMatch();
+      } else {
+        openSearchModal();
+      }
+    });
+  }
+
+  if (findPrevBtn) {
+    findPrevBtn.addEventListener('click', () => {
+      if (!viewer) return;
+      if (viewer.searchMatches && viewer.searchMatches.length > 0) {
+        viewer.previousMatch();
+      } else {
+        openSearchModal();
+      }
+    });
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   // viewer instance reference (will be created before data is loaded)
   let viewer = null;
   // alignment reference (will be set when data is loaded)
@@ -598,9 +691,6 @@
       }, 200);
     });
   }
-  const searchInput = document.getElementById('search-input');
-  const searchNextBtn = document.getElementById('search-next');
-
   // divider element for resizing the labels column
   const labelDivider = document.getElementById('label-divider');
   const maskToggle = document.getElementById('mask-toggle');
@@ -1604,12 +1694,31 @@
       console.info('Reset font size shortcut triggered (Cmd+0)');
       viewer.resetFontSize();
     }
-    // Cmd+G (or Ctrl+G) to search next
-    if ((e.metaKey || e.ctrlKey) && e.key === 'g') {
+    // Cmd+F (or Ctrl+F) to open the sequence search modal
+    if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+      e.preventDefault();
+      openSearchModal();
+      return;
+    }
+    // Cmd+G (or Ctrl+G) to find next match; open search modal if no active search
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'g') {
       e.preventDefault();
       if (viewer && viewer.searchMatches && viewer.searchMatches.length > 0) {
         viewer.nextMatch();
+      } else {
+        openSearchModal();
       }
+      return;
+    }
+    // Shift+Cmd+G (or Shift+Ctrl+G) to find previous match
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'g') {
+      e.preventDefault();
+      if (viewer && viewer.searchMatches && viewer.searchMatches.length > 0) {
+        viewer.previousMatch();
+      } else {
+        openSearchModal();
+      }
+      return;
     }
     // Cmd+D (or Ctrl+D) to toggle colour differences mode
     if ((e.metaKey || e.ctrlKey) && (e.key === 'd' || e.key === 'D')) {
@@ -1916,69 +2025,6 @@
       if (viewer && typeof viewer.toggleHideMode === 'function') {
         viewer.toggleHideMode();
       }
-    });
-  }
-
-  // Search functionality
-  if (searchInput) {
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-
-        const query = searchInput.value.trim();
-        if (!query) {
-          return;
-        }
-
-        if (e.shiftKey) {
-          // Shift+Enter goes to previous match
-          viewer.previousMatch();
-        } else {
-          // Enter performs search or goes to next match
-          if (viewer.searchMatches && viewer.searchMatches.length > 0) {
-            // Already have matches, go to next
-            viewer.nextMatch();
-          } else {
-            // No matches yet, perform search
-            viewer.performSearch(query);
-          }
-        }
-      }
-    });
-
-    // Clear search results when input changes
-    searchInput.addEventListener('input', () => {
-      viewer.searchMatches = [];
-      viewer.currentMatchIndex = -1;
-    });
-  }
-
-  if (searchNextBtn) {
-    searchNextBtn.addEventListener('click', () => {
-      try {
-        if (!viewer) {
-          console.warn('Viewer not available for search');
-          return;
-        }
-
-        const query = searchInput ? searchInput.value.trim() : '';
-
-        if (viewer.searchMatches && viewer.searchMatches.length > 0) {
-          // Already have matches, go to next
-          if (typeof viewer.nextMatch === 'function') {
-            viewer.nextMatch();
-          } else {
-            console.warn('Viewer nextMatch method not available');
-          }
-        } else if (query) {
-          // No matches yet but have a query, perform search
-          if (typeof viewer.performSearch === 'function') {
-            viewer.performSearch(query);
-          } else {
-            console.warn('Viewer performSearch method not available');
-          }
-        }
-      } catch (e) { console.warn('Search next button failed', e); }
     });
   }
 
