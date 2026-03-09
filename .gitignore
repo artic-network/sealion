@@ -416,3 +416,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Tauri / Rust build artefacts
+src-tauri/target/
+src-tauri/gen/
+
+# macOS metadata
+**/.DS_Store

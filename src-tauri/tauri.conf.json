@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sealion",
+  "version": "0.1.0",
+  "identifier": "network.artic.sealion",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Sealion — Genomic Alignment Viewer",
+        "url": "sealion.html",
+        "width": 1600,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' asset: https://asset.localhost; script-src 'self' 'unsafe-inline' asset: https://asset.localhost https://cdn.jsdelivr.net http://d3js.org; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net; connect-src 'self' https: http: asset: https://asset.localhost; img-src 'self' data: blob: asset: https://asset.localhost; worker-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Education",
+    "shortDescription": "Genomic Alignment Viewer",
+    "longDescription": "Sealion is a fast, interactive genomic sequence alignment viewer for genomic epidemiology.",
+    "macOS": {
+      "infoPlist": "./Info.plist"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["fasta", "fa", "fna", "ffn", "faa", "frn"],
+        "name": "Sealion FASTA alignment file"
+      }
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": []
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "sealion",
+  "version": "0.1.0",
+  "description": "Sealion — Genomic Alignment Viewer (Tauri desktop app)",
+  "private": true,
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "tauri icon"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}
