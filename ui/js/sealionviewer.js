@@ -3,7 +3,8 @@
 // SealionViewer is exposed globally via window.SealionViewer for sealion.js.
 
 import { CanvasRenderer } from './renderers/CanvasRenderer.js';
-import { OverviewRenderer } from './renderers/OverviewRenderer.js';
+import { OverviewRenderer }  from './renderers/OverviewRenderer.js';
+import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -182,8 +183,11 @@ import { OverviewRenderer } from './renderers/OverviewRenderer.js';
       // Initialize collections that should not be reset by setOptions
       this.labelTags = new Map(); // Map of label string -> tag color index
       this.siteBookmarks = new Map(); // Map of column index -> bookmark color index
-      this._overviewRenderer = new OverviewRenderer(this.overviewCanvas, this);
+      this._overviewRenderer   = new OverviewRenderer(this.overviewCanvas, this);
       this._overviewRenderer.attachEvents();
+      this._consensusRenderer  = new ConsensusRenderer(this.consensusCanvas, this);
+      // attachEvents() for consensus is called from attachInteractionHandlers() once
+      // the scroller and callbacks are available.
       this._lightModeColors = {}; // store original light mode colors
 
       // Apply defaults first, then override with provided options
@@ -1083,160 +1087,8 @@ import { OverviewRenderer } from './renderers/OverviewRenderer.js';
         });
       }
 
-      // Consensus behaves like header for column selection
-      if (consensusCanvas) {
-        consensusCanvas.addEventListener('mousedown', (e) => {
-          if (e.button !== 0) return;
-          try { this.clearRectSelection(); } catch (_) { }
-          try { this.selectedRows.clear(); } catch (_) { }
-          let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
-          
-          // Snap to codon boundary in codon or amino acid mode
-          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-            col = this.snapToCodonStart(col);
-          }
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Shift-click: expand selection to include this column
-            this.expandColSelectionToInclude(col);
-            // Determine which end we're extending from
-            const currentMin = Math.min(...Array.from(this.selectedCols));
-            const currentMax = Math.max(...Array.from(this.selectedCols));
-            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
-          } else {
-            this.selectionStartCol = col;
-          }
-          
-          this.selectionMode = e.metaKey ? 'add' : 'replace';
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Already handled above
-          } else if (e.metaKey) {
-            // Cmd-click: toggle selection of codon (or single column in non-codon mode)
-            if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-              const codonStart = this.snapToCodonStart(col);
-              const codonEnd = this.snapToCodonEnd(col);
-              const isSelected = this.selectedCols.has(codonStart) || this.selectedCols.has(codonStart + 1) || this.selectedCols.has(codonEnd);
-              if (isSelected) {
-                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.delete(c);
-              } else {
-                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.add(c);
-              }
-            } else {
-              try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
-            }
-            this.anchorCol = col; 
-          } else { 
-            try { 
-              this.selectedCols.clear(); 
-              if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-                const codonEnd = this.snapToCodonEnd(col);
-                for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
-              } else {
-                this.selectedCols.add(col);
-              }
-            } catch (_) { } 
-            this.anchorCol = col; 
-          }
-          this.isColSelecting = true; 
-          this.scheduleRender();
-          e.preventDefault();
-        });
-      }
-
-      // Overview: click to jump, drag to pan
-      if (overviewCanvas) {
-        let isOverviewDragging = false;
-        overviewCanvas.addEventListener('mousedown', (e) => {
-          if (e.button !== 0) return;
-          isOverviewDragging = true;
-          const rect = overviewCanvas.getBoundingClientRect();
-          const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-          const rawTotal = (this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets[this.colOffsets.length - 1] : ((opts && opts.estimatedTotal) ? opts.estimatedTotal : 0);
-          const cssW = rect.width || Math.max(1, overviewCanvas.width / (this.pr || 1));
-          const scale = cssW / Math.max(1, rawTotal);
-          const target = Math.round(x / scale - (scroller ? scroller.clientWidth / 2 : 0));
-          this.animateScrollTo(Math.max(0, target), scroller ? scroller.scrollTop : 0, scroller, 320);
-          this.scheduleRender();
-          e.preventDefault();
-        });
-        window.addEventListener('mousemove', (e) => {
-          if (!isOverviewDragging) return;
-          const rect = overviewCanvas.getBoundingClientRect();
-          const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-          const rawTotal = (this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets[this.colOffsets.length - 1] : ((opts && opts.estimatedTotal) ? opts.estimatedTotal : 0);
-          const cssW = rect.width || Math.max(1, overviewCanvas.width / (this.pr || 1));
-          const scale = cssW / Math.max(1, rawTotal);
-          const target = Math.round(x / scale - (scroller ? scroller.clientWidth / 2 : 0));
-          if (scroller) scroller.scrollLeft = Math.max(0, target);
-          this.scheduleRender();
-        });
-        window.addEventListener('mouseup', () => { isOverviewDragging = false; });
-        
-        // Add mousemove handler for CDS tooltips
-        overviewCanvas.addEventListener('mousemove', (e) => {
-          if (isOverviewDragging) return; // Don't show tooltip while dragging
-          
-          // Get mouse position relative to canvas
-          const rect = overviewCanvas.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          
-          // Check if hovering over any CDS region
-          let hoveredCDS = null;
-          if (this._cdsHitRegions && Array.isArray(this._cdsHitRegions)) {
-            for (const region of this._cdsHitRegions) {
-              if (mouseX >= region.x && mouseX <= region.x + region.width &&
-                  mouseY >= region.y && mouseY <= region.y + region.height) {
-                hoveredCDS = region;
-                break;
-              }
-            }
-          }
-          
-          // Show or hide tooltip
-          if (hoveredCDS) {
-            this._showCDSTooltip(e.clientX, e.clientY, hoveredCDS);
-            overviewCanvas.style.cursor = 'pointer';
-          } else {
-            this._hideCDSTooltip();
-            overviewCanvas.style.cursor = 'default';
-          }
-        });
-        
-        // Hide tooltip when mouse leaves canvas
-        overviewCanvas.addEventListener('mouseleave', () => {
-          this._hideCDSTooltip();
-          overviewCanvas.style.cursor = 'default';
-        });
-        
-        // Add double-click handler for CDS region selection
-        overviewCanvas.addEventListener('dblclick', (e) => {
-          // Get mouse position relative to canvas
-          const rect = overviewCanvas.getBoundingClientRect();
-          const mouseX = e.clientX - rect.left;
-          const mouseY = e.clientY - rect.top;
-          
-          // Check if double-clicking on any CDS region
-          let clickedCDS = null;
-          if (this._cdsHitRegions && Array.isArray(this._cdsHitRegions)) {
-            for (const region of this._cdsHitRegions) {
-              if (mouseX >= region.x && mouseX <= region.x + region.width &&
-                  mouseY >= region.y && mouseY <= region.y + region.height) {
-                clickedCDS = region;
-                break;
-              }
-            }
-          }
-          
-          // If clicked on a CDS, select all columns in its coordinate range
-          if (clickedCDS && clickedCDS.coordinates) {
-            this._selectCDSRange(clickedCDS);
-            e.preventDefault();
-            e.stopPropagation();
-          }
-        });
-      }
+      // Consensus column selection — delegated to ConsensusRenderer
+      if (this._consensusRenderer) this._consensusRenderer.attachEvents();
 
       // Sequence canvas interactions (select columns, rows, rect selection)
       if (seqCanvas) {
@@ -4429,7 +4281,7 @@ import { OverviewRenderer } from './renderers/OverviewRenderer.js';
         
         try { this._overviewRenderer.render(vis); } catch (e) { console.error('SealionViewer: OverviewRenderer.render failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
-        try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
+        try { this._consensusRenderer.render(vis); } catch (e) { console.error('SealionViewer: ConsensusRenderer.render failed', e); }
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
         try { this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); } catch (e) { console.error('SealionViewer.drawSequences failed', e); }
       } catch (e) { console.error('SealionViewer.drawAll failed', e); }

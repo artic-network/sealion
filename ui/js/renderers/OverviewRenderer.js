@@ -114,50 +114,87 @@ export class OverviewRenderer extends CanvasRenderer {
 
   attachEvents() {
     if (!this.canvas) return;
-    // Click on overview scrolls the alignment to that position
-    this.canvas.addEventListener('click', (e) => {
-      const v = this.viewer;
-      const colOffsets   = v.colOffsets || [];
-      const maxSeqLen    = colOffsets.length > 0 ? colOffsets.length - 1 : 0;
-      const charWidth    = v.charWidth || 8;
-      const expandedRightPad = v.EXPANDED_RIGHT_PAD != null ? v.EXPANDED_RIGHT_PAD : 2;
-      const rawTotal     = colOffsets[maxSeqLen] || (maxSeqLen * (charWidth + expandedRightPad));
-      const cssW         = this.canvas.getBoundingClientRect().width || 1;
-      const scale        = cssW / Math.max(1, rawTotal);
-      const rect         = this.canvas.getBoundingClientRect();
-      const clickX       = e.clientX - rect.left;
-      const targetScrollLeft = clickX / scale;
-      const scroller = v.scroller;
-      if (scroller) {
-        scroller.scrollLeft = Math.max(0, targetScrollLeft - (scroller.clientWidth / 2));
+    const v      = this.viewer;
+    const canvas = this.canvas;
+
+    const getRawTotal = () => {
+      const co  = v.colOffsets || [];
+      const len = co.length > 0 ? co.length - 1 : 0;
+      const cw  = v.charWidth || 8;
+      const rp  = v.EXPANDED_RIGHT_PAD != null ? v.EXPANDED_RIGHT_PAD : 2;
+      return co[len] || (len * (cw + rp));
+    };
+
+    const getHit = (mouseX, mouseY) => {
+      if (!this._cdsHitRegions) return null;
+      for (const r of this._cdsHitRegions) {
+        if (mouseX >= r.x && mouseX <= r.x + r.width &&
+            mouseY >= r.y && mouseY <= r.y + r.height) return r;
+      }
+      return null;
+    };
+
+    let isDragging = false;
+
+    // Mousedown: start drag + animate-scroll to click position
+    canvas.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      isDragging = true;
+      const rect     = canvas.getBoundingClientRect();
+      const x        = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const cssW     = rect.width || Math.max(1, canvas.width / (v.pr || 1));
+      const scale    = cssW / Math.max(1, getRawTotal());
+      const target   = Math.round(x / scale - (v.scroller ? v.scroller.clientWidth / 2 : 0));
+      if (typeof v.animateScrollTo === 'function') {
+        v.animateScrollTo(Math.max(0, target), v.scroller ? v.scroller.scrollTop : 0, v.scroller, 320);
+      } else if (v.scroller) {
+        v.scroller.scrollLeft = Math.max(0, target);
+      }
+      v.scheduleRender();
+      e.preventDefault();
+    });
+
+    // Window mousemove / mouseup: drag panning
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const rect   = canvas.getBoundingClientRect();
+      const x      = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const cssW   = rect.width || Math.max(1, canvas.width / (v.pr || 1));
+      const scale  = cssW / Math.max(1, getRawTotal());
+      const target = Math.round(x / scale - (v.scroller ? v.scroller.clientWidth / 2 : 0));
+      if (v.scroller) v.scroller.scrollLeft = Math.max(0, target);
+      v.scheduleRender();
+    });
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    // Canvas mousemove: CDS tooltip
+    canvas.addEventListener('mousemove', (e) => {
+      if (isDragging) return;
+      const rect   = canvas.getBoundingClientRect();
+      const hit    = getHit(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit) {
+        if (typeof v._showCDSTooltip === 'function') v._showCDSTooltip(e.clientX, e.clientY, hit);
+        canvas.style.cursor = 'pointer';
+      } else {
+        if (typeof v._hideCDSTooltip === 'function') v._hideCDSTooltip();
+        canvas.style.cursor = 'default';
       }
     });
 
-    // Tooltip on hover (CDS hit regions)
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (!this._cdsHitRegions || this._cdsHitRegions.length === 0) return;
-      const rect = this.canvas.getBoundingClientRect();
-      const pr   = this.viewer.pr || window.devicePixelRatio || 1;
-      const cssW = Math.max(1, rect.width);
-      const cssH = Math.max(1, rect.height);
-      const mouseX = (e.clientX - rect.left);
-      const mouseY = (e.clientY - rect.top);
-      let hit = null;
-      for (const region of this._cdsHitRegions) {
-        if (mouseX >= region.x && mouseX <= region.x + region.width
-            && mouseY >= region.y && mouseY <= region.y + region.height) {
-          hit = region;
-          break;
-        }
-      }
-      if (hit) {
-        const parts = [];
-        if (hit.gene) parts.push(hit.gene);
-        if (hit.product) parts.push(hit.product);
-        if (hit.coordinates) parts.push(hit.coordinates);
-        this.canvas.title = parts.join(' | ');
-      } else {
-        this.canvas.title = '';
+    // Mouseleave: hide tooltip
+    canvas.addEventListener('mouseleave', () => {
+      if (typeof v._hideCDSTooltip === 'function') v._hideCDSTooltip();
+      canvas.style.cursor = 'default';
+    });
+
+    // Dblclick: select columns of clicked CDS
+    canvas.addEventListener('dblclick', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const hit  = getHit(e.clientX - rect.left, e.clientY - rect.top);
+      if (hit && hit.coordinates && typeof v._selectCDSRange === 'function') {
+        v._selectCDSRange(hit);
+        e.preventDefault();
+        e.stopPropagation();
       }
     });
   }
