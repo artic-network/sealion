@@ -1,7 +1,8 @@
-// sealion.js
+// sealionviewer.js
+// ES module — imported renderer classes are private to this module.
+// SealionViewer is exposed globally via window.SealionViewer for sealion.js.
 
-(function () {
-  'use strict';
+import { CanvasRenderer } from './renderers/CanvasRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -5640,6 +5641,4 @@
     SealionViewer.DEFAULTS.DEFAULT_AA_COLOR = _zappo.lightDefault;
   }
 
-  window.SealionViewer = SealionViewer;
-
-})();
+window.SealionViewer = SealionViewer;
