@@ -2634,6 +2634,8 @@
       // Function to load FASTA from URL
       async function loadFastaFromUrl(url) {
         try {
+          console.log('loadFastaFromUrl called with URL:', url);
+          
           // Show loading state
           fileLoading.style.display = 'block';
           fileError.style.display = 'none';
@@ -2641,17 +2643,23 @@
           document.getElementById('fasta-file-panel').style.display = 'none';
           document.getElementById('fasta-example-panel').style.display = 'none';
           
+          console.log('Fetching URL...');
           // Fetch the URL
           const response = await fetch(url);
+          console.log('Fetch response:', response.status, response.statusText);
+          
           if (!response.ok) {
             throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
           }
           
+          console.log('Reading response text...');
           // Get text content
           const text = await response.text();
+          console.log('Received text, length:', text.length);
           
           // Parse FASTA
           const newAlignment = parseFasta(text);
+          console.log('Parsed sequences:', newAlignment.length);
           
           if (newAlignment.length === 0) {
             throw new Error('No sequences found in file');
@@ -2688,13 +2696,8 @@
         }
       }
       
-      // Check if auto-load from URL parameter was requested
-      if (window._autoLoadFastaUrl) {
-        const autoLoadUrl = window._autoLoadFastaUrl;
-        delete window._autoLoadFastaUrl; // Clear the flag
-        console.info('Auto-loading FASTA from URL parameter');
-        loadFastaFromUrl(autoLoadUrl);
-      }
+      // Make loadFastaFromUrl accessible outside this block for auto-load
+      window.loadFastaFromUrl = loadFastaFromUrl;
       
       // Open file button click handler
       openFileBtn.addEventListener('click', () => {
@@ -2814,6 +2817,30 @@
       
     } catch (e) {
       console.warn('Failed to initialize file upload modal', e);
+    }
+  }
+
+  // Check if auto-load from URL parameter was requested
+  // This needs to be outside the modal setup block so it always executes
+  if (window._autoLoadFastaUrl) {
+    const autoLoadUrl = window._autoLoadFastaUrl;
+    delete window._autoLoadFastaUrl; // Clear the flag
+    console.info('Auto-loading FASTA from URL parameter');
+    
+    // Show the modal with loading state so user can see progress/errors
+    if (fileModal) {
+      fileModal.show();
+    }
+    
+    // Try to load the URL (loadFastaFromUrl should be defined by now if modal setup succeeded)
+    if (typeof window.loadFastaFromUrl === 'function') {
+      window.loadFastaFromUrl(autoLoadUrl).catch(err => {
+        console.error('Auto-load failed:', err);
+        alert('Failed to load FASTA from URL: ' + (err.message || err));
+      });
+    } else {
+      console.error('loadFastaFromUrl function is not available');
+      alert('Failed to auto-load: file loading functionality not initialized');
     }
   }
 
