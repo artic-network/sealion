@@ -293,9 +293,34 @@
       try { window.viewer = viewer; } catch (_) { }
       console.info('SealionViewer created (no data - waiting for user to load)');
 
-      // Step 3: Show file upload modal immediately for user to choose data source
+      // Step 3: Check for fastaUrl parameter in URL, or show file upload modal
       setStatus(null); // Clear status
-      if (fileModal) {
+      
+      // Check for fastaUrl parameter in URL (check parent window if in iframe)
+      let searchParams = '';
+      try {
+        // Try to get parent window's URL if we're in an iframe
+        if (window.parent && window.parent !== window) {
+          searchParams = window.parent.location.search;
+        } else {
+          searchParams = window.location.search;
+        }
+      } catch (e) {
+        // If cross-origin, fall back to current window
+        searchParams = window.location.search;
+      }
+      
+      const urlParams = new URLSearchParams(searchParams);
+      const fastaUrl = urlParams.get('fastaUrl');
+      
+      if (fastaUrl) {
+        // Auto-load from URL parameter
+        console.info('Loading FASTA from URL parameter:', fastaUrl);
+        setStatus('Loading FASTA from URL...');
+        // Wait for loadFastaFromUrl to be defined (it's defined later in the file)
+        // We'll need to call it after it's defined, so we'll set a flag
+        window._autoLoadFastaUrl = fastaUrl;
+      } else if (fileModal) {
         // Reset modal state
         fileDropZone.style.display = 'block';
         fileLoading.style.display = 'none';
@@ -2661,6 +2686,14 @@
           document.getElementById('fasta-file-panel').style.display = '';
           document.getElementById('fasta-example-panel').style.display = '';
         }
+      }
+      
+      // Check if auto-load from URL parameter was requested
+      if (window._autoLoadFastaUrl) {
+        const autoLoadUrl = window._autoLoadFastaUrl;
+        delete window._autoLoadFastaUrl; // Clear the flag
+        console.info('Auto-loading FASTA from URL parameter');
+        loadFastaFromUrl(autoLoadUrl);
       }
       
       // Open file button click handler
