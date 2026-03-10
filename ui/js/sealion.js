@@ -314,25 +314,21 @@
       const fastaUrl = urlParams.get('fastaUrl');
       
       if (fastaUrl) {
-        // Auto-load from URL parameter
+        // Auto-load from URL parameter — do NOT show modal; load silently
         console.info('Loading FASTA from URL parameter:', fastaUrl);
         setStatus('Loading FASTA from URL...');
         
         // Wait for the page to finish loading and modal to be set up, then trigger auto-load
         setTimeout(() => {
           console.info('Attempting to auto-load FASTA from URL');
-          if (typeof window.loadFastaFromUrl === 'function' && fileModal) {
+          if (typeof window.loadFastaFromUrl === 'function') {
             console.info('Triggering auto-load');
-            fileModal.show();
-            window.loadFastaFromUrl(fastaUrl).catch(err => {
-              console.error('Auto-load failed:', err);
-              alert('Failed to load FASTA from URL: ' + (err.message || err));
-            });
+            // Do NOT call fileModal.show() — the modal should not open for a URL auto-load.
+            // loadFastaFromUrl will call fileModal.show() itself if an error occurs.
+            window.loadFastaFromUrl(fastaUrl);
           } else {
-            console.error('Auto-load failed: loadFastaFromUrl not available or modal not initialized');
-            console.log('loadFastaFromUrl:', typeof window.loadFastaFromUrl);
-            console.log('fileModal:', fileModal);
-            alert('Failed to auto-load: file loading functionality not initialized');
+            console.error('Auto-load failed: loadFastaFromUrl not available');
+            if (fileModal) fileModal.show();
           }
         }, 100); // Small delay to ensure modal setup completes
       } else if (fileModal) {
@@ -2934,6 +2930,13 @@
           document.getElementById('fasta-url-panel').style.display = '';
           document.getElementById('fasta-file-panel').style.display = '';
           document.getElementById('fasta-example-panel').style.display = '';
+          // Pre-fill the URL input with the attempted URL and switch to the URL tab
+          const fastaUrlInput = document.getElementById('fasta-url');
+          if (fastaUrlInput) fastaUrlInput.value = url;
+          const urlTab = document.getElementById('fasta-url-tab');
+          if (urlTab) bootstrap.Tab.getOrCreateInstance(urlTab).show();
+          // Ensure the modal is visible so the user can see the error
+          fileModal.show();
         }
       }
       
