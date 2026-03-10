@@ -7,6 +7,7 @@ import { OverviewRenderer }  from './renderers/OverviewRenderer.js';
 import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
 import { HeaderRenderer }    from './renderers/HeaderRenderer.js';
 import { LabelRenderer }     from './renderers/LabelRenderer.js';
+import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -190,7 +191,8 @@ import { LabelRenderer }     from './renderers/LabelRenderer.js';
       this._consensusRenderer  = new ConsensusRenderer(this.consensusCanvas, this);
       this._headerRenderer     = new HeaderRenderer(this.headerCanvas, this);
       this._labelRenderer      = new LabelRenderer(this.labelCanvas, this);
-      // attachEvents() for header, consensus, and label are called from attachInteractionHandlers().
+      this._alignmentRenderer  = new AlignmentRenderer(this.seqCanvas, this);
+      // attachEvents() for header, consensus, label, and alignment are called from attachInteractionHandlers().
       this._lightModeColors = {}; // store original light mode colors
 
       // Apply defaults first, then override with provided options
@@ -1014,283 +1016,8 @@ import { LabelRenderer }     from './renderers/LabelRenderer.js';
       // Consensus column selection — delegated to ConsensusRenderer
       if (this._consensusRenderer) this._consensusRenderer.attachEvents();
 
-      // Sequence canvas interactions (select columns, rows, rect selection)
-      if (seqCanvas) {
-        // Track clicks for double-click detection
-        let lastClickTime = 0;
-        let lastClickRow = -1;
-        let lastClickCol = -1;
-        const doubleClickThreshold = 500; // ms
-        
-        seqCanvas.addEventListener('wheel', (e) => {
-          if (!scroller) return;
-          scroller.scrollTop += e.deltaY;
-          scroller.scrollLeft += e.deltaX;
-          this.scheduleRender();
-          e.preventDefault();
-        }, { passive: false });
-
-        seqCanvas.addEventListener('mousedown', (e) => {
-          if (e.button !== 0) return;
-          // Command-drag panning begins here as well
-          if (this.isSpaceDown) {
-            this.isCmdDrag = true;
-            this.dragStartX = e.clientX; this.dragStartY = e.clientY;
-            this.dragStartScrollLeft = scroller ? scroller.scrollLeft : 0;
-            this.dragStartScrollTop = scroller ? scroller.scrollTop : 0;
-            try { if (seqCanvas) seqCanvas.style.cursor = 'grabbing'; document.body.style.userSelect = 'none'; } catch (_) { }
-            e.preventDefault();
-            return;
-          }
-
-          const alt = !!e.altKey;
-          const meta = !!e.metaKey;
-
-          if (!alt && !meta) {
-            // Rectangle selection (default drag behavior)
-            const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-            const col = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-            
-            // Detect double-click by checking if this click is at the same position within threshold
-            const now = Date.now();
-            const isDoubleClick = (now - lastClickTime < doubleClickThreshold) && 
-                                  (row === lastClickRow) && 
-                                  (col === lastClickCol);
-            
-            // Update last click tracking
-            lastClickTime = now;
-            lastClickRow = row;
-            lastClickCol = col;
-            
-            if (isDoubleClick) {
-              // Double-click detected: smart character type selection
-              if (!this.alignment || row < 0 || row >= this.alignment.length) return;
-              
-              const seq = this.alignment[row];
-              if (!seq || !seq.sequence || col < 0 || col >= seq.sequence.length) return;
-              
-              const clickedChar = seq.sequence[col].toUpperCase();
-              
-              // Determine character type
-              let charType;
-              if (clickedChar === '-') {
-                charType = 'gap';
-              } else if (clickedChar === 'N') {
-                charType = 'ambiguous';
-              } else if ('ACGT'.includes(clickedChar)) {
-                charType = 'nucleotide';
-              } else {
-                charType = 'other';
-              }
-              
-              // Find the horizontal extent of same character type
-              let startCol = col;
-              let endCol = col;
-              
-              // Expand left
-              while (startCol > 0) {
-                const prevChar = seq.sequence[startCol - 1].toUpperCase();
-                let prevType;
-                if (prevChar === '-') prevType = 'gap';
-                else if (prevChar === 'N') prevType = 'ambiguous';
-                else if ('ACGT'.includes(prevChar)) prevType = 'nucleotide';
-                else prevType = 'other';
-                
-                if (prevType !== charType) break;
-                startCol--;
-              }
-              
-              // Expand right
-              while (endCol < seq.sequence.length - 1) {
-                const nextChar = seq.sequence[endCol + 1].toUpperCase();
-                let nextType;
-                if (nextChar === '-') nextType = 'gap';
-                else if (nextChar === 'N') nextType = 'ambiguous';
-                else if ('ACGT'.includes(nextChar)) nextType = 'nucleotide';
-                else nextType = 'other';
-                
-                if (nextType !== charType) break;
-                endCol++;
-              }
-              
-              // Set up rectangle selection with this horizontal range
-              try { this.clearRectSelection(); } catch (_) { }
-              this.rectStartRow = row;
-              this.rectEndRow = row;
-              this.rectStartCol = startCol;
-              this.rectEndCol = endCol;
-              
-              // Store the locked column range for double-click mode
-              this.dblClickColStart = startCol;
-              this.dblClickColEnd = endCol;
-              
-              // Finalize the selection immediately so it appears on mousedown
-              try { this.finalizeRectSelection(row, row, startCol, endCol, null); } catch (_) { }
-              
-              this.anchorRow = row;
-              this.anchorCol = endCol;
-              
-              // Enable rect selecting mode so dragging will extend vertically
-              this.isRectSelecting = true;
-              
-              this.scheduleRender();
-              e.preventDefault();
-              return;
-            }
-            
-            // Clear double-click mode on new selection
-            this.dblClickColStart = undefined;
-            this.dblClickColEnd = undefined;
-            
-            if (e.shiftKey && this.rectStartRow !== null && this.rectStartCol !== null) {
-              // Shift+click: extend the existing rectangle to include the clicked point
-              // Keep the original start point, update the end point
-              this.rectEndRow = row;
-              this.rectEndCol = col;
-            } else {
-              // New rectangle selection
-              try { this.clearRectSelection(); } catch (_) { }
-              this.rectStartRow = row;
-              this.rectStartCol = col;
-              this.rectEndRow = row;
-              this.rectEndCol = col;
-            }
-            
-            this.isRectSelecting = true;
-            this.anchorRow = this.rectStartRow;
-            this.anchorCol = this.rectStartCol;
-            
-            // compute live selected sets
-            this.selectedRows.clear();
-            this.selectedCols.clear();
-            const rlo0 = Math.max(0, Math.min(this.rectStartRow, this.rectEndRow));
-            const rhi0 = Math.min((this.alignment && this.alignment.length) ? this.alignment.length - 1 : 0, Math.max(this.rectStartRow, this.rectEndRow));
-            const clo0 = Math.max(0, Math.min(this.rectStartCol, this.rectEndCol));
-            const chi0 = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(this.rectStartCol, this.rectEndCol), Math.max(this.rectStartCol, this.rectEndCol));
-            for (let r = rlo0; r <= rhi0; r++) this.selectedRows.add(r);
-            for (let c = clo0; c <= chi0; c++) this.selectedCols.add(c);
-            this.scheduleRender();
-            e.preventDefault();
-            return;
-          }
-
-          if (alt && !meta) {
-            // Alt alone: select rows
-            try { this.clearRectSelection(); } catch (_) { }
-            try { this.selectedCols.clear(); } catch (_) { }
-            const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-            
-            if (e.shiftKey && this.selectedRows.size > 0) {
-              // Shift-click: expand selection to include this row
-              this.expandSelectionToInclude(row);
-              // Determine which end we're extending from
-              const currentMin = Math.min(...Array.from(this.selectedRows));
-              const currentMax = Math.max(...Array.from(this.selectedRows));
-              this.selectionOrigin = (row < currentMin) ? currentMax : currentMin;
-            } else {
-              this.selectionOrigin = row;
-            }
-            
-            this.selectionMode = e.metaKey ? 'add' : 'replace';
-            
-            if (e.shiftKey && this.selectedRows.size > 0) {
-              // Already handled above
-            } else if (e.metaKey) {
-              try { if (this.selectedRows.has(row)) this.selectedRows.delete(row); else this.selectedRows.add(row); } catch (_) { }
-              this.anchorRow = row;
-            } else {
-              try { this.selectedRows.clear(); this.selectedRows.add(row); } catch (_) { }
-              this.anchorRow = row;
-            }
-            this.isSelecting = true;
-            this.selectionStartRow = row;
-            this.scheduleRender();
-            e.preventDefault();
-            return;
-          }
-
-          // Default: select columns
-          try { this.clearRectSelection(); } catch (_) { }
-          try { this.selectedRows.clear(); } catch (_) { }
-          const col = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Shift-click: expand selection to include this column
-            this.expandColSelectionToInclude(col);
-            // Determine which end we're extending from
-            const currentMin = Math.min(...Array.from(this.selectedCols));
-            const currentMax = Math.max(...Array.from(this.selectedCols));
-            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
-          } else {
-            this.selectionStartCol = col;
-          }
-          
-          this.selectionMode = e.metaKey ? 'add' : 'replace';
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Already handled above
-          } else if (e.metaKey) {
-            try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
-            this.anchorCol = col;
-          } else {
-            try { this.selectedCols.clear(); this.selectedCols.add(col); } catch (_) { }
-            this.anchorCol = col;
-          }
-          this.isColSelecting = true;
-          this.scheduleRender();
-          e.preventDefault();
-        });
-
-        window.addEventListener('mousemove', (e) => {
-          if (this.isCmdDrag) {
-            if (!e.buttons || !this.isSpaceDown) { this.isCmdDrag = false; return; }
-            const dx = e.clientX - this.dragStartX;
-            const dy = e.clientY - this.dragStartY;
-            const targetLeft = Math.max(0, Math.round(this.dragStartScrollLeft - dx));
-            const targetTop = Math.max(0, Math.round(this.dragStartScrollTop - dy));
-            if (scroller) { scroller.scrollLeft = targetLeft; scroller.scrollTop = targetTop; }
-            this.scheduleRender();
-            return;
-          }
-          if (!this.isRectSelecting) return;
-          this.rectEndRow = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          
-          // If in double-click mode, keep the column range locked
-          if (this.dblClickColStart !== undefined && this.dblClickColEnd !== undefined) {
-            this.rectStartCol = this.dblClickColStart;
-            this.rectEndCol = this.dblClickColEnd;
-          } else {
-            this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-          }
-          
-          try { this.updateRectSelection(this.rectStartRow, this.rectEndRow, this.rectStartCol, this.rectEndCol, this.rectOriginal); } catch (_) { }
-          this.scheduleRender();
-        });
-
-        window.addEventListener('mouseup', (e) => {
-          if (this.isCmdDrag) { this.isCmdDrag = false; return; }
-          if (!this.isRectSelecting) return;
-          this.isRectSelecting = false;
-          this.rectEndRow = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
-          
-          // If in double-click mode, keep the column range locked
-          if (this.dblClickColStart !== undefined && this.dblClickColEnd !== undefined) {
-            this.rectStartCol = this.dblClickColStart;
-            this.rectEndCol = this.dblClickColEnd;
-            // Clear double-click mode
-            this.dblClickColStart = undefined;
-            this.dblClickColEnd = undefined;
-          } else {
-            this.rectEndCol = (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null) || _colFromClientXLocal(e.clientX, seqCanvas);
-          }
-          
-          try { this.finalizeRectSelection(this.rectStartRow, this.rectEndRow, this.rectStartCol, this.rectEndCol, this.rectOriginal); } catch (_) { }
-          this.anchorRow = Math.max(this.rectStartRow, this.rectEndRow);
-          this.anchorCol = Math.max(this.rectStartCol, this.rectEndCol);
-          this.rectOriginal = null;
-          this.scheduleRender();
-        });
-      }
+      // Sequence canvas interactions — delegated to AlignmentRenderer
+      if (this._alignmentRenderer) this._alignmentRenderer.attachEvents();
 
       // Label canvas interactions — delegated to LabelRenderer
       if (this._labelRenderer) this._labelRenderer.attachEvents();
@@ -4036,7 +3763,7 @@ import { LabelRenderer }     from './renderers/LabelRenderer.js';
         try { this._headerRenderer.render(vis); } catch (e) { console.error('SealionViewer: HeaderRenderer.render failed', e); }
         try { this._consensusRenderer.render(vis); } catch (e) { console.error('SealionViewer: ConsensusRenderer.render failed', e); }
         try { this._labelRenderer.render(vis); } catch (e) { console.error('SealionViewer: LabelRenderer.render failed', e); }
-        try { this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); } catch (e) { console.error('SealionViewer.drawSequences failed', e); }
+        try { this._alignmentRenderer.render(vis); } catch (e) { console.error('SealionViewer: AlignmentRenderer.render failed', e); }
       } catch (e) { console.error('SealionViewer.drawAll failed', e); }
       console.timeEnd('drawAll');
     }
