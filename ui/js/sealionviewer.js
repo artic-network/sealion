@@ -3,6 +3,7 @@
 // SealionViewer is exposed globally via window.SealionViewer for sealion.js.
 
 import { CanvasRenderer } from './renderers/CanvasRenderer.js';
+import { OverviewRenderer } from './renderers/OverviewRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -181,9 +182,8 @@ import { CanvasRenderer } from './renderers/CanvasRenderer.js';
       // Initialize collections that should not be reset by setOptions
       this.labelTags = new Map(); // Map of label string -> tag color index
       this.siteBookmarks = new Map(); // Map of column index -> bookmark color index
-      this._overviewCache = null; // cached canvas for overview content (bars, differences, bookmarks)
-      this._overviewCacheInvalid = true; // flag to trigger cache rebuild
-      this._overviewCacheParams = null; // parameters used to build the cache
+      this._overviewRenderer = new OverviewRenderer(this.overviewCanvas, this);
+      this._overviewRenderer.attachEvents();
       this._lightModeColors = {}; // store original light mode colors
 
       // Apply defaults first, then override with provided options
@@ -577,7 +577,7 @@ import { CanvasRenderer } from './renderers/CanvasRenderer.js';
           this.siteBookmarks = this.siteBookmarks || new Map();
           this.siteBookmarks.clear();
           state.siteBookmarks.forEach(([key, value]) => this.siteBookmarks.set(key, value));
-          this._overviewCacheInvalid = true; // bookmarks affect overview
+          this._overviewRenderer.invalidateCache(); // bookmarks affect overview
           needsRerender = true;
         }
         
@@ -4427,7 +4427,7 @@ import { CanvasRenderer } from './renderers/CanvasRenderer.js';
           }
         } catch (_) { refGenomeCDS = null; }
         
-        try { this.drawOverview(this.overviewCanvas, vis, Object.assign({}, commonOpts, { refStr: refStr, refModeEnabled: !!this.refModeEnabled, rows: this.alignment || [], OVERVIEW_TOP_PAD: this.OVERVIEW_TOP_PAD, OVERVIEW_BOTTOM_PAD: this.OVERVIEW_BOTTOM_PAD, refGenomeCDS: refGenomeCDS })); } catch (e) { console.error('SealionViewer.drawOverview failed', e); }
+        try { this._overviewRenderer.render(vis); } catch (e) { console.error('SealionViewer: OverviewRenderer.render failed', e); }
         try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
         try { this.drawConsensus(this.consensusCanvas, vis, Object.assign({}, commonOpts, { FONT: this.FONT, CONSENSUS_TOP_PAD: this.CONSENSUS_TOP_PAD, CONSENSUS_BOTTOM_PAD: this.CONSENSUS_BOTTOM_PAD, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawConsensus failed', e); }
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
@@ -4878,7 +4878,7 @@ import { CanvasRenderer } from './renderers/CanvasRenderer.js';
 
     // Invalidate the overview cache (call when mask, bookmarks, or ref mode changes)
     invalidateOverviewCache() {
-      this._overviewCacheInvalid = true;
+      this._overviewRenderer.invalidateCache();
     }
 
     // Toggle dark mode

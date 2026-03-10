@@ -2848,8 +2848,8 @@
             }
             
             // Invalidate overview cache
-            if (viewer._overviewCacheInvalid !== undefined) {
-              viewer._overviewCacheInvalid = true;
+            if (typeof viewer.invalidateOverviewCache === 'function') {
+              viewer.invalidateOverviewCache();
             }
             
             // Reset scroll position
