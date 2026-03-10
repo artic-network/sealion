@@ -5228,6 +5228,7 @@
     aminoAcidMode: false,
     codonMode: false,
     readingFrame: 1,
+    AMINO_ACID_COLOR_SCHEME: 'zappo',
     // Canvas background colors - Light mode
     OVERVIEW_BG: '#f7f7f7',
     OVERVIEW_EXPANDED_COL: '#ddd',
@@ -5437,6 +5438,15 @@
       darkDefault: '#BDC3C7'
     }
   };
+
+  // Now that AMINO_ACID_COLOR_SCHEMES is defined, backfill the fallback values into
+  // DEFAULTS so the SealionViewer.DEFAULTS.AA_COLORS fallback in drawRow /
+  // drawConsensus always resolves to a valid map regardless of instance state.
+  {
+    const _zappo = SealionViewer.AMINO_ACID_COLOR_SCHEMES['zappo'];
+    SealionViewer.DEFAULTS.AA_COLORS      = { ..._zappo.lightColors };
+    SealionViewer.DEFAULTS.DEFAULT_AA_COLOR = _zappo.lightDefault;
+  }
 
   window.SealionViewer = SealionViewer;
 
