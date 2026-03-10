@@ -2707,6 +2707,11 @@
           document.getElementById('fasta-url-panel').style.display = '';
           document.getElementById('fasta-file-panel').style.display = '';
           document.getElementById('fasta-example-panel').style.display = '';
+          // Pre-fill the URL input with the attempted URL and switch to the URL tab
+          const fastaUrlInput = document.getElementById('fasta-url');
+          if (fastaUrlInput) fastaUrlInput.value = url;
+          const urlTab = document.getElementById('fasta-url-tab');
+          if (urlTab) bootstrap.Tab.getOrCreateInstance(urlTab).show();
           // Ensure the modal is visible so the user can see the error
           fileModal.show();
         }
