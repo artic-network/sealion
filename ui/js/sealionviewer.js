@@ -3176,9 +3176,12 @@
         const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
         ctx.fillStyle = '#000';
         
-        // Translate sequence to amino acids if in amino acid or codon mode
+        // Check if native amino acid alignment (no translation needed)
+        const isNativeAA = this.isNativeAminoAcid || false;
+        
+        // Translate sequence to amino acids if in amino acid or codon mode (but not for native AA)
         let translatedSeq = null;
-        if ((aminoAcidMode || codonMode) && seq) {
+        if ((aminoAcidMode || codonMode) && seq && !isNativeAA) {
           translatedSeq = Alignment.translateSequence(seq, readingFrame);
         }
         
@@ -3209,85 +3212,124 @@
               // Outside valid codon range - skip
               continue;
             }
-          } else if (aminoAcidMode && translatedSeq) {
-            // In amino acid mode, display amino acids centered in the codon box
-            // Map nucleotide position to amino acid position
-            const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
-            if (aaPos >= 0 && aaPos < translatedSeq.length && (c - (readingFrame - 1)) % 3 === 0) {
-              // This is the first nucleotide position of a codon
-              ch = translatedSeq.charAt(aaPos);
-              base = ch.toUpperCase();
+          } else if (aminoAcidMode && isNativeAA) {
+            // Native amino acid alignment - render as simple character (like nucleotides)
+            ch = seq.charAt(c) || 'X';
+            base = ch.toUpperCase();
+            
+            // Get reference amino acid character if reference mode is enabled
+            const refAA = (refStr && refStr.charAt(c)) ? refStr.charAt(c).toUpperCase() : null;
+            const isSameRef = refModeEnabled && refStr && refAA === base;
+            const isRefRow = (typeof refIndex === 'number' && refIndex === r);
+            color = isRefRow ? (aaColors[base] || defaultAaColor) : (isSameRef ? paleRefColor : (aaColors[base] || defaultAaColor));
               
-              // Get reference amino acid if reference mode is enabled
-              const refAA = (translatedRef && aaPos < translatedRef.length) ? translatedRef.charAt(aaPos) : null;
+              const left = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+              const right = (colOffsets[c + 1] !== undefined) ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
+              const x = left - visible.scrollLeft;
+              const w = Math.max(1, right - left);
               
-              const isSameRef = refModeEnabled && refStr && refAA === base;
-              const isRefRow = (typeof refIndex === 'number' && refIndex === r);
-              color = isRefRow ? (aaColors[base] || defaultAaColor) : (isSameRef ? paleRefColor : (aaColors[base] || defaultAaColor));
-              
-              // Calculate center position across all 3 codon nucleotides
-              const codonEnd = c + 2;
-              const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (charWidth + expandedRightPad));
-              const codonEndLeftPos = (colOffsets[codonEnd] !== undefined) ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
-              const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
-              const codonWidth = codonRightPos - codonLeftPos;
-              const xCenter = codonLeftPos + (codonWidth / 2) - visible.scrollLeft;
-              
-              // Draw the amino acid centered in the codon box
               if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
                 // Collapsed column
-                const w = Math.max(1, codonRightPos - codonLeftPos);
                 if (hideMode && w > 1) {
                   ctx.fillStyle = hiddenMarkerColor;
                   const topQ = Math.round(rawRowY * pr) / pr;
                   const hQ = Math.round(rowHeight * pr) / pr;
-                  ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                  ctx.fillRect(x, topQ, w, hQ);
                 } else if (!hideMode) {
                   ctx.fillStyle = color;
                   const topCss = rawRowY + compressedCellVpad;
                   const blockH = Math.max(1, rowHeight - (compressedCellVpad * 2));
                   const topQ = Math.round(topCss * pr) / pr;
                   const hQ = Math.round(blockH * pr) / pr;
-                  ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                  ctx.fillRect(x, topQ, w, hQ);
                 }
               } else {
-                // Draw rounded rectangle background with gaps
-                const hGap = 0.75; // Horizontal gap in pixels
-                const vGap = 0.75; // Vertical gap in pixels (smaller)
-                const bgWidth = codonWidth - (hGap * 2);
-                const bgHeight = rowHeight - (vGap * 2);
-                const bgX = xCenter - bgWidth / 2;
-                const bgY = rawRowY + vGap;
-                const radius = 3; // Corner radius for rounded rectangle
+                // Normal rendering - just text
+                ctx.fillStyle = color;
+                const textOffset = Math.round((w - charWidth) / 2);
+                ctx.fillText(ch, x + textOffset, y);
+              }
+              // Native AA rendering is complete, skip common nucleotide rendering code
+              continue;
+            } else if (aminoAcidMode && translatedSeq) {
+              // Translated nucleotide alignment - render with lozenges
+              // Map nucleotide position to amino acid position
+              const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+              if (aaPos >= 0 && aaPos < translatedSeq.length && (c - (readingFrame - 1)) % 3 === 0) {
+                // This is the first nucleotide position of a codon
+                ch = translatedSeq.charAt(aaPos);
+                base = ch.toUpperCase();
                 
-                // Create translucent version of color
-                const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-                let bgColor = color;
-                if (rgbMatch) {
-                  const r = parseInt(rgbMatch[1], 16);
-                  const g = parseInt(rgbMatch[2], 16);
-                  const b = parseInt(rgbMatch[3], 16);
-                  bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
+                // Get reference amino acid if reference mode is enabled
+                const refAA = (translatedRef && aaPos < translatedRef.length) ? translatedRef.charAt(aaPos) : null;
+                
+                const isSameRef = refModeEnabled && refStr && refAA === base;
+                const isRefRow = (typeof refIndex === 'number' && refIndex === r);
+                color = isRefRow ? (aaColors[base] || defaultAaColor) : (isSameRef ? paleRefColor : (aaColors[base] || defaultAaColor));
+                
+                // Calculate center position across all 3 codon nucleotides
+                const codonEnd = c + 2;
+                const codonLeftPos = (colOffsets[c] !== undefined) ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+                const codonEndLeftPos = (colOffsets[codonEnd] !== undefined) ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
+                const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
+                const codonWidth = codonRightPos - codonLeftPos;
+                const xCenter = codonLeftPos + (codonWidth / 2) - visible.scrollLeft;
+                
+                // Draw the amino acid centered in the codon box
+                if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+                  // Collapsed column
+                  const w = Math.max(1, codonRightPos - codonLeftPos);
+                  if (hideMode && w > 1) {
+                    ctx.fillStyle = hiddenMarkerColor;
+                    const topQ = Math.round(rawRowY * pr) / pr;
+                    const hQ = Math.round(rowHeight * pr) / pr;
+                    ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                  } else if (!hideMode) {
+                    ctx.fillStyle = color;
+                    const topCss = rawRowY + compressedCellVpad;
+                    const blockH = Math.max(1, rowHeight - (compressedCellVpad * 2));
+                    const topQ = Math.round(topCss * pr) / pr;
+                    const hQ = Math.round(blockH * pr) / pr;
+                    ctx.fillRect(xCenter - w/2, topQ, w, hQ);
+                  }
+                } else {
+                  // Draw rounded rectangle background with gaps
+                  const hGap = 0.75; // Horizontal gap in pixels
+                  const vGap = 0.75; // Vertical gap in pixels (smaller)
+                  const bgWidth = codonWidth - (hGap * 2);
+                  const bgHeight = rowHeight - (vGap * 2);
+                  const bgX = xCenter - bgWidth / 2;
+                  const bgY = rawRowY + vGap;
+                  const radius = 3; // Corner radius for rounded rectangle
+                  
+                  // Create translucent version of color
+                  const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+                  let bgColor = color;
+                  if (rgbMatch) {
+                    const r = parseInt(rgbMatch[1], 16);
+                    const g = parseInt(rgbMatch[2], 16);
+                    const b = parseInt(rgbMatch[3], 16);
+                    bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
+                  }
+                  
+                  ctx.fillStyle = bgColor;
+                  ctx.beginPath();
+                  ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
+                  ctx.fill();
+                  
+                  // Draw the text on top
+                  ctx.fillStyle = color;
+                  const textWidth = charWidth;
+                  ctx.fillText(ch, xCenter - textWidth / 2, y);
                 }
                 
-                ctx.fillStyle = bgColor;
-                ctx.beginPath();
-                ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
-                ctx.fill();
-                
-                // Draw the text on top
-                ctx.fillStyle = color;
-                const textWidth = charWidth;
-                ctx.fillText(ch, xCenter - textWidth / 2, y);
+                // Skip the next two positions of the codon
+                continue;
+              } else {
+                // Not at codon start position in amino acid mode - skip drawing
+                continue;
               }
-              
-              // Skip the next two positions of the codon
-              continue;
             } else {
-              // Not at codon start position in amino acid mode - skip drawing
-              continue;
-            }
-          } else {
             // Normal nucleotide mode
             const rawCh = seq[c] || ' ';
             ch = String(rawCh);
@@ -3458,85 +3500,135 @@
             continue; // Skip positions outside valid codon range
           }
         } else if (aminoAcidMode && translatedCons) {
-          // In amino acid mode, draw amino acid centered in codon box
-          const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
-          if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
-            ch = translatedCons.charAt(aaPos);
+          // In amino acid mode - check if native amino acid alignment
+          const isNativeAA = this.isNativeAminoAcid || false;
+          
+          if (isNativeAA) {
+            // Native amino acid alignment - render as simple character (like nucleotides)
+            ch = (cons.charAt(c) || 'X');
             base = ch.toUpperCase();
             color = aaColors[base] || defaultAaColor;
             
-            // Calculate center position across all 3 codon nucleotides
-            const codonEnd = c + 2;
-            const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
-            const codonEndLeftPos = (colOffsets && typeof colOffsets[codonEnd] !== 'undefined') ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
-            const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
-            const codonWidth = codonRightPos - codonLeftPos;
-            const xCenter = codonLeftPos + (codonWidth / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+            const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
+            const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+            const w = Math.max(1, right - left);
             
-            // Draw the amino acid centered in the codon box
             if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
               ctx.fillStyle = color;
               const blockTop = consensusTopPad;
               const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
-              const w = Math.max(1, codonWidth);
-              ctx.fillRect(xCenter - w/2, blockTop, w, blockH);
+              ctx.fillRect(x, blockTop, w, blockH);
             } else {
-              // Draw rounded rectangle background with gaps
-              const hGap = 0.75; // Horizontal gap in pixels
-              const vGap = 0.75; // Vertical gap in pixels (smaller)
-              const bgWidth = codonWidth - (hGap * 2);
-              const bgHeight = rowHeight - (vGap * 2);
-              const bgX = xCenter - bgWidth / 2;
-              // Center the lozenge vertically in the consensus row
-              const consensusRowHeight = cssH - (consensusTopPad + consensusBottomPad);
-              const bgY = consensusTopPad + (consensusRowHeight - bgHeight) / 2;
-              const radius = 3; // Corner radius for rounded rectangle
-              
-              // Create translucent version of color
-              const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-              let bgColor = color;
-              if (rgbMatch) {
-                const r = parseInt(rgbMatch[1], 16);
-                const g = parseInt(rgbMatch[2], 16);
-                const b = parseInt(rgbMatch[3], 16);
-                bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
-              }
-              
-              ctx.fillStyle = bgColor;
-              ctx.beginPath();
-              ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
-              ctx.fill();
-              
-              // Draw the text on top
               ctx.fillStyle = color;
-              const textWidth = charWidth;
-              ctx.fillText(ch, xCenter - textWidth / 2, baselineY);
+              // Center the text in the column
+              const textOffset = Math.round((w - charWidth) / 2);
+              ctx.fillText(ch, x + textOffset, baselineY);
             }
-            continue; // Skip the next two positions of the codon
           } else {
-            continue; // Skip non-codon-start positions
+            // Translated nucleotide alignment - render with lozenges
+            // Draw amino acid centered in codon box
+            const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+            if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
+              ch = translatedCons.charAt(aaPos);
+              base = ch.toUpperCase();
+              color = aaColors[base] || defaultAaColor;
+              
+              // Calculate center position across all 3 codon nucleotides
+              const codonEnd = c + 2;
+              const codonLeftPos = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+              const codonEndLeftPos = (colOffsets && typeof colOffsets[codonEnd] !== 'undefined') ? colOffsets[codonEnd] : (codonEnd * (charWidth + expandedRightPad));
+              const codonRightPos = codonEndLeftPos + charWidth + expandedRightPad;
+              const codonWidth = codonRightPos - codonLeftPos;
+              const xCenter = codonLeftPos + (codonWidth / 2) - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+              
+              // Draw the amino acid centered in the codon box
+              if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+                ctx.fillStyle = color;
+                const blockTop = consensusTopPad;
+                const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
+                const w = Math.max(1, codonWidth);
+                ctx.fillRect(xCenter - w/2, blockTop, w, blockH);
+              } else {
+                // Draw rounded rectangle background with gaps
+                const hGap = 0.75; // Horizontal gap in pixels
+                const vGap = 0.75; // Vertical gap in pixels (smaller)
+                const bgWidth = codonWidth - (hGap * 2);
+                const bgHeight = innerH - (vGap * 2);
+                const bgX = xCenter - bgWidth / 2;
+                // Center the lozenge vertically in the consensus row
+                const consensusRowHeight = cssH - (consensusTopPad + consensusBottomPad);
+                const bgY = consensusTopPad + (consensusRowHeight - bgHeight) / 2;
+                const radius = 3; // Corner radius for rounded rectangle
+                
+                // Create translucent version of color
+                const rgbMatch = color.match(/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
+                let bgColor = color;
+                if (rgbMatch) {
+                  const r = parseInt(rgbMatch[1], 16);
+                  const g = parseInt(rgbMatch[2], 16);
+                  const b = parseInt(rgbMatch[3], 16);
+                  bgColor = `rgba(${r}, ${g}, ${b}, 0.25)`;
+                }
+                
+                ctx.fillStyle = bgColor;
+                ctx.beginPath();
+                ctx.roundRect(bgX, bgY, bgWidth, bgHeight, radius);
+                ctx.fill();
+                
+                // Draw the text on top
+                ctx.fillStyle = color;
+                const textWidth = charWidth;
+                ctx.fillText(ch, xCenter - textWidth / 2, baselineY);
+              }
+              continue; // Skip the next two positions of the codon
+            } else {
+              continue; // Skip non-codon-start positions
+            }
+          }
+        } else if (aminoAcidMode) {
+          // In amino acid mode with no translation - this is a native AA alignment
+          ch = (cons.charAt(c) || 'X');
+          base = ch.toUpperCase();
+          color = aaColors[base] || defaultAaColor;
+          
+          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
+          const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+          const w = Math.max(1, right - left);
+          
+          if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+            ctx.fillStyle = color;
+            const blockTop = consensusTopPad;
+            const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
+            ctx.fillRect(x, blockTop, w, blockH);
+          } else {
+            ctx.fillStyle = color;
+            // Center the text in the column
+            const textOffset = Math.round((w - charWidth) / 2);
+            ctx.fillText(ch, x + textOffset, baselineY);
           }
         } else {
           ch = (cons.charAt(c) || 'N');
           base = ch ? ch.charAt(0).toUpperCase() : '';
           color = baseColors[base] || defaultBaseColor;
-        }
-        
-        const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
-        const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-        const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-        const w = Math.max(1, right - left);
-        
-        if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
-          ctx.fillStyle = color;
-          const blockTop = consensusTopPad;
-          const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
-          ctx.fillRect(x, blockTop, w, blockH);
-        } else {
-          ctx.fillStyle = color;
-          // Center the text in the column
-          const textOffset = Math.round((w - charWidth) / 2);
-          ctx.fillText(ch, x + textOffset, baselineY);
+          
+          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
+          const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+          const w = Math.max(1, right - left);
+          
+          if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+            ctx.fillStyle = color;
+            const blockTop = consensusTopPad;
+            const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
+            ctx.fillRect(x, blockTop, w, blockH);
+          } else {
+            ctx.fillStyle = color;
+            // Center the text in the column
+            const textOffset = Math.round((w - charWidth) / 2);
+            ctx.fillText(ch, x + textOffset, baselineY);
+          }
         }
       }
 

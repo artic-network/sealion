@@ -602,11 +602,12 @@ class Alignment {
     }
   }
 
-  // Compute constant mask treating 'N' as an ambiguous wildcard that matches any base
-  computeConstantMaskAllowN() {
+  // Compute constant mask treating 'N' (or 'X' for amino acids) as an ambiguous wildcard
+  computeConstantMaskAllowN(isAminoAcid = false) {
     try {
       const maxLen = this.getMaxSeqLen();
       const mask = new Array(maxLen);
+      const ambiguousChar = isAminoAcid ? 'X' : 'N'; // X for AA, N for nucleotides
       
       for (let col = 0; col < maxLen; col++) {
         let firstNonAmbig = null;
@@ -617,8 +618,8 @@ class Alignment {
           const seq = this._currentOrder[row].sequence;
           const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
           
-          // Skip gaps and N (ambiguous)
-          if (ch === '-' || ch === 'N') continue;
+          // Skip gaps and ambiguous character (N for nucleotides, X for amino acids)
+          if (ch === '-' || ch === ambiguousChar) continue;
           
           if (firstNonAmbig === null) {
             firstNonAmbig = ch;
@@ -639,11 +640,12 @@ class Alignment {
     }
   }
 
-  // Compute constant mask treating both 'N' and gap '-' as ambiguous/wildcards
-  computeConstantMaskAllowNAndGaps() {
+  // Compute constant mask treating both ambiguous chars and gap '-' as wildcards
+  computeConstantMaskAllowNAndGaps(isAminoAcid = false) {
     try {
       const maxLen = this.getMaxSeqLen();
       const mask = new Array(maxLen);
+      const ambiguousChar = isAminoAcid ? 'X' : 'N'; // X for AA, N for nucleotides
       
       for (let col = 0; col < maxLen; col++) {
         let firstNonAmbig = null;
@@ -654,8 +656,8 @@ class Alignment {
           const seq = this._currentOrder[row].sequence;
           const ch = (col < seq.length) ? seq[col].toUpperCase() : '-';
           
-          // Skip gaps, N, and empty
-          if (ch === '-' || ch === 'N' || ch === '') continue;
+          // Skip gaps, ambiguous character, and empty
+          if (ch === '-' || ch === ambiguousChar || ch === '') continue;
           
           if (firstNonAmbig === null) {
             firstNonAmbig = ch;

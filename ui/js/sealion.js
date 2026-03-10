@@ -99,7 +99,7 @@
     };
   }
 
-  // Start the initialization process
+  //  Start the initialization process
   initializeViewer();
 
   // Button to jump to next difference from reference
@@ -363,6 +363,159 @@
     }
   }
 
+  // Function to detect if alignment contains amino acid or nucleotide sequences
+  // Returns true if sequences appear to be amino acids, false for nucleotides
+  function detectAminoAcidSequences(alignmentInstance) {
+    if (!alignmentInstance || typeof alignmentInstance.getSequenceCount !== 'function') {
+      return false;
+    }
+    
+    const seqCount = alignmentInstance.getSequenceCount();
+    if (seqCount === 0) return false;
+    
+    // Check a sample of sequences (up to first 10)
+    const samplesToCheck = Math.min(10, seqCount);
+    const nucleotideChars = new Set(['A', 'C', 'G', 'T', 'U', 'N', '-']);
+    const aminoAcidChars = new Set([
+      'A', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'K', 'L', 'M', 'N', 'P', 'Q', 'R', 
+      'S', 'T', 'V', 'W', 'Y', 'X', '*', '-'
+    ]);
+    
+    let totalNonAmbiguous = 0;
+    let aminoAcidSpecific = 0;
+    
+    for (let i = 0; i < samplesToCheck; i++) {
+      const seq = alignmentInstance.getSequence(i);
+      if (!seq || !seq.sequence) continue;
+      
+      // Sample characters from the sequence (check up to 200 positions)
+      const seqStr = seq.sequence.toUpperCase();
+      const checkLength = Math.min(200, seqStr.length);
+      
+      for (let j = 0; j < checkLength; j++) {
+        const char = seqStr.charAt(j);
+        
+        // Skip gaps and ambiguity codes
+        if (char === '-' || char === 'N' || char === 'X' || char === '') continue;
+        
+        totalNonAmbiguous++;
+        
+        // Check if character is amino acid specific (not in nucleotide set)
+        if (aminoAcidChars.has(char) && !nucleotideChars.has(char)) {
+          aminoAcidSpecific++;
+        }
+      }
+    }
+    
+    // If we found no non-ambiguous characters, assume nucleotide
+    if (totalNonAmbiguous === 0) return false;
+    
+    // If more than 5% of characters are amino acid specific, it's likely amino acid
+    const aminoAcidRatio = aminoAcidSpecific / totalNonAmbiguous;
+    return aminoAcidRatio > 0.05;
+  }
+
+  // Function to disable translation controls (for amino acid alignments)
+  function disableTranslationControls() {
+    // Disable nucleotide mode button
+    const nucleotideModeBtn = document.getElementById('nucleotide-mode-btn');
+    if (nucleotideModeBtn) {
+      nucleotideModeBtn.classList.add('disabled');
+      nucleotideModeBtn.setAttribute('disabled', 'disabled');
+      nucleotideModeBtn.title = 'Not available for amino acid sequences';
+      nucleotideModeBtn.style.display = 'none'; // Hide it completely
+    }
+    
+    // Disable codon mode button
+    const codonModeBtn = document.getElementById('codon-mode-btn');
+    if (codonModeBtn) {
+      codonModeBtn.classList.add('disabled');
+      codonModeBtn.setAttribute('disabled', 'disabled');
+      codonModeBtn.title = 'Not available for amino acid sequences';
+      codonModeBtn.style.display = 'none'; // Hide it completely
+    }
+    
+    // Disable reading frame selectors and the divider before them
+    const readingFrameSelectors = document.querySelectorAll('.reading-frame-selector');
+    readingFrameSelectors.forEach(btn => {
+      btn.classList.add('disabled');
+      btn.setAttribute('disabled', 'disabled');
+      btn.title = 'Not available for amino acid sequences';
+      const parent = btn.closest('li');
+      if (parent) parent.style.display = 'none'; // Hide the list item
+    });
+    
+    // Hide the divider before reading frames
+    const dividers = document.querySelectorAll('#amino-acid-mode-btn').length > 0 
+      ? document.querySelectorAll('#amino-acid-mode-btn')[0].closest('li').nextElementSibling
+      : null;
+    if (dividers && dividers.classList.contains('dropdown-divider')) {
+      dividers.style.display = 'none';
+    }
+  }
+
+  // Function to enable translation controls (for nucleotide alignments)
+  function enableTranslationControls() {
+    // Enable nucleotide mode button
+    const nucleotideModeBtn = document.getElementById('nucleotide-mode-btn');
+    if (nucleotideModeBtn) {
+      nucleotideModeBtn.classList.remove('disabled');
+      nucleotideModeBtn.removeAttribute('disabled');
+      nucleotideModeBtn.title = '';
+      nucleotideModeBtn.style.display = ''; // Show it
+    }
+    
+    // Enable codon mode button
+    const codonModeBtn = document.getElementById('codon-mode-btn');
+    if (codonModeBtn) {
+      codonModeBtn.classList.remove('disabled');
+      codonModeBtn.removeAttribute('disabled');
+      codonModeBtn.title = '';
+      codonModeBtn.style.display = ''; // Show it
+    }
+    
+    // Enable reading frame selectors
+    const readingFrameSelectors = document.querySelectorAll('.reading-frame-selector');
+    readingFrameSelectors.forEach(btn => {
+      btn.classList.remove('disabled');
+      btn.removeAttribute('disabled');
+      btn.title = '';
+      const parent = btn.closest('li');
+      if (parent) parent.style.display = ''; // Show the list item
+    });
+    
+    // Show the divider before reading frames
+    const dividers = document.querySelectorAll('#amino-acid-mode-btn').length > 0 
+      ? document.querySelectorAll('#amino-acid-mode-btn')[0].closest('li').nextElementSibling
+      : null;
+    if (dividers && dividers.classList.contains('dropdown-divider')) {
+      dividers.style.display = '';
+    }
+  }
+
+  // Function to update collapse preset button labels based on mode
+  function updateCollapseButtonLabels(isAminoAcid) {
+    const ambiguousChar = isAminoAcid ? 'X' : 'N';
+    
+    // Update "Constant (allow N)" button
+    const applyConstantAmbiguousBtn = document.getElementById('apply-constant-ambiguous-btn');
+    if (applyConstantAmbiguousBtn) {
+      const icon = applyConstantAmbiguousBtn.querySelector('.bi');
+      applyConstantAmbiguousBtn.innerHTML = '';
+      if (icon) applyConstantAmbiguousBtn.appendChild(icon.cloneNode(true));
+      applyConstantAmbiguousBtn.appendChild(document.createTextNode(` Constant (allow ${ambiguousChar})`));
+    }
+    
+    // Update "Constant (allow N & -)" button
+    const applyConstantGappedBtn = document.getElementById('apply-constant-gapped-btn');
+    if (applyConstantGappedBtn) {
+      const icon = applyConstantGappedBtn.querySelector('.bi');
+      applyConstantGappedBtn.innerHTML = '';
+      if (icon) applyConstantGappedBtn.appendChild(icon.cloneNode(true));
+      applyConstantGappedBtn.appendChild(document.createTextNode(` Constant (allow ${ambiguousChar} & -)`));
+    }
+  }
+
   // Helper function to complete viewer setup after data is loaded
   function loadDataIntoViewer(alignmentInstance) {
     try {
@@ -374,6 +527,32 @@
       // Update global alignment reference
       alignment = alignmentInstance;
       try { window.alignment = alignmentInstance; } catch (_) { }
+
+      // Detect if sequences are amino acid or nucleotide
+      const isAminoAcid = detectAminoAcidSequences(alignmentInstance);
+      if (isAminoAcid) {
+        console.info('Detected amino acid sequences - setting amino acid mode and disabling translation controls');
+        viewer.aminoAcidMode = true;
+        viewer.codonMode = false;
+        viewer.isNativeAminoAcid = true; // Flag to distinguish native AA from translated
+        window.isAminoAcidAlignment = true;
+        
+        // Disable nucleotide/codon mode buttons and reading frame selectors
+        disableTranslationControls();
+        
+        // Update collapse button labels for amino acid mode
+        updateCollapseButtonLabels(true);
+      } else {
+        console.info('Detected nucleotide sequences - translation controls enabled');
+        viewer.isNativeAminoAcid = false;
+        window.isAminoAcidAlignment = false;
+        
+        // Ensure translation controls are enabled
+        enableTranslationControls();
+        
+        // Update collapse button labels for nucleotide mode
+        updateCollapseButtonLabels(false);
+      }
 
       // Notify command registry that export / diff navigation are now available.
       try {
@@ -1142,6 +1321,11 @@
   if (nucleotideModeBtn) {
     nucleotideModeBtn.addEventListener('click', () => {
       if (!viewer) return;
+      // Don't allow switching to nucleotide mode for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Cannot switch to nucleotide mode for amino acid alignments');
+        return;
+      }
       viewer.aminoAcidMode = false;
       viewer.codonMode = false;
       viewer.cancelRender();
@@ -1154,6 +1338,13 @@
   if (aminoAcidModeBtn) {
     aminoAcidModeBtn.addEventListener('click', () => {
       if (!viewer) return;
+      
+      // For native amino acid alignments, this is already the only mode - no action needed
+      if (window.isAminoAcidAlignment && viewer.isNativeAminoAcid) {
+        console.info('Already displaying native amino acids - no action needed');
+        return;
+      }
+      
       viewer.aminoAcidMode = true;
       viewer.codonMode = false;
       viewer.cancelRender();
@@ -1166,6 +1357,11 @@
   if (codonModeBtn) {
     codonModeBtn.addEventListener('click', () => {
       if (!viewer) return;
+      // Don't allow switching to codon mode for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Cannot switch to codon mode for amino acid alignments');
+        return;
+      }
       viewer.aminoAcidMode = false;
       viewer.codonMode = true;
       viewer.cancelRender();
@@ -1194,6 +1390,11 @@
   readingFrameSelectors.forEach(btn => {
     btn.addEventListener('click', () => {
       if (!viewer) return;
+      // Don't allow reading frame changes for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Cannot change reading frame for amino acid alignments');
+        return;
+      }
       const frame = parseInt(btn.getAttribute('data-frame'), 10);
       if (frame >= 1 && frame <= 3) {
         viewer.readingFrame = frame;
@@ -1219,6 +1420,12 @@
     // Command/Ctrl + \ to cycle through nucleotide → codon → amino acid modes
     if (e.key === '\\') {
       e.preventDefault();
+      
+      // Don't allow mode switching for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Mode switching disabled for amino acid alignments');
+        return;
+      }
       
       if (!viewer.aminoAcidMode && !viewer.codonMode) {
         // Currently in nucleotide mode, switch to codon mode
@@ -1248,6 +1455,13 @@
     // Command/Ctrl + ] to shift up a reading frame (1→2→3→1)
     if (e.key === ']') {
       e.preventDefault();
+      
+      // Don't allow reading frame changes for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Reading frame changes disabled for amino acid alignments');
+        return;
+      }
+      
       viewer.readingFrame = (viewer.readingFrame % 3) + 1;
       updateReadingFrameUI();
       viewer.cancelRender();
@@ -1260,6 +1474,13 @@
     // Command/Ctrl + [ to shift down a reading frame (3→2→1→3)
     if (e.key === '[') {
       e.preventDefault();
+      
+      // Don't allow reading frame changes for amino acid alignments
+      if (window.isAminoAcidAlignment) {
+        console.info('Reading frame changes disabled for amino acid alignments');
+        return;
+      }
+      
       viewer.readingFrame = viewer.readingFrame === 1 ? 3 : viewer.readingFrame - 1;
       updateReadingFrameUI();
       viewer.cancelRender();
@@ -1437,7 +1658,8 @@
   if (applyConstantAmbiguousBtn) {
     applyConstantAmbiguousBtn.addEventListener('click', () => {
       if (!viewer || !viewer.alignment) return;
-      const cm = viewer.alignment.computeConstantMaskAllowN();
+      const isAA = viewer.isNativeAminoAcid || false;
+      const cm = viewer.alignment.computeConstantMaskAllowN(isAA);
       if (!cm) {
         console.warn('computeConstantMaskAllowN returned no mask');
         return;
@@ -1470,7 +1692,8 @@
   if (applyConstantGappedBtn) {
     applyConstantGappedBtn.addEventListener('click', () => {
       if (!viewer || !viewer.alignment) return;
-      const cm = viewer.alignment.computeConstantMaskAllowNAndGaps();
+      const isAA = viewer.isNativeAminoAcid || false;
+      const cm = viewer.alignment.computeConstantMaskAllowNAndGaps(isAA);
       if (!cm) {
         console.warn('computeConstantMaskAllowNAndGaps returned no mask');
         return;
