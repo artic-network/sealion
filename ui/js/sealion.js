@@ -448,6 +448,43 @@
     if (dividers && dividers.classList.contains('dropdown-divider')) {
       dividers.style.display = 'none';
     }
+    
+    // Hide nucleotide color schemes section
+    const nucleotideColorBtns = document.querySelectorAll('.nucleotide-color-scheme-btn');
+    nucleotideColorBtns.forEach(btn => {
+      const parent = btn.closest('li');
+      if (parent) parent.style.display = 'none';
+    });
+    
+    // Hide nucleotide color header and dividers
+    const allDropdownItems = document.querySelectorAll('.dropdown-menu li');
+    allDropdownItems.forEach(li => {
+      if (li.classList.contains('dropdown-header') && li.textContent.includes('Nucleotide')) {
+        li.style.display = 'none';
+        // Hide the divider after nucleotide header (before first nucleotide color scheme)
+        const nextSibling = li.nextElementSibling;
+        if (nextSibling && nextSibling.querySelector('.nucleotide-color-scheme-btn')) {
+          // Already hidden by the button loop above
+        }
+      }
+    });
+    
+    // Hide the divider between nucleotide and amino acid sections
+    const nucleotideSection = document.querySelector('.nucleotide-color-scheme-btn');
+    if (nucleotideSection) {
+      let currentEl = nucleotideSection.closest('li');
+      while (currentEl) {
+        currentEl = currentEl.nextElementSibling;
+        if (currentEl && currentEl.querySelector('hr.dropdown-divider')) {
+          const nextLi = currentEl.nextElementSibling;
+          if (nextLi && nextLi.classList.contains('dropdown-header') && nextLi.textContent.includes('Amino acid')) {
+            currentEl.style.display = 'none';
+            break;
+          }
+        }
+        if (!currentEl || currentEl.querySelector('.amino-acid-color-scheme-btn')) break;
+      }
+    }
   }
 
   // Function to enable translation controls (for nucleotide alignments)
@@ -487,6 +524,38 @@
     if (dividers && dividers.classList.contains('dropdown-divider')) {
       dividers.style.display = '';
     }
+    
+    // Show nucleotide color schemes section
+    const nucleotideColorBtns = document.querySelectorAll('.nucleotide-color-scheme-btn');
+    nucleotideColorBtns.forEach(btn => {
+      const parent = btn.closest('li');
+      if (parent) parent.style.display = '';
+    });
+    
+    // Show nucleotide color header
+    const allDropdownItems = document.querySelectorAll('.dropdown-menu li');
+    allDropdownItems.forEach(li => {
+      if (li.classList.contains('dropdown-header') && li.textContent.includes('Nucleotide')) {
+        li.style.display = '';
+      }
+    });
+    
+    // Show the divider between nucleotide and amino acid sections
+    const nucleotideSection = document.querySelector('.nucleotide-color-scheme-btn');
+    if (nucleotideSection) {
+      let currentEl = nucleotideSection.closest('li');
+      while (currentEl) {
+        currentEl = currentEl.nextElementSibling;
+        if (currentEl && currentEl.querySelector('hr.dropdown-divider')) {
+          const nextLi = currentEl.nextElementSibling;
+          if (nextLi && nextLi.classList.contains('dropdown-header') && nextLi.textContent.includes('Amino acid')) {
+            currentEl.style.display = '';
+            break;
+          }
+        }
+        if (!currentEl || currentEl.querySelector('.amino-acid-color-scheme-btn')) break;
+      }
+    }
   }
 
   // Function to update collapse preset button labels based on mode
@@ -515,9 +584,13 @@
   // Helper function to complete viewer setup after data is loaded
   function loadDataIntoViewer(alignmentInstance) {
     try {
+      console.time('loadDataIntoViewer');
+      
       // Set data on viewer
       setStatus('Initializing alignment view...');
+      console.time('loadDataIntoViewer:setData');
       viewer.setData(alignmentInstance);
+      console.timeEnd('loadDataIntoViewer:setData');
       console.info('Viewer data set');
 
       // Update global alignment reference
@@ -525,12 +598,18 @@
       try { window.alignment = alignmentInstance; } catch (_) { }
 
       // Detect if sequences are amino acid or nucleotide
+      console.time('loadDataIntoViewer:detectAminoAcid');
       const isAminoAcid = detectAminoAcidSequences(alignmentInstance);
+      console.timeEnd('loadDataIntoViewer:detectAminoAcid');
       if (isAminoAcid) {
-        console.info('Detected amino acid sequences - setting amino acid mode and disabling translation controls');
+        console.info('Detected amino acid sequences - setting native amino acid mode');
+        // Set new mode system
+        viewer.dataType = 'aminoacid';
+        viewer.displayMode = 'native';
+        // Backward compatibility flags
         viewer.aminoAcidMode = true;
         viewer.codonMode = false;
-        viewer.isNativeAminoAcid = true; // Flag to distinguish native AA from translated
+        viewer.isNativeAminoAcid = true;
         window.isAminoAcidAlignment = true;
         
         // Disable nucleotide/codon mode buttons and reading frame selectors
@@ -539,7 +618,13 @@
         // Update collapse button labels for amino acid mode
         updateCollapseButtonLabels(true);
       } else {
-        console.info('Detected nucleotide sequences - translation controls enabled');
+        console.info('Detected nucleotide sequences - starting in native mode');
+        // Set new mode system
+        viewer.dataType = 'nucleotide';
+        viewer.displayMode = 'native';
+        // Backward compatibility flags
+        viewer.aminoAcidMode = false;
+        viewer.codonMode = false;
         viewer.isNativeAminoAcid = false;
         window.isAminoAcidAlignment = false;
         
@@ -573,6 +658,7 @@
       }
 
       // Load saved dark mode preference from localStorage
+      console.time('loadDataIntoViewer:loadDarkMode');
       try {
         const darkModePref = localStorage.getItem('sealion_dark_mode');
         if (darkModePref === 'true' && !viewer.darkMode) {
@@ -590,13 +676,17 @@
       } catch (e) {
         console.warn('Failed to load dark mode preference:', e);
       }
+      console.timeEnd('loadDataIntoViewer:loadDarkMode');
 
       // Load saved custom names from localStorage
+      console.time('loadDataIntoViewer:loadCustomNames');
       if (typeof viewer.loadCustomNames === 'function') {
         viewer.loadCustomNames();
       }
+      console.timeEnd('loadDataIntoViewer:loadCustomNames');
 
       // Load saved nucleotide color scheme preference from localStorage
+      console.time('loadDataIntoViewer:loadNucleotideColorScheme');
       try {
         if (typeof viewer.loadNucleotideColorScheme === 'function') {
           viewer.loadNucleotideColorScheme();
@@ -604,8 +694,10 @@
       } catch (e) {
         console.warn('Failed to load nucleotide color scheme preference:', e);
       }
+      console.timeEnd('loadDataIntoViewer:loadNucleotideColorScheme');
 
       // Load saved amino acid color scheme preference from localStorage
+      console.time('loadDataIntoViewer:loadAminoAcidColorScheme');
       try {
         if (typeof viewer.loadAminoAcidColorScheme === 'function') {
           viewer.loadAminoAcidColorScheme();
@@ -613,21 +705,29 @@
       } catch (e) {
         console.warn('Failed to load amino acid color scheme preference:', e);
       }
+      console.timeEnd('loadDataIntoViewer:loadAminoAcidColorScheme');
 
       // Load saved tags from localStorage
+      console.time('loadDataIntoViewer:loadTags');
       if (typeof viewer.loadTags === 'function') {
         viewer.loadTags();
       }
+      console.timeEnd('loadDataIntoViewer:loadTags');
 
       // Load saved bookmarks from localStorage
+      console.time('loadDataIntoViewer:loadBookmarks');
       if (typeof viewer.loadBookmarks === 'function') {
         viewer.loadBookmarks();
       }
+      console.timeEnd('loadDataIntoViewer:loadBookmarks');
 
       // Update UI with custom names
+      console.time('loadDataIntoViewer:updateNames');
       updateTagAndBookmarkNames();
+      console.timeEnd('loadDataIntoViewer:updateNames');
 
       // Populate labels-consensus-div with UI controls
+      console.time('loadDataIntoViewer:populateUI');
       try {
         const labelsConsensusDiv = document.getElementById('labels-consensus-div') || (viewer && viewer.labelsConsensusDiv);
         if (labelsConsensusDiv && labelsConsensusDiv.children.length === 0) {
@@ -835,8 +935,10 @@
       } catch (e) {
         console.warn('Failed to populate labels-consensus-div:', e);
       }
+      console.timeEnd('loadDataIntoViewer:populateUI');
 
       // Attach interaction handlers
+      console.time('loadDataIntoViewer:attachHandlers');
       try {
         // Query DOM for canvases created by viewer
         const realHeaderCanvas = document.getElementById('header-canvas') || (viewer && viewer.headerCanvas) || null;
@@ -876,8 +978,10 @@
       } catch (e) {
         console.error('Failed to attach interaction handlers to SealionViewer', e);
       }
+      console.timeEnd('loadDataIntoViewer:attachHandlers');
 
       // Set up initial reference (consensus)
+      console.time('loadDataIntoViewer:computeConsensus');
       setStatus('Computing consensus...');
       try {
         if (viewer && viewer.alignment) {
@@ -890,19 +994,28 @@
           }
         }
       } catch (e) { console.warn('Failed to compute consensus', e); }
+      console.timeEnd('loadDataIntoViewer:computeConsensus');
 
       // Complete initialization
+      console.time('loadDataIntoViewer:scheduleRender');
       setStatus('Rendering...');
+      
+      // Schedule render and wait for it to complete before clearing status
       viewer.scheduleRender();
-
-      // Wait a moment for first render then hide status
-      setTimeout(() => {
-        setStatus(null);
-        console.info('Data loaded and viewer initialized');
-      }, 100);
+      
+      // Use requestAnimationFrame chained after the viewer's RAF to ensure render completes
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setStatus(null);
+          console.info('Data loaded and viewer initialized');
+          console.timeEnd('loadDataIntoViewer');
+        });
+      });
+      console.timeEnd('loadDataIntoViewer:scheduleRender');
 
     } catch (e) {
       console.error('Failed to load data into viewer:', e);
+      console.timeEnd('loadDataIntoViewer');
       setStatus('ERROR: Failed to load data - see console');
     }
   }
@@ -1318,15 +1431,14 @@
     nucleotideModeBtn.addEventListener('click', () => {
       if (!viewer) return;
       // Don't allow switching to nucleotide mode for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer.dataType === 'aminoacid') {
         console.info('Cannot switch to nucleotide mode for amino acid alignments');
         return;
       }
-      viewer.aminoAcidMode = false;
-      viewer.codonMode = false;
+      viewer.displayMode = 'native';
       viewer.cancelRender();
       viewer.scheduleRender();
-      console.info('Switched to nucleotide mode');
+      console.info('Switched to native nucleotide mode');
     });
   }
 
@@ -1335,17 +1447,17 @@
     aminoAcidModeBtn.addEventListener('click', () => {
       if (!viewer) return;
       
-      // For native amino acid alignments, this is already the only mode - no action needed
-      if (window.isAminoAcidAlignment && viewer.isNativeAminoAcid) {
+      // For native amino acid alignments, already in native mode - no action needed
+      if (viewer.dataType === 'aminoacid') {
         console.info('Already displaying native amino acids - no action needed');
         return;
       }
       
-      viewer.aminoAcidMode = true;
-      viewer.codonMode = false;
+      // For nucleotide alignments, switch to translate mode
+      viewer.displayMode = 'translate';
       viewer.cancelRender();
       viewer.scheduleRender();
-      console.info(`Switched to amino acid mode, reading frame ${viewer.readingFrame}`);
+      console.info(`Switched to translate mode, reading frame ${viewer.readingFrame}`);
     });
   }
 
@@ -1354,12 +1466,11 @@
     codonModeBtn.addEventListener('click', () => {
       if (!viewer) return;
       // Don't allow switching to codon mode for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer.dataType === 'aminoacid') {
         console.info('Cannot switch to codon mode for amino acid alignments');
         return;
       }
-      viewer.aminoAcidMode = false;
-      viewer.codonMode = true;
+      viewer.displayMode = 'codon';
       viewer.cancelRender();
       viewer.scheduleRender();
       console.info(`Switched to codon mode, reading frame ${viewer.readingFrame}`);
@@ -1387,7 +1498,7 @@
     btn.addEventListener('click', () => {
       if (!viewer) return;
       // Don't allow reading frame changes for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer && viewer.dataType === 'aminoacid') {
         console.info('Cannot change reading frame for amino acid alignments');
         return;
       }
@@ -1397,7 +1508,7 @@
         updateReadingFrameUI();
         viewer.cancelRender();
         viewer.scheduleRender();
-        const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+        const mode = viewer.displayMode || 'native';
         console.info(`Set reading frame ${frame} (${mode} mode)`);
       }
     });
@@ -1413,38 +1524,34 @@
     // Check for Command key (Mac) or Ctrl key (Windows/Linux)
     if (!e.metaKey && !e.ctrlKey) return;
     
-    // Command/Ctrl + \ to cycle through nucleotide → codon → amino acid modes
+    // Command/Ctrl + \ to cycle through native → codon → translate modes
     if (e.key === '\\') {
       e.preventDefault();
       
       // Don't allow mode switching for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer && viewer.dataType === 'aminoacid') {
         console.info('Mode switching disabled for amino acid alignments');
         return;
       }
       
-      if (!viewer.aminoAcidMode && !viewer.codonMode) {
-        // Currently in nucleotide mode, switch to codon mode
-        viewer.aminoAcidMode = false;
-        viewer.codonMode = true;
-        viewer.cancelRender();
-        viewer.scheduleRender();
+      const currentMode = viewer.displayMode || 'native';
+      
+      if (currentMode === 'native') {
+        // Switch to codon mode
+        viewer.displayMode = 'codon';
         console.info(`Switched to codon mode, reading frame ${viewer.readingFrame}`);
-      } else if (viewer.codonMode) {
-        // Currently in codon mode, switch to amino acid mode
-        viewer.aminoAcidMode = true;
-        viewer.codonMode = false;
-        viewer.cancelRender();
-        viewer.scheduleRender();
-        console.info(`Switched to amino acid mode, reading frame ${viewer.readingFrame}`);
+      } else if (currentMode === 'codon') {
+        // Switch to translate mode
+        viewer.displayMode = 'translate';
+        console.info(`Switched to translate mode, reading frame ${viewer.readingFrame}`);
       } else {
-        // Currently in amino acid mode, switch to nucleotide mode
-        viewer.aminoAcidMode = false;
-        viewer.codonMode = false;
-        viewer.cancelRender();
-        viewer.scheduleRender();
-        console.info('Switched to nucleotide mode');
+        // Switch back to native mode
+        viewer.displayMode = 'native';
+        console.info('Switched to native mode');
       }
+      
+      viewer.cancelRender();
+      viewer.scheduleRender();
       return;
     }
     
@@ -1453,7 +1560,7 @@
       e.preventDefault();
       
       // Don't allow reading frame changes for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer && viewer.dataType === 'aminoacid') {
         console.info('Reading frame changes disabled for amino acid alignments');
         return;
       }
@@ -1462,7 +1569,7 @@
       updateReadingFrameUI();
       viewer.cancelRender();
       viewer.scheduleRender();
-      const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+      const mode = viewer.displayMode || 'native';
       console.info(`Shifted to reading frame ${viewer.readingFrame} (${mode} mode)`);
       return;
     }
@@ -1472,7 +1579,7 @@
       e.preventDefault();
       
       // Don't allow reading frame changes for amino acid alignments
-      if (window.isAminoAcidAlignment) {
+      if (viewer && viewer.dataType === 'aminoacid') {
         console.info('Reading frame changes disabled for amino acid alignments');
         return;
       }
@@ -1481,7 +1588,7 @@
       updateReadingFrameUI();
       viewer.cancelRender();
       viewer.scheduleRender();
-      const mode = viewer.aminoAcidMode ? 'amino acid' : (viewer.codonMode ? 'codon' : 'nucleotide');
+      const mode = viewer.displayMode || 'native';
       console.info(`Shifted to reading frame ${viewer.readingFrame} (${mode} mode)`);
       return;
     }
@@ -2709,8 +2816,15 @@
             }
             window.refRow = null;
             
-            // Rebuild column offsets
-            const newMaxSeqLen = Math.max(...newAlignment.map(s => s.sequence.length));
+            // Rebuild column offsets - calculate max length efficiently
+            let newMaxSeqLen = 0;
+            for (let i = 0; i < newAlignment.length; i++) {
+              const s = newAlignment[i];
+              if (s && s.sequence) {
+                const len = s.sequence.length;
+                if (len > newMaxSeqLen) newMaxSeqLen = len;
+              }
+            }
             window.maskStr = '1'.repeat(newMaxSeqLen);
             
             if (typeof viewer.buildColOffsetsFor === 'function') {

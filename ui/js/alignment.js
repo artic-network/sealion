@@ -345,32 +345,66 @@ class Alignment {
 
     const maxLen = this.getMaxSeqLen();
     const count = this.getSequenceCount();
-    let consensus = '';
-
-    for (let pos = 0; pos < maxLen; pos++) {
-      const charCounts = {};
-      let maxCount = 0;
-      let maxChar = 'N';
-
-      // Count characters at this position across all sequences
-      for (let i = 0; i < count; i++) {
-        const seq = this._currentOrder[i].sequence;
-        const char = (pos < seq.length) ? seq[pos].toUpperCase() : '-';
-        
-        // Skip ambiguous characters in consensus calculation
-        if (char === 'N' || char === '?' || char === '-') continue;
-        
-        charCounts[char] = (charCounts[char] || 0) + 1;
-        
-        if (charCounts[char] > maxCount) {
-          maxCount = charCounts[char];
-          maxChar = char;
+    
+    // Detect if this is amino acid or nucleotide alignment
+    // Check first few sequences for amino-acid-specific characters
+    let isAminoAcid = false;
+    const aaSpecific = 'DEFHIKLPQVWY';
+    checkLoop: for (let i = 0; i < Math.min(10, count); i++) {
+      const seq = this._currentOrder[i].sequence.toUpperCase();
+      for (let j = 0; j < Math.min(200, seq.length); j++) {
+        if (aaSpecific.includes(seq[j])) {
+          isAminoAcid = true;
+          break checkLoop;
         }
       }
-
-      consensus += maxChar;
     }
-
+    
+    // Define canonical states for this sequence type
+    // Nucleotides: ACGT (excludes N, which is ambiguous)
+    // Amino acids: 20 standard amino acids (excludes X, which is ambiguous)
+    const states = isAminoAcid 
+      ? ['A','C','D','E','F','G','H','I','K','L','M','N','P','Q','R','S','T','V','W','Y']
+      : ['A','C','G','T'];
+    
+    // Create K x N array (K = number of states, N = number of positions)
+    const K = states.length;
+    const N = maxLen;
+    const counts = new Array(K);
+    for (let k = 0; k < K; k++) {
+      counts[k] = new Array(N).fill(0);
+    }
+    
+    // Single pass over all sequences, increment appropriate counters
+    // Any character not in the states array is automatically skipped (N for nucleotides, X/gaps/etc)
+    for (let i = 0; i < count; i++) {
+      const seq = this._currentOrder[i].sequence;
+      const seqLen = seq.length;
+      for (let pos = 0; pos < seqLen; pos++) {
+        const char = seq[pos].toUpperCase();
+        const stateIdx = states.indexOf(char);
+        if (stateIdx >= 0) {
+          counts[stateIdx][pos]++;
+        }
+      }
+    }
+    
+    // Find consensus: state with max count at each position
+    const consensusArray = new Array(N);
+    const defaultChar = isAminoAcid ? 'X' : 'N';
+    for (let pos = 0; pos < N; pos++) {
+      let maxCount = 0;
+      let maxIdx = -1;
+      for (let k = 0; k < K; k++) {
+        if (counts[k][pos] > maxCount) {
+          maxCount = counts[k][pos];
+          maxIdx = k;
+        }
+      }
+      consensusArray[pos] = (maxIdx >= 0) ? states[maxIdx] : defaultChar;
+    }
+    
+    const consensus = consensusArray.join('');
     this._cache.consensus = consensus;
     return consensus;
   }

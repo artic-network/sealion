@@ -293,10 +293,32 @@
           this.snapEnabled = true;
         }
         
-        // amino acid mode settings
+        // Display mode settings (new system)
+        // displayMode: 'native' | 'codon' | 'translate'
+        // dataType: 'nucleotide' | 'aminoacid'
+        if (typeof options.DISPLAY_MODE === 'string') this.displayMode = options.DISPLAY_MODE;
+        if (typeof options.DATA_TYPE === 'string') this.dataType = options.DATA_TYPE;
+        if (typeof options.READING_FRAME === 'number') this.readingFrame = options.READING_FRAME;
+        
+        // Backward compatibility with old mode flags
         if (typeof options.AMINO_ACID_MODE === 'boolean') this.aminoAcidMode = options.AMINO_ACID_MODE;
         if (typeof options.CODON_MODE === 'boolean') this.codonMode = options.CODON_MODE;
-        if (typeof options.READING_FRAME === 'number') this.readingFrame = options.READING_FRAME;
+        
+        // Sync old flags with new displayMode if new mode is set
+        if (this.displayMode) {
+          this.aminoAcidMode = (this.displayMode === 'translate');
+          this.codonMode = (this.displayMode === 'codon');
+        }
+        // Sync displayMode from old flags if not explicitly set
+        else if (typeof this.displayMode === 'undefined') {
+          if (this.codonMode) {
+            this.displayMode = 'codon';
+          } else if (this.aminoAcidMode) {
+            this.displayMode = this.isNativeAminoAcid ? 'native' : 'translate';
+          } else {
+            this.displayMode = 'native';
+          }
+        }
         
         // color schemes
         if (typeof options.NUCLEOTIDE_COLOR_SCHEME !== 'undefined') {
@@ -342,10 +364,13 @@
     // State includes viewing modes, color schemes, viewport position, and selections.
     getState() {
       const state = {
-        // Viewing modes
+        // Viewing modes (new system)
+        displayMode: this.displayMode || 'native',
+        dataType: this.dataType || 'nucleotide',
+        readingFrame: this.readingFrame || 1,
+        // Backward compatibility
         aminoAcidMode: this.aminoAcidMode || false,
         codonMode: this.codonMode || false,
-        readingFrame: this.readingFrame || 1,
         maskEnabled: this.maskEnabled || false,
         hideMode: this.hideMode || false,
         refModeEnabled: this.refModeEnabled || false,
@@ -395,14 +420,36 @@
         let needsRebuild = false;
         let needsRerender = false;
         
-        // Viewing modes
+        // Viewing modes (new system)
+        if (typeof state.displayMode === 'string' && state.displayMode !== this.displayMode) {
+          this.displayMode = state.displayMode;
+          // Sync old flags for backward compatibility
+          this.aminoAcidMode = (this.displayMode === 'translate');
+          this.codonMode = (this.displayMode === 'codon');
+          needsRebuild = true;
+          needsRerender = true;
+        }
+        if (typeof state.dataType === 'string' && state.dataType !== this.dataType) {
+          this.dataType = state.dataType;
+          needsRerender = true;
+        }
+        
+        // Backward compatibility with old mode flags
         if (typeof state.aminoAcidMode === 'boolean' && state.aminoAcidMode !== this.aminoAcidMode) {
           this.aminoAcidMode = state.aminoAcidMode;
+          // Sync to new displayMode if not already set from state
+          if (!state.displayMode) {
+            this.displayMode = this.aminoAcidMode ? 'translate' : 'native';
+          }
           needsRebuild = true;
           needsRerender = true;
         }
         if (typeof state.codonMode === 'boolean' && state.codonMode !== this.codonMode) {
           this.codonMode = state.codonMode;
+          // Sync to new displayMode if not already set from state
+          if (!state.displayMode) {
+            this.displayMode = this.codonMode ? 'codon' : 'native';
+          }
           needsRebuild = true;
           needsRerender = true;
         }
@@ -535,7 +582,16 @@
         
         // Rebuild column offsets if needed (for mask, amino acid mode, font size changes)
         if (needsRebuild && typeof this.buildColOffsetsFor === 'function' && this.alignment) {
-          const maxSeqLen = Math.max(...this.alignment.map(row => row.sequence ? row.sequence.length : 0));
+          // Calculate max sequence length efficiently without spread operator
+          let maxSeqLen = 0;
+          for (let i = 0; i < this.alignment.length; i++) {
+            const row = this.alignment[i];
+            if (row && row.sequence) {
+              const len = row.sequence.length;
+              if (len > maxSeqLen) maxSeqLen = len;
+            }
+          }
+          
           this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
             maxSeqLen: maxSeqLen,
             CHAR_WIDTH: this.charWidth,
@@ -578,16 +634,31 @@
     // offsets, updates sizing, and schedules a render.
     setData(alignment, opts) {
       try {
+        console.time('setData');
         if (!alignment) {
           console.warn('SealionViewer.setData: no alignment provided');
           return;
         }
         
+        console.time('setData:assignAlignment');
         this.alignment = alignment;
+        console.timeEnd('setData:assignAlignment');
         
         // Rebuild column offsets for the new alignment
         if (typeof this.buildColOffsetsFor === 'function') {
-          const maxSeqLen = Math.max(...alignment.map(row => row.sequence ? row.sequence.length : 0));
+          console.time('setData:calcMaxSeqLen');
+          // Calculate max sequence length efficiently without spread operator
+          let maxSeqLen = 0;
+          for (let i = 0; i < alignment.length; i++) {
+            const row = alignment[i];
+            if (row && row.sequence) {
+              const len = row.sequence.length;
+              if (len > maxSeqLen) maxSeqLen = len;
+            }
+          }
+          console.timeEnd('setData:calcMaxSeqLen');
+          
+          console.time('setData:buildColOffsets');
           this.colOffsets = this.buildColOffsetsFor(this.maskEnabled, {
             maxSeqLen: maxSeqLen,
             CHAR_WIDTH: this.charWidth,
@@ -597,15 +668,21 @@
             hideMode: this.hideMode || false,
             maskStr: (opts && opts.maskStr) || (window && window.maskStr) || (window && window.mask) || null
           });
+          console.timeEnd('setData:buildColOffsets');
         }
         
         // Update canvas sizes and backings
+        console.time('setData:setCanvasCSSSizes');
         if (typeof this.setCanvasCSSSizes === 'function') {
           this.setCanvasCSSSizes(opts);
         }
+        console.timeEnd('setData:setCanvasCSSSizes');
+        
+        console.time('setData:resizeBackings');
         if (typeof this.resizeBackings === 'function') {
           this.resizeBackings(opts);
         }
+        console.timeEnd('setData:resizeBackings');
         
         // Schedule a render to display the new data
         if (typeof this.scheduleRender === 'function') {
@@ -613,6 +690,7 @@
         }
         
         console.info('SealionViewer.setData: alignment updated with', alignment.length, 'sequences');
+        console.timeEnd('setData');
       } catch (e) {
         console.warn('SealionViewer.setData failed', e);
       }
@@ -770,8 +848,12 @@
       this.clearSelectionSets = () => { try { this.selectedRows.clear(); this.selectedCols.clear(); } catch (_) { } };
       
       // Helper: snap column to codon boundary in codon or amino acid mode
+      // (but not for native amino acid alignments where each column is already one AA)
       this.snapToCodonStart = (col) => {
-        if (!this.codonMode && !this.aminoAcidMode) return col;
+        // Only snap in codon or translate mode (not in native mode)
+        if (this.displayMode !== 'codon' && this.displayMode !== 'translate') return col;
+        // For native amino acids, each column is already one amino acid - no snapping needed
+        if (this.dataType === 'aminoacid') return col;
         const frame = this.readingFrame || 1;
         const offset = (col - (frame - 1));
         if (offset < 0) return col;
@@ -780,7 +862,10 @@
       };
       
       this.snapToCodonEnd = (col) => {
-        if (!this.codonMode && !this.aminoAcidMode) return col;
+        // Only snap in codon or translate mode (not in native mode)
+        if (this.displayMode !== 'codon' && this.displayMode !== 'translate') return col;
+        // For native amino acids, each column is already one amino acid - no snapping needed
+        if (this.dataType === 'aminoacid') return col;
         const frame = this.readingFrame || 1;
         const offset = (col - (frame - 1));
         if (offset < 0) return col;
@@ -2593,10 +2678,13 @@
       const charWidth = (opts && opts.CHAR_WIDTH) ? opts.CHAR_WIDTH : this.charWidth || 8;
       const expandedRightPad = (opts && (typeof opts.EXPANDED_RIGHT_PAD !== 'undefined')) ? opts.EXPANDED_RIGHT_PAD : 2;
       const selectedCols = (opts && opts.selectedCols) ? opts.selectedCols : (window && window.selectedCols) ? window.selectedCols : new Set();
-      // Amino acid mode settings
+      // Display mode settings (new system)
+      const displayMode = (opts && opts.displayMode) ? opts.displayMode : (this.displayMode || 'native');
+      const dataType = (opts && opts.dataType) ? opts.dataType : (this.dataType || 'nucleotide');
+      const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
+      // Backward compatibility (remove after migration)
       const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
       const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
-      const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
 
       // clear header area
       ctx.clearRect(0, 0, cssW, headerHeight);
@@ -2654,14 +2742,21 @@
         return Math.max(10, Math.ceil(raw));
       }
       
-      // In amino acid mode, adjust tick step for amino acid positions
-      // In codon mode, keep nucleotide positions
+      // Adjust tick step based on display mode
+      // In translate mode: show AA positions (every 3 nucleotides)
+      // In codon mode: show nucleotide positions
+      // In native mode with AA data: show AA positions (each column)
+      // In native mode with nucleotide data: show nucleotide positions
       let step;
-      if (aminoAcidMode && !codonMode) {
-        // Calculate effective spacing for amino acids (every 3 nucleotides)
+      if (displayMode === 'translate') {
+        // Calculate effective spacing for translated amino acids (every 3 nucleotides)
         const aaAvgPx = actualAvgPx * 3;
         step = chooseTickStep(aaAvgPx);
+      } else if (displayMode === 'native' && dataType === 'aminoacid') {
+        // Native amino acids: each column is one AA
+        step = chooseTickStep(actualAvgPx);
       } else {
+        // Native nucleotides or codon mode: nucleotide positions
         step = chooseTickStep(actualAvgPx);
       }
       
@@ -2675,15 +2770,21 @@
       for (let c = start; c <= end; c++) {
         let posIndex, isMajor, isMinor;
         
-        if (aminoAcidMode && !codonMode) {
-          // Only show ticks at codon start positions
+        if (displayMode === 'translate') {
+          // Translate mode: only show ticks at codon start positions (AA positions)
           const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
           if (aaPos < 0 || (c - (readingFrame - 1)) % 3 !== 0) continue;
           
           posIndex = aaPos + 1; // 1-based amino acid position
           isMajor = (posIndex % step) === 0;
           isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
+        } else if (displayMode === 'native' && dataType === 'aminoacid') {
+          // Native amino acid mode: each column is one AA position
+          posIndex = c + 1; // 1-based amino acid position
+          isMajor = (posIndex % step) === 0;
+          isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
         } else {
+          // Native nucleotides or codon mode: show nucleotide positions
           posIndex = c + 1; // 1-based nucleotide position
           isMajor = (posIndex % step) === 0;
           isMinor = !isMajor && (step >= 2) && ((posIndex % (step / 2)) === 0);
@@ -3166,7 +3267,10 @@
       // Second pass: draw glyphs
       // Translate reference sequence once if needed (for performance)
       let translatedRef = null;
-      if ((aminoAcidMode || codonMode) && refModeEnabled && refStr) {
+      const displayMode = this.displayMode || 'native';
+      const dataType = this.dataType || 'nucleotide';
+      
+      if ((displayMode === 'translate' || displayMode === 'codon') && refModeEnabled && refStr) {
         translatedRef = Alignment.translateSequence(refStr, readingFrame);
       }
       
@@ -3176,20 +3280,17 @@
         const seq = (rows[r] && rows[r].sequence) ? rows[r].sequence : '';
         ctx.fillStyle = '#000';
         
-        // Check if native amino acid alignment (no translation needed)
-        const isNativeAA = this.isNativeAminoAcid || false;
-        
-        // Translate sequence to amino acids if in amino acid or codon mode (but not for native AA)
+        // Translate sequence to amino acids if in translate or codon mode
         let translatedSeq = null;
-        if ((aminoAcidMode || codonMode) && seq && !isNativeAA) {
+        if ((displayMode === 'translate' || displayMode === 'codon') && seq) {
           translatedSeq = Alignment.translateSequence(seq, readingFrame);
         }
         
         for (let c = visible.firstCol; c <= visible.lastCol; c++) {
           let ch, base, color;
           
-          if (codonMode && translatedSeq) {
-            // In codon mode, display nucleotides but color them by amino acid
+          if (displayMode === 'codon' && translatedSeq) {
+            // Codon mode: display nucleotides but color them by amino acid
             const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
             const posInCodon = (c - (readingFrame - 1)) % 3;
             
@@ -3212,8 +3313,8 @@
               // Outside valid codon range - skip
               continue;
             }
-          } else if (aminoAcidMode && isNativeAA) {
-            // Native amino acid alignment - render as simple character (like nucleotides)
+          } else if (displayMode === 'native' && dataType === 'aminoacid') {
+            // Native amino acid mode: render amino acids as simple characters
             ch = seq.charAt(c) || 'X';
             base = ch.toUpperCase();
             
@@ -3251,8 +3352,8 @@
               }
               // Native AA rendering is complete, skip common nucleotide rendering code
               continue;
-            } else if (aminoAcidMode && translatedSeq) {
-              // Translated nucleotide alignment - render with lozenges
+            } else if (displayMode === 'translate' && translatedSeq) {
+              // Translate mode: render with amino acid lozenges
               // Map nucleotide position to amino acid position
               const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
               if (aaPos >= 0 && aaPos < translatedSeq.length && (c - (readingFrame - 1)) % 3 === 0) {
@@ -3447,12 +3548,15 @@
       const maskEnabled = (opts && typeof opts.maskEnabled === 'boolean') ? opts.maskEnabled : true;
       const baseColors = (opts && opts.BASE_COLORS) ? opts.BASE_COLORS : (window && window.BASE_COLORS) ? window.BASE_COLORS : { 'A': '#2ca02c', 'C': '#1f77b4', 'G': '#d62728', 'T': '#ff7f0e' };
       const defaultBaseColor = (opts && opts.DEFAULT_BASE_COLOR) ? opts.DEFAULT_BASE_COLOR : (window && window.DEFAULT_BASE_COLOR) ? window.DEFAULT_BASE_COLOR : '#666';
-      // Amino acid mode settings
-      const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
-      const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
+      // Display mode settings (new system)
+      const displayMode = (opts && opts.displayMode) ? opts.displayMode : (this.displayMode || 'native');
+      const dataType = (opts && opts.dataType) ? opts.dataType : (this.dataType || 'nucleotide');
       const readingFrame = (opts && typeof opts.readingFrame === 'number') ? opts.readingFrame : (this.readingFrame || 1);
       const aaColors = (opts && opts.AA_COLORS) ? opts.AA_COLORS : (this.AA_COLORS || SealionViewer.DEFAULTS.AA_COLORS);
       const defaultAaColor = (opts && opts.DEFAULT_AA_COLOR) ? opts.DEFAULT_AA_COLOR : (this.DEFAULT_AA_COLOR || SealionViewer.DEFAULTS.DEFAULT_AA_COLOR);
+      // Backward compatibility (remove after migration)
+      const aminoAcidMode = (opts && typeof opts.aminoAcidMode === 'boolean') ? opts.aminoAcidMode : (this.aminoAcidMode || false);
+      const codonMode = (opts && typeof opts.codonMode === 'boolean') ? opts.codonMode : (this.codonMode || false);
 
       ctx.font = font;
       ctx.textBaseline = 'alphabetic';
@@ -3475,9 +3579,9 @@
                    (window && window.computeConsensusSequence ? window.computeConsensusSequence() : null)));
       if (!cons || cons.length === 0) return;
 
-      // Translate consensus if in amino acid or codon mode
+      // Translate consensus if in codon or translate mode (nucleotide data only)
       let translatedCons = null;
-      if ((aminoAcidMode || codonMode) && cons) {
+      if ((displayMode === 'codon' || displayMode === 'translate') && dataType === 'nucleotide' && cons) {
         translatedCons = Alignment.translateSequence(cons, readingFrame);
       }
 
@@ -3486,8 +3590,8 @@
       for (let c = start; c <= end; c++) {
         let ch, base, color;
         
-        if (codonMode && translatedCons) {
-          // In codon mode, display nucleotides colored by amino acid
+        if (displayMode === 'codon' && translatedCons) {
+          // Codon mode: display nucleotides colored by amino acid translation
           const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
           const posInCodon = (c - (readingFrame - 1)) % 3;
           
@@ -3499,37 +3603,32 @@
           } else {
             continue; // Skip positions outside valid codon range
           }
-        } else if (aminoAcidMode && translatedCons) {
-          // In amino acid mode - check if native amino acid alignment
-          const isNativeAA = this.isNativeAminoAcid || false;
+        } else if (displayMode === 'native' && dataType === 'aminoacid') {
+          // Native amino acid mode: display AA as simple characters
+          ch = (cons.charAt(c) || 'X');
+          base = ch.toUpperCase();
+          color = aaColors[base] || defaultAaColor;
           
-          if (isNativeAA) {
-            // Native amino acid alignment - render as simple character (like nucleotides)
-            ch = (cons.charAt(c) || 'X');
-            base = ch.toUpperCase();
-            color = aaColors[base] || defaultAaColor;
-            
-            const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
-            const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-            const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-            const w = Math.max(1, right - left);
-            
-            if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
-              ctx.fillStyle = color;
-              const blockTop = consensusTopPad;
-              const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
-              ctx.fillRect(x, blockTop, w, blockH);
-            } else {
-              ctx.fillStyle = color;
-              // Center the text in the column
-              const textOffset = Math.round((w - charWidth) / 2);
-              ctx.fillText(ch, x + textOffset, baselineY);
-            }
+          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
+          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
+          const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
+          const w = Math.max(1, right - left);
+          
+          if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
+            ctx.fillStyle = color;
+            const blockTop = consensusTopPad;
+            const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
+            ctx.fillRect(x, blockTop, w, blockH);
           } else {
-            // Translated nucleotide alignment - render with lozenges
-            // Draw amino acid centered in codon box
-            const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
-            if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
+            ctx.fillStyle = color;
+            // Center the text in the column
+            const textOffset = Math.round((w - charWidth) / 2);
+            ctx.fillText(ch, x + textOffset, baselineY);
+          }
+        } else if (displayMode === 'translate' && translatedCons) {
+          // Translate mode: display amino acids with lozenges centered in codon boxes
+          const aaPos = Math.floor((c - (readingFrame - 1)) / 3);
+          if (aaPos >= 0 && aaPos < translatedCons.length && (c - (readingFrame - 1)) % 3 === 0) {
               ch = translatedCons.charAt(aaPos);
               base = ch.toUpperCase();
               color = aaColors[base] || defaultAaColor;
@@ -3585,30 +3684,8 @@
             } else {
               continue; // Skip non-codon-start positions
             }
-          }
-        } else if (aminoAcidMode) {
-          // In amino acid mode with no translation - this is a native AA alignment
-          ch = (cons.charAt(c) || 'X');
-          base = ch.toUpperCase();
-          color = aaColors[base] || defaultAaColor;
-          
-          const left = (colOffsets && typeof colOffsets[c] !== 'undefined') ? colOffsets[c] : (c * (charWidth + expandedRightPad));
-          const right = (colOffsets && typeof colOffsets[c + 1] !== 'undefined') ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-          const x = left - (visible && visible.scrollLeft ? visible.scrollLeft : 0);
-          const w = Math.max(1, right - left);
-          
-          if (maskEnabled && maskStr && maskStr.charAt(c) === '0') {
-            ctx.fillStyle = color;
-            const blockTop = consensusTopPad;
-            const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
-            ctx.fillRect(x, blockTop, w, blockH);
-          } else {
-            ctx.fillStyle = color;
-            // Center the text in the column
-            const textOffset = Math.round((w - charWidth) / 2);
-            ctx.fillText(ch, x + textOffset, baselineY);
-          }
         } else {
+          // Native nucleotide mode: display nucleotides as simple characters
           ch = (cons.charAt(c) || 'N');
           base = ch ? ch.charAt(0).toUpperCase() : '';
           color = baseColors[base] || defaultBaseColor;
@@ -3692,8 +3769,9 @@
         ctx.save();
         ctx.fillStyle = this.SEQ_COL_SELECTION;
         
-        // In amino acid or codon mode, group selections by codon and draw entire codon boxes
-        if (this.aminoAcidMode || this.codonMode) {
+        // In codon or translate mode, group selections by codon and draw entire codon boxes
+        // (but not in native amino acid mode where each position is independent)
+        if ((this.displayMode === 'codon' || this.displayMode === 'translate') && this.dataType === 'nucleotide') {
           const frame = this.readingFrame || 1;
           const drawnCodons = new Set();
           
@@ -4250,6 +4328,7 @@
     // Placeholder drawAll implementation. In staged migration we'll replace
     // this with the real drawing functions ported from `script.js`.
     drawAll() {
+      console.time('drawAll');
       try {
         // Update label canvas cursor based on whether drag-drop is allowed
         if (this.labelCanvas) {
@@ -4261,8 +4340,25 @@
           }
         }
 
+        // Calculate maxSeqLen once for this render (fallback if colOffsets not available)
+        let maxSeqLen;
+        if (this.colOffsets && this.colOffsets.length) {
+          maxSeqLen = this.colOffsets.length - 1;
+        } else if (this.alignment) {
+          maxSeqLen = 0;
+          for (let i = 0; i < this.alignment.length; i++) {
+            const r = this.alignment[i];
+            if (r && r.sequence) {
+              const len = r.sequence.length;
+              if (len > maxSeqLen) maxSeqLen = len;
+            }
+          }
+        } else {
+          maxSeqLen = 0;
+        }
+
         // compute visible region using the viewer's scroller and instance settings
-        const vis = this.computeVisible(this.scroller, { ROW_HEIGHT: this.ROW_HEIGHT, BUFFER_ROWS: this.BUFFER_ROWS, BUFFER_COLS: this.BUFFER_COLS, CHAR_WIDTH: this.charWidth, maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (this.alignment ? Math.max(0, ...this.alignment.map(r => r.sequence.length)) : 0), rowCount: (this.alignment ? this.alignment.length : 0), maskEnabled: !!this.maskEnabled });
+        const vis = this.computeVisible(this.scroller, { ROW_HEIGHT: this.ROW_HEIGHT, BUFFER_ROWS: this.BUFFER_ROWS, BUFFER_COLS: this.BUFFER_COLS, CHAR_WIDTH: this.charWidth, maxSeqLen: maxSeqLen, rowCount: (this.alignment ? this.alignment.length : 0), maskEnabled: !!this.maskEnabled });
 
         // refresh reference string/index if helper exists
         let refStr = null, refIndex = null;
@@ -4274,7 +4370,7 @@
         // gather common opts
         const commonOpts = {
           colOffsets: this.colOffsets || [],
-          maxSeqLen: (this.colOffsets && this.colOffsets.length) ? this.colOffsets.length - 1 : (this.alignment ? Math.max(0, ...this.alignment.map(r => r.sequence.length)) : 0),
+          maxSeqLen: maxSeqLen,
           CHAR_WIDTH: this.charWidth,
           EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD,
           maskStr: maskStr,
@@ -4336,6 +4432,7 @@
         try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
         try { this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); } catch (e) { console.error('SealionViewer.drawSequences failed', e); }
       } catch (e) { console.error('SealionViewer.drawAll failed', e); }
+      console.timeEnd('drawAll');
     }
 
     // Small helper to cancel any pending RAF
@@ -5316,10 +5413,13 @@
     // Color scheme settings
     nucleotideColorScheme: 'default',
     aminoAcidColorScheme: 'zappo',
-    // Amino acid mode settings
+    // Display mode settings (new system)
+    displayMode: 'native', // 'native' | 'codon' | 'translate'
+    dataType: 'nucleotide', // 'nucleotide' | 'aminoacid' (set on data load)
+    readingFrame: 1,
+    // Backward compatibility
     aminoAcidMode: false,
     codonMode: false,
-    readingFrame: 1,
     AMINO_ACID_COLOR_SCHEME: 'zappo',
     // Canvas background colors - Light mode
     OVERVIEW_BG: '#f7f7f7',
