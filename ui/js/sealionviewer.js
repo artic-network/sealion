@@ -902,7 +902,7 @@
         let lo = Math.max(0, Math.min(a, b));
         let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
         
-        if (this.codonMode || this.aminoAcidMode) {
+        if (this.displayMode === 'codon' || this.displayMode === 'translate') {
           lo = this.snapToCodonStart(lo);
           hi = this.snapToCodonEnd(hi);
         }
@@ -915,7 +915,7 @@
         let lo = Math.max(0, Math.min(a, b));
         let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, (a + b)), Math.max(a, b));
         
-        if (this.codonMode || this.aminoAcidMode) {
+        if (this.displayMode === 'codon' || this.displayMode === 'translate') {
           lo = this.snapToCodonStart(lo);
           hi = this.snapToCodonEnd(hi);
         }
@@ -925,7 +925,7 @@
       this.expandColSelectionToInclude = (newPos) => {
         // Expand column selection to include newPos
         if (this.selectedCols.size === 0) {
-          if (this.codonMode || this.aminoAcidMode) {
+          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
             const start = this.snapToCodonStart(newPos);
             const end = this.snapToCodonEnd(newPos);
             for (let c = start; c <= end; c++) this.selectedCols.add(c);
@@ -939,7 +939,7 @@
         let lo = Math.max(0, Math.min(currentMin, newPos));
         let hi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(0, currentMax), Math.max(currentMax, newPos));
         
-        if (this.codonMode || this.aminoAcidMode) {
+        if (this.displayMode === 'codon' || this.displayMode === 'translate') {
           lo = this.snapToCodonStart(lo);
           hi = this.snapToCodonEnd(hi);
         }
@@ -956,7 +956,7 @@
           let chi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(c0, c1), Math.max(c0, c1));
           
           // Snap to codon boundaries in codon or amino acid mode
-          if (this.codonMode || this.aminoAcidMode) {
+          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
             clo = this.snapToCodonStart(clo);
             chi = this.snapToCodonEnd(chi);
           }
@@ -975,7 +975,7 @@
           let chi = Math.min((this.colOffsets && this.colOffsets.length > 0) ? this.colOffsets.length - 2 : Math.max(c0, c1), Math.max(c0, c1));
           
           // Snap to codon boundaries in codon or amino acid mode
-          if (this.codonMode || this.aminoAcidMode) {
+          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
             clo = this.snapToCodonStart(clo);
             chi = this.snapToCodonEnd(chi);
           }
@@ -1009,7 +1009,7 @@
           let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
           
           // Snap to codon boundary in codon or amino acid mode
-          if (this.codonMode || this.aminoAcidMode) {
+          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
             col = this.snapToCodonStart(col);
           }
           
@@ -1030,7 +1030,7 @@
             // Already handled above
           } else if (e.metaKey) {
             // Cmd-click: toggle selection of codon (or single column in non-codon mode)
-            if (this.codonMode || this.aminoAcidMode) {
+            if (this.displayMode === 'codon' || this.displayMode === 'translate') {
               const codonStart = this.snapToCodonStart(col);
               const codonEnd = this.snapToCodonEnd(col);
               // Check if any part of the codon is selected
@@ -1049,7 +1049,7 @@
           } else { 
             try { 
               this.selectedCols.clear(); 
-              if (this.codonMode || this.aminoAcidMode) {
+              if (this.displayMode === 'codon' || this.displayMode === 'translate') {
                 const codonEnd = this.snapToCodonEnd(col);
                 for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
               } else {
@@ -1091,7 +1091,7 @@
           let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, consensusCanvas);
           
           // Snap to codon boundary in codon or amino acid mode
-          if (this.codonMode || this.aminoAcidMode) {
+          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
             col = this.snapToCodonStart(col);
           }
           
@@ -1112,7 +1112,7 @@
             // Already handled above
           } else if (e.metaKey) {
             // Cmd-click: toggle selection of codon (or single column in non-codon mode)
-            if (this.codonMode || this.aminoAcidMode) {
+            if (this.displayMode === 'codon' || this.displayMode === 'translate') {
               const codonStart = this.snapToCodonStart(col);
               const codonEnd = this.snapToCodonEnd(col);
               const isSelected = this.selectedCols.has(codonStart) || this.selectedCols.has(codonStart + 1) || this.selectedCols.has(codonEnd);
@@ -1128,7 +1128,7 @@
           } else { 
             try { 
               this.selectedCols.clear(); 
-              if (this.codonMode || this.aminoAcidMode) {
+              if (this.displayMode === 'codon' || this.displayMode === 'translate') {
                 const codonEnd = this.snapToCodonEnd(col);
                 for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
               } else {
@@ -2852,8 +2852,8 @@
         headerCtx.save();
         headerCtx.fillStyle = this.HEADER_SELECTION;
         
-        // In amino acid or codon mode, group selections by codon and draw entire codon boxes
-        if (this.aminoAcidMode || this.codonMode) {
+        // In codon or translate mode, group selections by codon and draw entire codon boxes
+        if (this.displayMode === 'codon' || this.displayMode === 'translate') {
           const drawnCodons = new Set();
           
           for (const c of selectedCols) {
@@ -3481,8 +3481,8 @@
           let clo = Math.max(0, Math.min(rectStartCol, rectEndCol));
           let chi = Math.min(maxSeqLen - 1, Math.max(rectStartCol, rectEndCol));
           
-          // Snap visual rectangle to codon boundaries in amino acid or codon mode
-          if (aminoAcidMode || codonMode) {
+          // Snap visual rectangle to codon boundaries in codon or translate mode
+          if (displayMode === 'codon' || displayMode === 'translate') {
             clo = this.snapToCodonStart(clo);
             chi = this.snapToCodonEnd(chi);
           }
