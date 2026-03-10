@@ -3559,8 +3559,8 @@
           const b_val = parseInt(bookmarkColor.slice(5, 7), 16);
           ctx.fillStyle = `rgba(${r_val}, ${g_val}, ${b_val}, ${this.BOOKMARK_COL_ALPHA})`;
           
-          const blockTop = CONSENSUS_TOP_PAD;
-          const blockH = Math.max(1, cssH - (CONSENSUS_TOP_PAD + CONSENSUS_BOTTOM_PAD));
+          const blockTop = consensusTopPad;
+          const blockH = Math.max(1, cssH - (consensusTopPad + consensusBottomPad));
           ctx.fillRect(x, blockTop, w, blockH);
         }
         ctx.restore();

@@ -317,9 +317,24 @@
         // Auto-load from URL parameter
         console.info('Loading FASTA from URL parameter:', fastaUrl);
         setStatus('Loading FASTA from URL...');
-        // Wait for loadFastaFromUrl to be defined (it's defined later in the file)
-        // We'll need to call it after it's defined, so we'll set a flag
-        window._autoLoadFastaUrl = fastaUrl;
+        
+        // Wait for the page to finish loading and modal to be set up, then trigger auto-load
+        setTimeout(() => {
+          console.info('Attempting to auto-load FASTA from URL');
+          if (typeof window.loadFastaFromUrl === 'function' && fileModal) {
+            console.info('Triggering auto-load');
+            fileModal.show();
+            window.loadFastaFromUrl(fastaUrl).catch(err => {
+              console.error('Auto-load failed:', err);
+              alert('Failed to load FASTA from URL: ' + (err.message || err));
+            });
+          } else {
+            console.error('Auto-load failed: loadFastaFromUrl not available or modal not initialized');
+            console.log('loadFastaFromUrl:', typeof window.loadFastaFromUrl);
+            console.log('fileModal:', fileModal);
+            alert('Failed to auto-load: file loading functionality not initialized');
+          }
+        }, 100); // Small delay to ensure modal setup completes
       } else if (fileModal) {
         // Reset modal state
         fileDropZone.style.display = 'block';
@@ -2512,7 +2527,8 @@
             
             console.info('File loaded successfully:', file.name);
             
-            // Close modal
+            // Hide loading state and close modal
+            fileLoading.style.display = 'none';
             fileModal.hide();
             
             // Load data using shared function
@@ -2579,7 +2595,8 @@
           // Update global alignment variable
           window.alignment = alignmentInstance;
           
-          // Close modal first
+          // Hide loading state and close modal
+          fileLoading.style.display = 'none';
           fileModal.hide();
           
           // Load the data into the viewer using the shared function
@@ -2678,7 +2695,8 @@
           // Update global alignment variable
           window.alignment = alignmentInstance;
           
-          // Close modal
+          // Hide loading state and close modal
+          fileLoading.style.display = 'none';
           fileModal.hide();
           
           // Load data using shared function
@@ -2817,30 +2835,6 @@
       
     } catch (e) {
       console.warn('Failed to initialize file upload modal', e);
-    }
-  }
-
-  // Check if auto-load from URL parameter was requested
-  // This needs to be outside the modal setup block so it always executes
-  if (window._autoLoadFastaUrl) {
-    const autoLoadUrl = window._autoLoadFastaUrl;
-    delete window._autoLoadFastaUrl; // Clear the flag
-    console.info('Auto-loading FASTA from URL parameter');
-    
-    // Show the modal with loading state so user can see progress/errors
-    if (fileModal) {
-      fileModal.show();
-    }
-    
-    // Try to load the URL (loadFastaFromUrl should be defined by now if modal setup succeeded)
-    if (typeof window.loadFastaFromUrl === 'function') {
-      window.loadFastaFromUrl(autoLoadUrl).catch(err => {
-        console.error('Auto-load failed:', err);
-        alert('Failed to load FASTA from URL: ' + (err.message || err));
-      });
-    } else {
-      console.error('loadFastaFromUrl function is not available');
-      alert('Failed to auto-load: file loading functionality not initialized');
     }
   }
 
