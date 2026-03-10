@@ -5,6 +5,8 @@
 import { CanvasRenderer } from './renderers/CanvasRenderer.js';
 import { OverviewRenderer }  from './renderers/OverviewRenderer.js';
 import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
+import { HeaderRenderer }    from './renderers/HeaderRenderer.js';
+import { LabelRenderer }     from './renderers/LabelRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -186,8 +188,9 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
       this._overviewRenderer   = new OverviewRenderer(this.overviewCanvas, this);
       this._overviewRenderer.attachEvents();
       this._consensusRenderer  = new ConsensusRenderer(this.consensusCanvas, this);
-      // attachEvents() for consensus is called from attachInteractionHandlers() once
-      // the scroller and callbacks are available.
+      this._headerRenderer     = new HeaderRenderer(this.headerCanvas, this);
+      this._labelRenderer      = new LabelRenderer(this.labelCanvas, this);
+      // attachEvents() for header, consensus, and label are called from attachInteractionHandlers().
       this._lightModeColors = {}; // store original light mode colors
 
       // Apply defaults first, then override with provided options
@@ -1005,87 +1008,8 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
         } catch (_) { return 0; }
       };
 
-      // Header: click/drag to select columns
-      if (headerCanvas) {
-        headerCanvas.addEventListener('mousedown', (e) => {
-          if (e.button !== 0) return;
-          try { this.clearRectSelection(); } catch (_) { }
-          try { this.selectedRows.clear(); } catch (_) { }
-          let col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
-          
-          // Snap to codon boundary in codon or amino acid mode
-          if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-            col = this.snapToCodonStart(col);
-          }
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Shift-click: expand selection to include this column
-            this.expandColSelectionToInclude(col);
-            // Determine which end we're extending from
-            const currentMin = Math.min(...Array.from(this.selectedCols));
-            const currentMax = Math.max(...Array.from(this.selectedCols));
-            this.selectionStartCol = (col < currentMin) ? currentMax : currentMin;
-          } else {
-            this.selectionStartCol = col;
-          }
-          
-          this.selectionMode = e.metaKey ? 'add' : 'replace';
-          
-          if (e.shiftKey && this.selectedCols.size > 0) {
-            // Already handled above
-          } else if (e.metaKey) {
-            // Cmd-click: toggle selection of codon (or single column in non-codon mode)
-            if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-              const codonStart = this.snapToCodonStart(col);
-              const codonEnd = this.snapToCodonEnd(col);
-              // Check if any part of the codon is selected
-              const isSelected = this.selectedCols.has(codonStart) || this.selectedCols.has(codonStart + 1) || this.selectedCols.has(codonEnd);
-              if (isSelected) {
-                // Remove entire codon
-                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.delete(c);
-              } else {
-                // Add entire codon
-                for (let c = codonStart; c <= codonEnd; c++) this.selectedCols.add(c);
-              }
-            } else {
-              try { if (this.selectedCols.has(col)) this.selectedCols.delete(col); else this.selectedCols.add(col); } catch (_) { }
-            }
-            this.anchorCol = col; 
-          } else { 
-            try { 
-              this.selectedCols.clear(); 
-              if (this.displayMode === 'codon' || this.displayMode === 'translate') {
-                const codonEnd = this.snapToCodonEnd(col);
-                for (let c = col; c <= codonEnd; c++) this.selectedCols.add(c);
-              } else {
-                this.selectedCols.add(col);
-              }
-            } catch (_) { } 
-            this.anchorCol = col; 
-          }
-          this.isColSelecting = true; 
-          this.scheduleRender();
-          e.preventDefault();
-        });
-
-        window.addEventListener('mousemove', (e) => {
-          if (!this.isColSelecting) return;
-          const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
-          if (e.metaKey) { 
-            try { this.addRangeToColSelection(this.selectionStartCol, col); } catch (_) { } 
-          } else { 
-            try { this.setColSelectionToRange(this.selectionStartCol, col); } catch (_) { } 
-          }
-          this.scheduleRender();
-        });
-
-        window.addEventListener('mouseup', (e) => {
-          if (!this.isColSelecting) return;
-          this.isColSelecting = false;
-          const col = (cb.colFromClientX ? cb.colFromClientX(e.clientX) : (cb.colFromClientXLocal ? cb.colFromClientXLocal(e.clientX) : null)) || _colFromClientXLocal(e.clientX, headerCanvas);
-          this.anchorCol = col; this.scheduleRender();
-        });
-      }
+      // Header ruler — delegated to HeaderRenderer
+      if (this._headerRenderer) this._headerRenderer.attachEvents();
 
       // Consensus column selection — delegated to ConsensusRenderer
       if (this._consensusRenderer) this._consensusRenderer.attachEvents();
@@ -1368,19 +1292,10 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
         });
       }
 
-      // Label canvas interactions: row selection
-      if (labelCanvas) {
-        // Drag-and-drop state for sequence reordering
-        let dragState = {
-          isDragging: false,
-          draggedRows: [],
-          dragStartRow: null,
-          dropIndicatorRow: null,
-          dragStartTime: 0,
-          dragStartY: 0
-        };
+      // Label canvas interactions — delegated to LabelRenderer
+      if (this._labelRenderer) this._labelRenderer.attachEvents();
 
-        labelCanvas.addEventListener('mousedown', (e) => {
+      // Keyboard handlers and scroller snapping/paging
           if (e.button !== 0) return;
           const row = (cb.rowFromClientY ? cb.rowFromClientY(e.clientY) : null) || _rowFromClientY(e.clientY);
           try { this.clearRectSelection(); } catch (_) { }
@@ -4280,9 +4195,9 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
         } catch (_) { refGenomeCDS = null; }
         
         try { this._overviewRenderer.render(vis); } catch (e) { console.error('SealionViewer: OverviewRenderer.render failed', e); }
-        try { this.drawHeader(this.headerCanvas, vis, Object.assign({}, commonOpts, { HEADER_FONT: this.HEADER_FONT, HEADER_HEIGHT: this.HEADER_HEIGHT, selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()) })); } catch (e) { console.error('SealionViewer.drawHeader failed', e); }
+        try { this._headerRenderer.render(vis); } catch (e) { console.error('SealionViewer: HeaderRenderer.render failed', e); }
         try { this._consensusRenderer.render(vis); } catch (e) { console.error('SealionViewer: ConsensusRenderer.render failed', e); }
-        try { this.drawLabels(this.labelCanvas, vis, { FONT: this.labelFont || this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, LABEL_WIDTH: this.LABEL_WIDTH, labelTextVertOffset: this.labelTextVertOffset, selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), rows: this.alignment || [], refIndex: refIndex, REF_ACCENT: this.REF_ACCENT }); } catch (e) { console.error('SealionViewer.drawLabels failed', e); }
+        try { this._labelRenderer.render(vis); } catch (e) { console.error('SealionViewer: LabelRenderer.render failed', e); }
         try { this.drawSequences(this.seqCanvas, vis, Object.assign({}, { FONT: this.FONT, ROW_HEIGHT: this.ROW_HEIGHT, CHAR_WIDTH: this.charWidth, EXPANDED_RIGHT_PAD: this.EXPANDED_RIGHT_PAD, rows: this.alignment || [], selectedRows: this.getSelectedRows ? this.getSelectedRows() : (this.selectedRows || new Set()), selectedCols: this.getSelectedCols ? this.getSelectedCols() : (this.selectedCols || new Set()), refStr: refStr, refModeEnabled: !!this.refModeEnabled, refIndex: refIndex, maskStr: maskStr, maskEnabled: !!this.maskEnabled, BASE_COLORS: this.BASE_COLORS, DEFAULT_BASE_COLOR: this.DEFAULT_BASE_COLOR, PALE_REF_COLOR: this.PALE_REF_COLOR, COMPRESSED_CELL_VPAD: this.COMPRESSED_CELL_VPAD, seqTextVertOffset: this.seqTextVertOffset, rowCount: (this.alignment ? this.alignment.length : 0), maxSeqLen: commonOpts.maxSeqLen, colOffsets: commonOpts.colOffsets, isRectSelecting: !!this.isRectSelecting, rectStartRow: this.rectStartRow, rectEndRow: this.rectEndRow, rectStartCol: this.rectStartCol, rectEndCol: this.rectEndCol })); } catch (e) { console.error('SealionViewer.drawSequences failed', e); }
       } catch (e) { console.error('SealionViewer.drawAll failed', e); }
       console.timeEnd('drawAll');
