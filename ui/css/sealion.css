@@ -172,4 +172,7 @@
 
 /* debug HUD removed; use console for diagnostics */
 
-
+/* Toolbar: central section can wrap when window is narrow */
+#navbarControls {
+  align-items: flex-start;
+}

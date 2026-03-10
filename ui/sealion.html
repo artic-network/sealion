@@ -22,16 +22,17 @@
   <body>
     <div id="app">
       <!-- Bootstrap Toolbar -->
-      <nav class="navbar navbar-expand-lg navbar-light bg-dark border-bottom">
+      <nav class="navbar navbar-expand navbar-light bg-dark border-bottom">
         <div class="container-fluid">
-          <span class="navbar-brand mb-0 h1"><a href="http://github.com/artic-network/sealion"><i class="bi bi-dna me-2"></i>Sealion</span></a>
+          <span class="navbar-brand mb-0 h1 align-self-start"><a href="http://github.com/artic-network/sealion"><i class="bi bi-dna me-2"></i>Sealion</span></a>
           
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarControls" aria-controls="navbarControls" aria-expanded="false" aria-label="Toggle controls">
             <span class="navbar-toggler-icon"></span>
           </button>
           
           <div class="collapse navbar-collapse" id="navbarControls">
-            <div class="navbar-nav me-auto">
+            <!-- Left group: file actions, never wraps -->
+            <div class="d-flex flex-nowrap align-items-center flex-shrink-0">
               <!-- Open File Button -->
               <div class="nav-item">
                 <button class="btn btn-sm btn-outline-primary" id="open-file-btn" type="button" title="Open FASTA file (Cmd-O)">
@@ -52,7 +53,10 @@
                   <i class="bi bi-download"></i>
                 </button>
               </div>
-              
+            </div><!-- end left group -->
+
+            <!-- Central group: wraps when window is narrow -->
+            <div class="d-flex flex-wrap align-items-center flex-grow-1 mx-2" style="row-gap: 4px;">
               <!-- Font Size Controls -->
               <div class="nav-item ms-2">
                 <div class="btn-group" role="group" aria-label="Font size controls">
@@ -389,9 +393,11 @@
                     </ul>
                   </div>
                 </div>
-              </div>              
-            </div>
-            
+              </div>
+            </div><!-- end central group -->
+
+            <!-- Right group: search and utilities, never wraps -->
+            <div class="d-flex flex-nowrap align-items-center flex-shrink-0 ms-auto">
             <!-- Sequence Search Controls -->
             <div class="nav-item ms-2">
               <div class="btn-group" role="group" aria-label="Sequence search">
@@ -423,6 +429,7 @@
             <button class="btn btn-sm btn-outline-secondary ms-2" id="about-btn" type="button" title="About Sealion">
               <i class="bi bi-info-circle"></i>
             </button>
+            </div><!-- end right group -->
           </div>
         </div>
       </nav>
