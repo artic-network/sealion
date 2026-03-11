@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="[logo/sealion_logo.png](https://github.com/artic-network/sealion/blob/main/logo/sealion.png)" alt="Sealion" width="220"/>
+  <img width="128" height="128" alt="sealion" src="https://github.com/user-attachments/assets/2463492a-ce36-45aa-b9a4-53dfa1991601" />
 </p>
 
 # Sealion — Genomic Alignment Viewer
