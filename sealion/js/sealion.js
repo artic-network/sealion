@@ -2528,7 +2528,9 @@
         // Load the markdown content if not already loaded
         if (helpContent.querySelector('.spinner-border')) {
           try {
-            const response = await fetch('instructions.md');
+            const response = await (window.SealionUtils && window.SealionUtils.fetchWithFallback
+              ? window.SealionUtils.fetchWithFallback('instructions.md')
+              : fetch('instructions.md'));
             const markdown = await response.text();
 
             // Use marked.js to convert markdown to HTML if available
@@ -2603,7 +2605,9 @@
         // Load the markdown content if not already loaded
         if (aboutContent.querySelector('.spinner-border')) {
           try {
-            const response = await fetch('about.md');
+            const response = await (window.SealionUtils && window.SealionUtils.fetchWithFallback
+              ? window.SealionUtils.fetchWithFallback('about.md')
+              : fetch('about.md'));
             const markdown = await response.text();
 
             // Use marked.js to convert markdown to HTML if available
@@ -2977,7 +2981,9 @@
           
           // Load mpox_clade_iib.fasta
           console.log('Loading mpox_clade_iib.fasta...');
-          const fastaResponse = await fetch('data/mpox_clade_iib.fasta');
+          const fastaResponse = await (window.SealionUtils && window.SealionUtils.fetchWithFallback
+            ? window.SealionUtils.fetchWithFallback('data/mpox_clade_iib.fasta')
+            : fetch('data/mpox_clade_iib.fasta'));
           if (!fastaResponse.ok) {
             throw new Error('Failed to load mpox_clade_iib.fasta');
           }
@@ -3013,7 +3019,9 @@
           // Load the reference genome NC_063383_mpox_clade_iib.gb
           try {
             console.log('Loading NC_063383_mpox_clade_iib.gb reference genome...');
-            const gbResponse = await fetch('data/NC_063383_mpox_clade_iib.gb');
+            const gbResponse = await (window.SealionUtils && window.SealionUtils.fetchWithFallback
+              ? window.SealionUtils.fetchWithFallback('data/NC_063383_mpox_clade_iib.gb')
+              : fetch('data/NC_063383_mpox_clade_iib.gb'));
             if (!gbResponse.ok) {
               console.warn('Failed to load reference genome NC_063383_mpox_clade_iib.gb');
               return;

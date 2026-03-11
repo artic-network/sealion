@@ -1,5 +1,6 @@
 // ui/js/utils.js
 // Utility functions shared across the Sealion application.
+window.SealionUtils = window.SealionUtils || {};
 (function(exports){
   // Normalize and return a mask string of length `maxSeqLen`.
   // Uses window.alignment and window.mask when called without arguments for
@@ -411,6 +412,22 @@
   exports.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps;
   exports.andMasks = andMasks;
   exports.parseGenBankFile = parseGenBankFile;
+
+  // Fetch a relative URL, falling back to the same path under the canonical
+  // GitHub Pages base (sealion/ subdirectory) if the relative fetch fails,
+  // e.g. when running locally from a file:// origin or a plain HTTP server.
+  const FALLBACK_BASE = 'https://artic-network.github.io/sealion/sealion/';
+  async function fetchWithFallback(relativeUrl) {
+    try {
+      const response = await fetch(relativeUrl);
+      if (response.ok) return response;
+    } catch (_) { /* network error – try fallback */ }
+    return fetch(FALLBACK_BASE + relativeUrl);
+  }
+  exports.fetchWithFallback = fetchWithFallback;
+
+  try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.fetchWithFallback = fetchWithFallback; } }catch(_){ }
+
   try{ if(window) { window.SealionUtils = window.SealionUtils || {}; window.SealionUtils.computeConstantMask = computeConstantMask; window.SealionUtils.computeConsensusSequence = computeConsensusSequence; window.SealionUtils.computeConstantMaskAllowN = computeConstantMaskAllowN; window.SealionUtils.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.SealionUtils.andMasks = andMasks; window.SealionUtils.parseGenBankFile = parseGenBankFile; } }catch(_){ }
   // attach globals for backward compatibility
   try{ if(window){ window.computeConstantMask = computeConstantMask; window.computeConsensusSequence = computeConsensusSequence; window.computeConstantMaskAllowN = computeConstantMaskAllowN; window.computeConstantMaskAllowNAndGaps = computeConstantMaskAllowNAndGaps; window.andMasks = andMasks; } }catch(_){ }
@@ -419,4 +436,4 @@
   // attach globals (so unqualified calls like `refreshMaskStr()` in script.js will find them)
   try{ if(window) { window.refreshMaskStr = refreshMaskStr; window.refreshRefStr = function(){ const r = refreshRefStr(); return r; }; } }catch(_){ }
 
-})(window.SealionUtils);
+})(window.SealionUtils = window.SealionUtils || {});
