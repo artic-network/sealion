@@ -1449,15 +1449,15 @@
       canvas.style.display = hidden ? '' : 'none';
       if (labelsPlotDiv) labelsPlotDiv.style.display = hidden ? '' : 'none';
       hidePlotBtn.classList.toggle('active', !hidden);
-      if (hidden) {
-        viewer.setCanvasCSSSizes();
-        viewer.resizeBackings();
-        viewer.scheduleRender();
-      } else {
-        viewer.setCanvasCSSSizes();
-        viewer.resizeBackings();
-        viewer.scheduleRender();
+      const icon = hidePlotBtn.querySelector('i');
+      if (icon) {
+        icon.className = hidden ? 'bi bi-eye-slash' : 'bi bi-eye';
       }
+      const label = hidePlotBtn.querySelector('span');
+      if (label) label.textContent = hidden ? 'Hide plot' : 'Show plot';
+      viewer.setCanvasCSSSizes();
+      viewer.resizeBackings();
+      viewer.scheduleRender();
     });
   }
 
@@ -1486,6 +1486,12 @@
       const hidden = canvas.style.display === 'none';
       canvas.style.display = hidden ? '' : 'none';
       hideOverviewBtn.classList.toggle('active', !hidden);
+      const icon = hideOverviewBtn.querySelector('i');
+      if (icon) {
+        icon.className = hidden ? 'bi bi-eye-slash' : 'bi bi-eye';
+      }
+      const label = hideOverviewBtn.querySelector('span');
+      if (label) label.textContent = hidden ? 'Hide overview' : 'Show overview';
       viewer.setCanvasCSSSizes();
       viewer.resizeBackings();
       viewer.scheduleRender();
