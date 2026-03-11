@@ -122,6 +122,20 @@ export class SlidingWindowLayer {
     // Forward-fill trailing gap
     if (prev >= 0) for (let x = prev + 1; x < pixW; x++) points[x] = points[prev];
 
+    // ── Normalise to [0, 1] so min → baseline, max → top of bar area ────
+    let minVal = Infinity, maxVal = -Infinity;
+    for (let x = 0; x < pixW; x++) {
+      if (points[x] < minVal) minVal = points[x];
+      if (points[x] > maxVal) maxVal = points[x];
+    }
+    const range = maxVal - minVal;
+    if (range > 0) {
+      for (let x = 0; x < pixW; x++) points[x] = (points[x] - minVal) / range;
+    } else {
+      // Flat line — place at mid-height
+      points.fill(0.5);
+    }
+
     // ── Draw as a coloured polyline ──────────────────────────────────────
     const baseline = barY + barH;
     const areaH    = barH;

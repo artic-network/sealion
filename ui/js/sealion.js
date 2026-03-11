@@ -1470,6 +1470,11 @@
       const nowEnabled = !viewer._overviewRenderer.isLayerEnabled(layer);
       viewer._overviewRenderer.setLayerEnabled(layer, nowEnabled);
       btn.classList.toggle('active', nowEnabled);
+      const icon = btn.querySelector('i');
+      if (icon) {
+        icon.classList.toggle('bi-check2-square', nowEnabled);
+        icon.classList.toggle('bi-square',        !nowEnabled);
+      }
     });
   });
 
