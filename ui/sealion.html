@@ -199,6 +199,33 @@
                 </div>
               </div>
               
+              <!-- Plot strip selector -->
+              <div class="nav-item ms-2">
+                <div class="btn-group" role="group">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-bar-chart"></i> Plot
+                  </button>
+                  <ul class="dropdown-menu">
+                    <li>
+                      <button class="dropdown-item plot-type-btn" data-plot-type="entropy" type="button">
+                        <i class="bi bi-graph-up"></i> Conservation (entropy)
+                      </button>
+                    </li>
+                    <li>
+                      <button class="dropdown-item plot-type-btn" data-plot-type="differences" type="button">
+                        <i class="bi bi-bar-chart-fill"></i> Differences from reference
+                      </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li>
+                      <button class="dropdown-item" id="hide-plot-btn" type="button">
+                        <i class="bi bi-eye-slash"></i> Hide plot
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
               <!-- Navigate Differences -->
               <div class="nav-item ms-2">
                 <div class="btn-group" role="group" aria-label="Navigate differences">

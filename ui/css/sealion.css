@@ -96,6 +96,7 @@
   display: block; 
   flex-shrink: 0; 
 }
+#labels-plot-div{ width: var(--label-width); height: var(--plot-height, 40px); display: block; flex-shrink: 0; }
 #labels-consensus-div{ 
   width: var(--label-width); 
   height: var(--consensus-height); 

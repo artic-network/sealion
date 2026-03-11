@@ -8,7 +8,7 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
 import { HeaderRenderer }    from './renderers/HeaderRenderer.js';
 import { LabelRenderer }     from './renderers/LabelRenderer.js';
 import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
-import { PlotRenderer }     from './renderers/PlotRenderer.js';
+import { PlotRenderer, PLOT_TYPES } from './renderers/PlotRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -71,6 +71,15 @@ import { PlotRenderer }     from './renderers/PlotRenderer.js';
           labels.appendChild(labelsHeaderDiv);
         }
 
+        // Label div for plot strip spacer (matches #plot-canvas height)
+        let labelsPlotDiv = q('#labels-plot-div');
+        if (!labelsPlotDiv) {
+          labelsPlotDiv = document.createElement('div');
+          labelsPlotDiv.id = 'labels-plot-div';
+          labelsPlotDiv.className = 'labels-plot-div';
+          labels.appendChild(labelsPlotDiv);
+        }
+
         // Label div for consensus controls (UI elements added by script.js)
         let labelsConsensusDiv = q('#labels-consensus-div');
         if (!labelsConsensusDiv) {
@@ -121,6 +130,7 @@ import { PlotRenderer }     from './renderers/PlotRenderer.js';
         // persist references onto the instance for later helpers
         this.labelFilterBox = labelFilterBox;
         this.labelsHeaderDiv = labelsHeaderDiv;
+        this.labelsPlotDiv = labelsPlotDiv;
         this.labelsConsensusDiv = labelsConsensusDiv;
         this.overviewCanvas = overviewCanvas;
         this.headerCanvas = headerCanvas;
@@ -1558,6 +1568,8 @@ import { PlotRenderer }     from './renderers/PlotRenderer.js';
         if (plotCanvasEl) { const pWc = (plotCanvasEl.parentElement && plotCanvasEl.parentElement.clientWidth) ? plotCanvasEl.parentElement.clientWidth : viewportWidth; const pSbW = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const pCssW = Math.max(1, pWc - pSbW); const plotH = this.PLOT_HEIGHT != null ? this.PLOT_HEIGHT : 40; plotCanvasEl.style.width = pCssW + 'px'; plotCanvasEl.style.height = plotH + 'px'; }
         if (labelFilterBox) { labelFilterBox.style.width = labelWidth + 'px'; }
         if (labelsHeaderDiv) { labelsHeaderDiv.style.width = labelWidth + 'px'; labelsHeaderDiv.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
+        const labelsPlotDiv = this.labelsPlotDiv || (document.getElementById ? document.getElementById('labels-plot-div') : null);
+        if (labelsPlotDiv) { labelsPlotDiv.style.width = labelWidth + 'px'; labelsPlotDiv.style.height = (this.PLOT_HEIGHT != null ? this.PLOT_HEIGHT : 40) + 'px'; }
         const labelsConsensusDiv = this.labelsConsensusDiv || (opts && opts.labelsConsensusDiv) || (document.getElementById ? document.getElementById('labels-consensus-div') : null);
         if (labelsConsensusDiv) { labelsConsensusDiv.style.width = labelWidth + 'px'; labelsConsensusDiv.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
 
@@ -2877,6 +2889,16 @@ import { PlotRenderer }     from './renderers/PlotRenderer.js';
     // Invalidate the entropy plot cache (call when alignment data changes)
     invalidatePlotCache() {
       if (this._plotRenderer) this._plotRenderer.invalidateCache();
+    }
+
+    // Switch the active plot type by name ('entropy' | 'differences').
+    setPlotType(type) {
+      if (!this._plotRenderer) return;
+      const factory = PLOT_TYPES[type];
+      if (!factory) { console.warn('SealionViewer.setPlotType: unknown type', type); return; }
+      this._plotRenderer.setPlot(factory());
+      this.plotType = type;
+      this.scheduleRender();
     }
 
     // Toggle dark mode

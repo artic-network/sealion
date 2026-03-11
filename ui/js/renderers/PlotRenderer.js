@@ -5,8 +5,14 @@
 // - scrollAxes: h:'follow' — tracks horizontal scroll from AlignmentRenderer.
 // - selectionAxes: ['col'] — clicking selects columns (same as header / consensus).
 
-import { CanvasRenderer } from './CanvasRenderer.js';
-import { EntropyPlot }    from './EntropyPlot.js';
+import { CanvasRenderer }   from './CanvasRenderer.js';
+import { EntropyPlot }      from './EntropyPlot.js';
+import { DifferencesPlot }  from './DifferencesPlot.js';
+
+export const PLOT_TYPES = {
+  entropy:     () => new EntropyPlot(),
+  differences: () => new DifferencesPlot(),
+};
 
 export class PlotRenderer extends CanvasRenderer {
   static scrollAxes    = { h: 'follow', v: false };

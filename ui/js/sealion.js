@@ -1425,6 +1425,42 @@
     });
   });
 
+  // Plot strip type controls
+  document.querySelectorAll('.plot-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!viewer) return;
+      const type = btn.getAttribute('data-plot-type');
+      if (type && typeof viewer.setPlotType === 'function') {
+        viewer.setPlotType(type);
+        // Update active-state check marks
+        document.querySelectorAll('.plot-type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      }
+    });
+  });
+
+  const hidePlotBtn = document.getElementById('hide-plot-btn');
+  if (hidePlotBtn) {
+    hidePlotBtn.addEventListener('click', () => {
+      if (!viewer || !viewer.plotCanvas) return;
+      const canvas = viewer.plotCanvas;
+      const labelsPlotDiv = document.getElementById('labels-plot-div');
+      const hidden = canvas.style.display === 'none';
+      canvas.style.display = hidden ? '' : 'none';
+      if (labelsPlotDiv) labelsPlotDiv.style.display = hidden ? '' : 'none';
+      hidePlotBtn.classList.toggle('active', !hidden);
+      if (hidden) {
+        viewer.setCanvasCSSSizes();
+        viewer.resizeBackings();
+        viewer.scheduleRender();
+      } else {
+        viewer.setCanvasCSSSizes();
+        viewer.resizeBackings();
+        viewer.scheduleRender();
+      }
+    });
+  }
+
   // Show mode controls
   const nucleotideModeBtn = document.getElementById('nucleotide-mode-btn');
   if (nucleotideModeBtn) {
