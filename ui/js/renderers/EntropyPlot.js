@@ -10,6 +10,10 @@
 //   nucleotides  → A C G T   (gaps, N, ? are ignored)
 //   amino acids  → 20 standard AAs  (gaps, X, ? are ignored)
 
+import { getSequentialPalette, lerpSequential } from '../palettes.js';
+
+const DEFAULT_PALETTE = 'Fire';
+
 export class EntropyPlot {
   constructor() {
     this._cache    = null; // Float32Array of per-column bar heights in [0, 1]
@@ -44,7 +48,7 @@ export class EntropyPlot {
     const end   = Math.min(maxSeqLen - 1, (vis && vis.rawLastCol  != null ? vis.rawLastCol  : maxSeqLen - 1) + 1);
 
     const entropy  = this._getEntropy(v, maxSeqLen);
-    const barColor = v.PLOT_BAR_COLOR || '#3182bd';
+    const palette  = getSequentialPalette(v.PLOT_PALETTE || DEFAULT_PALETTE);
 
     for (let c = start; c <= end; c++) {
       const h    = entropy[c] != null ? entropy[c] : 0;
@@ -58,7 +62,7 @@ export class EntropyPlot {
 
       // Bars grow upward from the bottom of the plot area.
       const barY = topPad + barAreaH - barH;
-      ctx.fillStyle = barColor;
+      ctx.fillStyle = lerpSequential(h, palette);
       ctx.fillRect(x, barY, w, barH);
     }
   }

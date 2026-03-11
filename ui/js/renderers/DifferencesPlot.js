@@ -12,6 +12,10 @@
 //
 // Reference: viewer.refStr (if refModeEnabled) otherwise column consensus.
 
+import { getSequentialPalette, lerpSequential } from '../palettes.js';
+
+const DEFAULT_PALETTE = 'Ocean';
+
 export class DifferencesPlot {
   constructor() {
     this._cache    = null; // Float32Array of per-column fraction in [0, 1]
@@ -40,7 +44,7 @@ export class DifferencesPlot {
     const end   = Math.min(maxSeqLen - 1, (vis && vis.rawLastCol  != null ? vis.rawLastCol  : maxSeqLen - 1) + 1);
 
     const diffs    = this._getDiffs(v, maxSeqLen);
-    const barColor = v.PLOT_BAR_COLOR || '#e6550d';
+    const palette  = getSequentialPalette(v.PLOT_PALETTE || DEFAULT_PALETTE);
 
     for (let c = start; c <= end; c++) {
       const h    = diffs[c] != null ? diffs[c] : 0;
@@ -54,7 +58,7 @@ export class DifferencesPlot {
 
       // Bars grow upward from the bottom of the plot area.
       const barY = topPad + barAreaH - barH;
-      ctx.fillStyle = barColor;
+      ctx.fillStyle = lerpSequential(h, palette);
       ctx.fillRect(x, barY, w, barH);
     }
   }

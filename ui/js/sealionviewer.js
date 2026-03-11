@@ -3484,7 +3484,7 @@ import { PlotRenderer, PLOT_TYPES } from './renderers/PlotRenderer.js';
     CDS_FILL_ALPHA: 1.0,
     CDS_BORDER_ALPHA: 0.3,
     // Entropy / plot strip
-    PLOT_HEIGHT: 40,
+    PLOT_HEIGHT: 20,
     PLOT_BG: '#f3f3f3',
     PLOT_SEPARATOR: '#aaa',
     PLOT_BAR_COLOR: '#3182bd',
