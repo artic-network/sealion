@@ -11,10 +11,11 @@
 // Architecture mirrors PlotRenderer: an off-screen cache composite is rebuilt
 // whenever any layer's cache key changes, then blitted on every render frame.
 
-import { CanvasRenderer }       from './CanvasRenderer.js';
-import { GenomeStructureLayer } from './overview/GenomeStructureLayer.js';
-import { VariableSitesLayer }   from './overview/VariableSitesLayer.js';
-import { SlidingWindowLayer }   from './overview/SlidingWindowLayer.js';
+import { CanvasRenderer }        from './CanvasRenderer.js';
+import { GenomeStructureLayer }  from './overview/GenomeStructureLayer.js';
+import { CompressedSitesLayer }  from './overview/CompressedSitesLayer.js';
+import { VariableSitesLayer }    from './overview/VariableSitesLayer.js';
+import { SlidingWindowLayer }    from './overview/SlidingWindowLayer.js';
 
 export class OverviewRenderer extends CanvasRenderer {
   static scrollAxes = { h: 'observe', v: 'observe' };
@@ -25,9 +26,10 @@ export class OverviewRenderer extends CanvasRenderer {
 
     // Layer instances (order = draw order)
     this._layers = {
-      genomeStructure : new GenomeStructureLayer(),
-      variableSites   : new VariableSitesLayer(),
-      slidingWindow   : new SlidingWindowLayer(),
+      genomeStructure  : new GenomeStructureLayer(),
+      compressedSites  : new CompressedSitesLayer(),
+      variableSites    : new VariableSitesLayer(),
+      slidingWindow    : new SlidingWindowLayer(),
     };
 
     // Off-screen cache for composited layer content

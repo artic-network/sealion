@@ -1,17 +1,20 @@
 // renderers/overview/SlidingWindowLayer.js
 //
-// Overview layer: draws the active plot's data as a continuous filled-line
-// (area chart) spanning the full overview width.
+// Overview layer: draws the active plot's data as a sliding-window averaged
+// line spanning the full overview width.
 //
 // Data source: reads the active plot's per-column Float32Array cache via
 //   viewer._plotRenderer._plot
 // If unavailable (plot renderer hidden / no data) the layer draws nothing.
 //
 // The line is coloured using the same palette as the active plot (Fire for
-// entropy, Ocean for differences).  Each point is coloured independently by
-// its value so the line shifts colour across the genome.
+// entropy, Ocean for differences).  Each point on the line is coloured by
+// its smoothed value.
 
 import { getSequentialPalette, lerpSequential } from '../../palettes.js';
+
+// Number of alignment columns averaged in each sliding-window step.
+const SLIDING_WINDOW_SIZE = 100;
 
 export class SlidingWindowLayer {
   constructor() {
@@ -27,7 +30,7 @@ export class SlidingWindowLayer {
   render(ctx, p) {
     if (!this.enabled) return;
 
-    const { cssW, cssH, scale, barY, barH, totalWidth,
+    const { cssW, cssH, scale, barY, barH,
             colOffsets, maxSeqLen, charWidth, expandedRightPad } = p;
     const v = p.viewer;
 
@@ -37,9 +40,6 @@ export class SlidingWindowLayer {
     const plot = plotRenderer._plot;
     if (!plot) return;
 
-    // Trigger the plot cache calculation if not yet done (works because the
-    // EntropyPlot / DifferencesPlot caches are computed lazily and keyed on
-    // alignment + viewer state, which is already consistent at this point).
     let values = null;
     try {
       if (typeof plot._getEntropy === 'function') {
@@ -53,60 +53,101 @@ export class SlidingWindowLayer {
 
     if (!values || values.length === 0) return;
 
+    // ── Sliding window average over columns ──────────────────────────────
+    // For each column c compute the mean of values in
+    // [c - half, c + half] clamped to [0, maxSeqLen).
+    const half    = Math.floor(SLIDING_WINDOW_SIZE / 2);
+    const smoothed = new Float32Array(maxSeqLen);
+
+    // Build a prefix-sum for O(1) range queries.
+    const prefix = new Float64Array(maxSeqLen + 1);
+    for (let c = 0; c < maxSeqLen; c++) prefix[c + 1] = prefix[c] + (values[c] || 0);
+
+    for (let c = 0; c < maxSeqLen; c++) {
+      const lo  = Math.max(0, c - half);
+      const hi  = Math.min(maxSeqLen - 1, c + half);
+      const len = hi - lo + 1;
+      smoothed[c] = (prefix[hi + 1] - prefix[lo]) / len;
+    }
+
     // ── Resolve the palette (same as the active plot) ───────────────────
     const defaultPalette = typeof plot._getEntropy === 'function' ? 'Fire' : 'Ocean';
     const palette = getSequentialPalette(v.PLOT_PALETTE || defaultPalette);
 
-    // ── Map columns → pixel-width buckets and compute average value ──────
-    // We render one segment per CSS pixel column.
-    const points = new Float32Array(Math.ceil(cssW));
-    const counts = new Uint16Array (Math.ceil(cssW));
+    // ── Build per-pixel-column point array ──────────────────────────────
+    // Map each alignment column's smoothed value to its pixel x position,
+    // taking the centroid of each column's pixel span.
+    const pixW   = Math.ceil(cssW);
+    const points = new Float32Array(pixW).fill(-1); // -1 = no data
+    const ptVals = new Float32Array(pixW);
 
     for (let c = 0; c < maxSeqLen; c++) {
       const left  = colOffsets[c]     != null ? colOffsets[c]     : (c * (charWidth + expandedRightPad));
       const right = colOffsets[c + 1] != null ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-      const x0 = Math.round(left  * scale);
-      const x1 = Math.round(right * scale);
-      const val = values[c] != null ? values[c] : 0;
-      for (let x = x0; x < x1 && x < points.length; x++) {
-        points[x] += val;
-        counts[x] += 1;
+      const cx = (left + right) * 0.5 * scale; // centroid pixel
+      const xi = Math.round(cx);
+      if (xi >= 0 && xi < pixW) {
+        // Keep the last assignment — columns are ordered so this is fine
+        points[xi] = smoothed[c];
       }
     }
 
-    // Normalise buckets
-    for (let x = 0; x < points.length; x++) {
-      if (counts[x] > 0) points[x] /= counts[x];
+    // Fill any gaps between sampled pixels via linear interpolation so the
+    // line is fully continuous even at high compression.
+    let lastSet = -1;
+    for (let x = 0; x < pixW; x++) {
+      if (points[x] >= 0) { lastSet = x; }
     }
+    if (lastSet < 0) return; // nothing to draw
 
-    // ── Draw as a filled area chart ──────────────────────────────────────
+    // Forward-fill first defined value to the left edge
+    let firstVal = 0;
+    for (let x = 0; x < pixW; x++) { if (points[x] >= 0) { firstVal = points[x]; break; } }
+    for (let x = 0; x < pixW; x++) { if (points[x] < 0) points[x] = firstVal; else break; }
+
+    // Interpolate gaps between defined points
+    let prev = -1;
+    for (let x = 0; x < pixW; x++) {
+      if (points[x] >= 0) {
+        if (prev >= 0 && x - prev > 1) {
+          // linear interpolation between prev and x
+          const v0 = points[prev], v1 = points[x];
+          for (let i = prev + 1; i < x; i++) {
+            points[i] = v0 + (v1 - v0) * (i - prev) / (x - prev);
+          }
+        }
+        prev = x;
+      }
+    }
+    // Forward-fill trailing gap
+    if (prev >= 0) for (let x = prev + 1; x < pixW; x++) points[x] = points[prev];
+
+    // ── Draw as a coloured polyline ──────────────────────────────────────
     const baseline = barY + barH;
     const areaH    = barH;
 
-    // Draw one thin rect per pixel column, coloured by value and alpha 0.75.
     ctx.save();
-    ctx.globalAlpha = 0.75;
-
-    for (let x = 0; x < points.length; x++) {
-      const val = points[x];
-      if (val <= 0) continue;
-      const h   = Math.round(val * areaH);
-      if (h <= 0) continue;
-      ctx.fillStyle = lerpSequential(val, palette);
-      ctx.fillRect(x, baseline - h, 1, h);
-    }
-
-    // Overlay a 1px contrasted line at the top edge of each bar
+    ctx.lineWidth   = 1.5;
     ctx.globalAlpha = 0.9;
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth   = 1;
+
+    // Draw short coloured segments — colour changes with value.
     ctx.beginPath();
-    let inPath = false;
-    for (let x = 0; x < points.length; x++) {
-      const val = points[x];
-      const y   = val > 0 ? baseline - Math.round(val * areaH) : baseline;
-      if (!inPath) { ctx.moveTo(x + 0.5, y); inPath = true; }
-      else          { ctx.lineTo(x + 0.5, y); }
+    let prevColor = null;
+    for (let x = 0; x < pixW; x++) {
+      const val  = points[x];
+      const y    = baseline - val * areaH;
+      const col  = lerpSequential(val, palette);
+
+      if (col !== prevColor) {
+        if (prevColor !== null) ctx.stroke();
+        ctx.beginPath();
+        ctx.strokeStyle = col;
+        // Overlap by one pixel so segments join cleanly
+        if (x > 0) ctx.moveTo(x - 0.5, baseline - points[x - 1] * areaH);
+        else        ctx.moveTo(x + 0.5, y);
+        prevColor = col;
+      }
+      ctx.lineTo(x + 0.5, y);
     }
     ctx.stroke();
 
