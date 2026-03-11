@@ -8,6 +8,7 @@ import { ConsensusRenderer } from './renderers/ConsensusRenderer.js';
 import { HeaderRenderer }    from './renderers/HeaderRenderer.js';
 import { LabelRenderer }     from './renderers/LabelRenderer.js';
 import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
+import { PlotRenderer }     from './renderers/PlotRenderer.js';
 
   // Minimal, self-contained SealionViewer class.
   // Purpose: provide a clean place to migrate rendering, geometry and interaction
@@ -100,6 +101,8 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         if (!overviewCanvas) { overviewCanvas = document.createElement('canvas'); overviewCanvas.id = 'overview-canvas'; overviewCanvas.className = 'overview-canvas'; header.appendChild(overviewCanvas); }
         let headerCanvas = q('#header-canvas');
         if (!headerCanvas) { headerCanvas = document.createElement('canvas'); headerCanvas.id = 'header-canvas'; headerCanvas.className = 'header-canvas'; header.appendChild(headerCanvas); }
+        let plotCanvas = q('#plot-canvas');
+        if (!plotCanvas) { plotCanvas = document.createElement('canvas'); plotCanvas.id = 'plot-canvas'; plotCanvas.className = 'plot-canvas'; header.appendChild(plotCanvas); }
         let consensusCanvas = q('#consensus-canvas');
         if (!consensusCanvas) { consensusCanvas = document.createElement('canvas'); consensusCanvas.id = 'consensus-canvas'; consensusCanvas.className = 'consensus-canvas'; header.appendChild(consensusCanvas); }
 
@@ -121,6 +124,7 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         this.labelsConsensusDiv = labelsConsensusDiv;
         this.overviewCanvas = overviewCanvas;
         this.headerCanvas = headerCanvas;
+        this.plotCanvas = plotCanvas;
         this.consensusCanvas = consensusCanvas;
         this.alignmentDiv = alignmentDiv;
         this.labelCanvas = labelsCanvas;
@@ -189,6 +193,7 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
       this._overviewRenderer   = new OverviewRenderer(this.overviewCanvas, this);
       this._overviewRenderer.attachEvents();
       this._consensusRenderer  = new ConsensusRenderer(this.consensusCanvas, this);
+      this._plotRenderer       = new PlotRenderer(this.plotCanvas, this);
       this._headerRenderer     = new HeaderRenderer(this.headerCanvas, this);
       this._labelRenderer      = new LabelRenderer(this.labelCanvas, this);
       this._alignmentRenderer  = new AlignmentRenderer(this.seqCanvas, this);
@@ -279,6 +284,12 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         if (typeof options.HEADER_SELECTION !== 'undefined') this.HEADER_SELECTION = options.HEADER_SELECTION;
         if (typeof options.CONSENSUS_BG !== 'undefined') this.CONSENSUS_BG = options.CONSENSUS_BG;
         if (typeof options.CONSENSUS_SEPARATOR !== 'undefined') this.CONSENSUS_SEPARATOR = options.CONSENSUS_SEPARATOR;
+        if (typeof options.PLOT_HEIGHT === 'number') this.PLOT_HEIGHT = options.PLOT_HEIGHT;
+        if (typeof options.PLOT_BG !== 'undefined') this.PLOT_BG = options.PLOT_BG;
+        if (typeof options.PLOT_SEPARATOR !== 'undefined') this.PLOT_SEPARATOR = options.PLOT_SEPARATOR;
+        if (typeof options.PLOT_BAR_COLOR !== 'undefined') this.PLOT_BAR_COLOR = options.PLOT_BAR_COLOR;
+        if (typeof options.PLOT_TOP_PAD === 'number') this.PLOT_TOP_PAD = options.PLOT_TOP_PAD;
+        if (typeof options.PLOT_BOTTOM_PAD === 'number') this.PLOT_BOTTOM_PAD = options.PLOT_BOTTOM_PAD;
         if (typeof options.LABELS_BG !== 'undefined') this.LABELS_BG = options.LABELS_BG;
         if (typeof options.LABELS_TEXT !== 'undefined') this.LABELS_TEXT = options.LABELS_TEXT;
         if (typeof options.LABELS_HEADER_TEXT !== 'undefined') this.LABELS_HEADER_TEXT = options.LABELS_HEADER_TEXT;
@@ -1013,6 +1024,9 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
       // Header ruler — delegated to HeaderRenderer
       if (this._headerRenderer) this._headerRenderer.attachEvents();
 
+      // Plot column selection — delegated to PlotRenderer
+      if (this._plotRenderer) this._plotRenderer.attachEvents();
+
       // Consensus column selection — delegated to ConsensusRenderer
       if (this._consensusRenderer) this._consensusRenderer.attachEvents();
 
@@ -1540,6 +1554,8 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         if (headerCanvas) { headerCanvas.style.width = viewportWidth + 'px'; headerCanvas.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.style.width = hdrW + 'px'; overviewCanvas.style.height = Math.round((window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48) + 'px'; }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const cssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.style.width = cssWc + 'px'; consensusCanvas.style.height = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT + 'px' : '20px'; }
+        const plotCanvasEl = this.plotCanvas || (document.getElementById ? document.getElementById('plot-canvas') : null);
+        if (plotCanvasEl) { const pWc = (plotCanvasEl.parentElement && plotCanvasEl.parentElement.clientWidth) ? plotCanvasEl.parentElement.clientWidth : viewportWidth; const pSbW = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const pCssW = Math.max(1, pWc - pSbW); const plotH = this.PLOT_HEIGHT != null ? this.PLOT_HEIGHT : 40; plotCanvasEl.style.width = pCssW + 'px'; plotCanvasEl.style.height = plotH + 'px'; }
         if (labelFilterBox) { labelFilterBox.style.width = labelWidth + 'px'; }
         if (labelsHeaderDiv) { labelsHeaderDiv.style.width = labelWidth + 'px'; labelsHeaderDiv.style.height = Math.round((window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30) + 'px'; }
         const labelsConsensusDiv = this.labelsConsensusDiv || (opts && opts.labelsConsensusDiv) || (document.getElementById ? document.getElementById('labels-consensus-div') : null);
@@ -1549,11 +1565,13 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         const overviewHeight = (window && window.OVERVIEW_HEIGHT) ? window.OVERVIEW_HEIGHT : 48;
         const headerHeight = (window && window.HEADER_HEIGHT) ? window.HEADER_HEIGHT : 30;
         const consensusHeight = (window && window.CONSENSUS_HEIGHT) ? window.CONSENSUS_HEIGHT : 20;
+        const plotHeight = this.PLOT_HEIGHT != null ? this.PLOT_HEIGHT : 40;
         try {
           const root = document.documentElement;
           if (root) {
             root.style.setProperty('--overview-height', overviewHeight + 'px');
             root.style.setProperty('--header-height', headerHeight + 'px');
+            root.style.setProperty('--plot-height', plotHeight + 'px');
             root.style.setProperty('--consensus-height', consensusHeight + 'px');
           } 
         } catch (_) { }
@@ -1561,7 +1579,7 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         // Update alignment div position to account for dynamic header heights
         const alignmentDiv = this.alignmentDiv || (document.getElementById ? document.getElementById('alignment') : null);
         if (alignmentDiv) {
-          const totalHeaderHeight = overviewHeight + headerHeight + consensusHeight;
+          const totalHeaderHeight = overviewHeight + headerHeight + plotHeight + consensusHeight;
           alignmentDiv.style.marginTop = totalHeaderHeight + 'px';
           alignmentDiv.style.height = 'calc(100% - ' + totalHeaderHeight + 'px)';
         }
@@ -1597,6 +1615,8 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         if (headerCanvas) { headerCanvas.width = Math.max(1, Math.round(viewportWidth * pr)); headerCanvas.height = Math.max(1, Math.round(((window && typeof window.HEADER_HEIGHT === 'number') ? window.HEADER_HEIGHT : 30) * pr)); try { headerCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (overviewCanvas) { const parentW = (overviewCanvas.parentElement && overviewCanvas.parentElement.clientWidth) ? overviewCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidth = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssW = Math.max(1, parentW - scrollbarWidth); overviewCanvas.width = Math.max(1, Math.round(hdrCssW * pr)); overviewCanvas.height = Math.max(1, Math.round(((window && typeof window.OVERVIEW_HEIGHT === 'number') ? window.OVERVIEW_HEIGHT : 48) * pr)); try { overviewCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         if (consensusCanvas) { const parentWc = (consensusCanvas.parentElement && consensusCanvas.parentElement.clientWidth) ? consensusCanvas.parentElement.clientWidth : viewportWidth; const scrollbarWidthc = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const hdrCssWc = Math.max(1, parentWc - scrollbarWidthc); consensusCanvas.width = Math.max(1, Math.round(hdrCssWc * pr)); consensusCanvas.height = Math.max(1, Math.round(((window && typeof window.CONSENSUS_HEIGHT === 'number') ? window.CONSENSUS_HEIGHT : 20) * pr)); try { consensusCanvas.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
+        const plotCanvasB = this.plotCanvas || (document.getElementById ? document.getElementById('plot-canvas') : null);
+        if (plotCanvasB) { const pWcB = (plotCanvasB.parentElement && plotCanvasB.parentElement.clientWidth) ? plotCanvasB.parentElement.clientWidth : viewportWidth; const pSbB = scroller ? Math.max(0, scroller.offsetWidth - scroller.clientWidth) : 0; const pCssWB = Math.max(1, pWcB - pSbB); const plotHB = this.PLOT_HEIGHT != null ? this.PLOT_HEIGHT : 40; plotCanvasB.width = Math.max(1, Math.round(pCssWB * pr)); plotCanvasB.height = Math.max(1, Math.round(plotHB * pr)); try { plotCanvasB.getContext('2d').setTransform(pr, 0, 0, pr, 0, 0); } catch (_) { } }
         // labelsHeaderDiv is now a div, not a canvas, so no backing resize needed
         // labelsConsensusDiv is now a div, not a canvas, so no backing resize needed
 
@@ -2401,6 +2421,7 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
         
         try { this._overviewRenderer.render(vis); } catch (e) { console.error('SealionViewer: OverviewRenderer.render failed', e); }
         try { this._headerRenderer.render(vis); } catch (e) { console.error('SealionViewer: HeaderRenderer.render failed', e); }
+        try { this._plotRenderer.render(vis); } catch (e) { console.error('SealionViewer: PlotRenderer.render failed', e); }
         try { this._consensusRenderer.render(vis); } catch (e) { console.error('SealionViewer: ConsensusRenderer.render failed', e); }
         try { this._labelRenderer.render(vis); } catch (e) { console.error('SealionViewer: LabelRenderer.render failed', e); }
         try { this._alignmentRenderer.render(vis); } catch (e) { console.error('SealionViewer: AlignmentRenderer.render failed', e); }
@@ -2851,6 +2872,11 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
     // Invalidate the overview cache (call when mask, bookmarks, or ref mode changes)
     invalidateOverviewCache() {
       this._overviewRenderer.invalidateCache();
+    }
+
+    // Invalidate the entropy plot cache (call when alignment data changes)
+    invalidatePlotCache() {
+      if (this._plotRenderer) this._plotRenderer.invalidateCache();
     }
 
     // Toggle dark mode
@@ -3434,7 +3460,14 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
     // CDS reading frame colors (overview display)
     CDS_FRAME_COLORS: ['#0B775E', '#45b7d1', '#fd79a8'], // frames 1, 2, 3
     CDS_FILL_ALPHA: 1.0,
-    CDS_BORDER_ALPHA: 0.3
+    CDS_BORDER_ALPHA: 0.3,
+    // Entropy / plot strip
+    PLOT_HEIGHT: 40,
+    PLOT_BG: '#f3f3f3',
+    PLOT_SEPARATOR: '#aaa',
+    PLOT_BAR_COLOR: '#3182bd',
+    PLOT_TOP_PAD: 4,
+    PLOT_BOTTOM_PAD: 6
   };
 
   // Dark mode color scheme
@@ -3453,6 +3486,9 @@ import { AlignmentRenderer } from './renderers/AlignmentRenderer.js';
     HEADER_SELECTION: 'rgba(91, 163, 255, 0.2)',
     CONSENSUS_BG: '#1a1a1a',
     CONSENSUS_SEPARATOR: '#404040',
+    PLOT_BG: '#1a1a1a',
+    PLOT_SEPARATOR: '#404040',
+    PLOT_BAR_COLOR: '#5ba3ff',
     LABELS_BG: '#252525',
     LABELS_TEXT: '#d4d4d4',
     LABELS_HEADER_TEXT: '#d4d4d4',

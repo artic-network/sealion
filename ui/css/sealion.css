@@ -133,6 +133,7 @@
 
 #overview-canvas{ width:100%; height: var(--overview-height); display:block; }
 #header-canvas{ width:100%; height: var(--header-height); }
+#plot-canvas{ width:100%; height: var(--plot-height, 40px); display:block; }
 #consensus-canvas{ width:100%; height: var(--consensus-height); display:block; }
 #labels-canvas{ width: var(--label-width); position:absolute; left:0; top:0; }
 #seq-canvas{ position:absolute; left:0; top:0; z-index: 3; pointer-events: auto; }
