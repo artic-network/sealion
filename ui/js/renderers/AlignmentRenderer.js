@@ -30,7 +30,7 @@ export class AlignmentRenderer extends CanvasRenderer {
     const expandedRightPad = typeof v.EXPANDED_RIGHT_PAD === 'number' ? v.EXPANDED_RIGHT_PAD : 2;
     const colOffsets       = v.colOffsets || [];
 
-    const rows         = v.rows         || (window.rows)         || [];
+    const rows         = v.alignment  || (window.alignment) || [];
     const selectedRows = v.selectedRows || new Set();
     const selectedCols = v.selectedCols || new Set();
 
