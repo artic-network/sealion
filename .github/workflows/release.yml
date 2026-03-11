@@ -70,3 +70,27 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  webapp:
+    name: Package webapp
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    # Run after the release job so the draft release already exists.
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create sealion-webapp archives
+        run: |
+          cd sealion
+          zip -r ../sealion-webapp.zip .
+          tar -czf ../sealion-webapp.tgz .
+
+      - name: Upload webapp archives to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            ../sealion-webapp.zip \
+            ../sealion-webapp.tgz
