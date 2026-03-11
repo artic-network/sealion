@@ -2368,6 +2368,9 @@ import { PlotRenderer, PLOT_TYPES } from './renderers/PlotRenderer.js';
         // refresh reference string/index if helper exists
         let refStr = null, refIndex = null;
         try { const _r = (window && window.refreshRefStr) ? window.refreshRefStr() : { refStr: null, refIndex: null }; refStr = _r.refStr; refIndex = _r.refIndex; } catch (_) { refStr = null; refIndex = null; }
+        // Persist so renderers can read via this.refStr / this.refIndex
+        this.refStr   = refStr;
+        this.refIndex = typeof refIndex === 'number' ? refIndex : null;
 
         // mask string
         let maskStr = this.maskStr || (window && window.maskStr) || (window && window.mask) || null;

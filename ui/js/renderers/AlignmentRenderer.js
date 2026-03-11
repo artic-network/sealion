@@ -43,9 +43,9 @@ export class AlignmentRenderer extends CanvasRenderer {
     const hideMode    = v.hideMode   || false;
     const hiddenMarkerColor = v.HIDDEN_MARKER_COLOR || '#d0d0d0';
 
-    const baseColors      = (window.BASE_COLORS)      || { A: '#2ca02c', C: '#1f77b4', G: '#d62728', T: '#ff7f0e' };
-    const defaultBaseColor = (window.DEFAULT_BASE_COLOR) || '#666';
-    const paleRefColor     = (window.PALE_REF_COLOR)    || '#bfc9d6';
+    const baseColors      = v.BASE_COLORS      || { A: '#2ca02c', C: '#1f77b4', G: '#d62728', T: '#ff7f0e' };
+    const defaultBaseColor = v.DEFAULT_BASE_COLOR || '#666';
+    const paleRefColor     = v.PALE_REF_COLOR    || '#bfc9d6';
 
     const displayMode   = v.displayMode  || 'native';
     const dataType      = v.dataType     || 'nucleotide';
