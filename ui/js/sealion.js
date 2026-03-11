@@ -1461,6 +1461,32 @@
     });
   }
 
+  // Overview layer controls
+  document.querySelectorAll('.overview-layer-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!viewer || !viewer._overviewRenderer) return;
+      const layer = btn.getAttribute('data-layer');
+      if (!layer) return;
+      const nowEnabled = !viewer._overviewRenderer.isLayerEnabled(layer);
+      viewer._overviewRenderer.setLayerEnabled(layer, nowEnabled);
+      btn.classList.toggle('active', nowEnabled);
+    });
+  });
+
+  const hideOverviewBtn = document.getElementById('hide-overview-btn');
+  if (hideOverviewBtn) {
+    hideOverviewBtn.addEventListener('click', () => {
+      if (!viewer || !viewer.overviewCanvas) return;
+      const canvas = viewer.overviewCanvas;
+      const hidden = canvas.style.display === 'none';
+      canvas.style.display = hidden ? '' : 'none';
+      hideOverviewBtn.classList.toggle('active', !hidden);
+      viewer.setCanvasCSSSizes();
+      viewer.resizeBackings();
+      viewer.scheduleRender();
+    });
+  }
+
   // Show mode controls
   const nucleotideModeBtn = document.getElementById('nucleotide-mode-btn');
   if (nucleotideModeBtn) {

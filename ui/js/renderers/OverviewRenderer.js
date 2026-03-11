@@ -1,14 +1,20 @@
 // renderers/OverviewRenderer.js
 //
-// Renders the overview (minimap) canvas.
-// - scrollAxes: 'observe' for both H and V — reads scroll position to draw the
-//   viewport rectangle but has no scroll container of its own.
-// - selectionAxes: none — clicking the overview scrolls the viewer rather than
-//   selecting sequences or sites (handled via viewer.scrollToCol/scrollToRow).
-// - Caches the static portion (bars, CDS features, bookmarks) and only redraws
-//   the viewport indicator rectangle on every scroll frame.
+// Renders the overview (minimap) canvas via a composited layer system.
+//
+// Layers (in draw order, each independently toggleable):
+//   1. GenomeStructureLayer — CDS feature bars
+//   2. VariableSitesLayer   — compressed/expanded column bars + diff overlay
+//   3. SlidingWindowLayer   — active plot data as a filled area line
+//   + Viewport rectangle    — always on top, drawn directly on the live ctx
+//
+// Architecture mirrors PlotRenderer: an off-screen cache composite is rebuilt
+// whenever any layer's cache key changes, then blitted on every render frame.
 
-import { CanvasRenderer } from './CanvasRenderer.js';
+import { CanvasRenderer }       from './CanvasRenderer.js';
+import { GenomeStructureLayer } from './overview/GenomeStructureLayer.js';
+import { VariableSitesLayer }   from './overview/VariableSitesLayer.js';
+import { SlidingWindowLayer }   from './overview/SlidingWindowLayer.js';
 
 export class OverviewRenderer extends CanvasRenderer {
   static scrollAxes = { h: 'observe', v: 'observe' };
@@ -16,15 +22,41 @@ export class OverviewRenderer extends CanvasRenderer {
 
   constructor(canvas, viewer) {
     super(canvas, viewer);
-    // Off-screen cache for static content (bars, CDS, bookmarks)
-    this._cache = null;
-    this._cacheParams = null;
+
+    // Layer instances (order = draw order)
+    this._layers = {
+      genomeStructure : new GenomeStructureLayer(),
+      variableSites   : new VariableSitesLayer(),
+      slidingWindow   : new SlidingWindowLayer(),
+    };
+
+    // Off-screen cache for composited layer content
+    this._cache       = null;
+    this._cacheKey    = null;
     this._cacheInvalid = true;
-    // CDS hit regions for tooltip support (built during cache render)
-    this._cdsHitRegions = [];
   }
 
-  // Invalidate the static cache (call when alignment, bookmarks, or mask changes)
+  // ── Public layer API ───────────────────────────────────────────────────────
+
+  /** Enable or disable a named layer and schedule a full redraw. */
+  setLayerEnabled(name, enabled) {
+    if (!(name in this._layers)) return;
+    this._layers[name].enabled = enabled;
+    this.invalidateCache();
+  }
+
+  /** Returns whether a named layer is currently enabled. */
+  isLayerEnabled(name) {
+    return name in this._layers ? this._layers[name].enabled : false;
+  }
+
+  /** CDS hit regions — built by GenomeStructureLayer during cache render. */
+  get _cdsHitRegions() {
+    return this._layers.genomeStructure.cdsHitRegions;
+  }
+
+  // Invalidate the composite cache (call when alignment, bookmarks, mask, or
+  // any layer toggle changes).
   invalidateCache() {
     this._cacheInvalid = true;
     this.invalidate();
@@ -36,80 +68,41 @@ export class OverviewRenderer extends CanvasRenderer {
     const ctx = this.ensureBacking();
     if (!ctx) return;
 
-    const pr = v.pr || window.devicePixelRatio || 1;
-    const rect = this.canvas.getBoundingClientRect();
-    const cssW = Math.max(1, rect.width || Math.max(1, this.canvas.width / pr));
-    const cssH = Math.max(1, rect.height || Math.max(1, this.canvas.height / pr));
+    const p = this._buildParams();
+    if (!p) return;
 
-    const colOffsets       = v.colOffsets || [];
-    const maxSeqLen        = colOffsets.length > 0 ? colOffsets.length - 1 : 0;
-    const charWidth        = v.charWidth || 8;
-    const expandedRightPad = v.EXPANDED_RIGHT_PAD != null ? v.EXPANDED_RIGHT_PAD : 2;
-    const overviewTopPad   = v.OVERVIEW_TOP_PAD != null ? v.OVERVIEW_TOP_PAD : 4;
-    const overviewBottomPad= v.OVERVIEW_BOTTOM_PAD != null ? v.OVERVIEW_BOTTOM_PAD : 4;
-    const maskStr          = v.maskStr || (window && window.maskStr) || '';
-    const maskEnabled      = !!v.maskEnabled;
-    const rows             = (v.alignment && v.alignment.length != null) ? v.alignment : [];
-    const refModeEnabled   = !!v.refModeEnabled;
-    const refStr           = (window && window.refreshRefStr) ? (() => { try { return window.refreshRefStr().refStr; } catch (_) { return null; } })() : null;
-    const siteBookmarks    = v.siteBookmarks;
-
-    // Resolve CDS from the viewer's last-known reference genome
-    let refGenomeCDS = null;
-    try {
-      const acc = window && window.displayedReferenceAccession;
-      if (acc && v.alignment && v.alignment.getReferenceGenome) {
-        const rg = v.alignment.getReferenceGenome(acc);
-        if (rg && Array.isArray(rg.cds)) refGenomeCDS = rg.cds;
-      }
-      if (!refGenomeCDS && v._lastRefGenomeCDS) refGenomeCDS = v._lastRefGenomeCDS;
-    } catch (_) { refGenomeCDS = null; }
-
-    // Check if static-content cache needs rebuilding
-    const cacheKey = {
-      maxSeqLen,
-      maskStr,
-      maskEnabled,
-      refStr,
-      refModeEnabled,
-      rowCount: rows.length,
-      bookmarkCount: siteBookmarks ? siteBookmarks.size : 0,
-      cdsCount: refGenomeCDS ? refGenomeCDS.length : 0,
-    };
+    // Rebuild composite cache if needed
+    const cacheKey = this._buildCacheKey(p);
     const needsRebuild = this._cacheInvalid
       || !this._cache
       || this._cache.width  !== this.canvas.width
       || this._cache.height !== this.canvas.height
-      || !this._cacheParams
-      || Object.keys(cacheKey).some(k => this._cacheParams[k] !== cacheKey[k]);
+      || this._cacheKey !== cacheKey;
 
     if (needsRebuild) {
-      this._rebuildCache(cssW, cssH, pr, colOffsets, maxSeqLen, charWidth,
-        expandedRightPad, overviewTopPad, overviewBottomPad,
-        maskStr, maskEnabled, rows, refModeEnabled, refStr,
-        refGenomeCDS, siteBookmarks);
-      this._cacheParams  = cacheKey;
+      this._rebuildCache(p);
+      this._cacheKey    = cacheKey;
       this._cacheInvalid = false;
     }
 
-    // Blit static cache
+    const { cssW, cssH } = p;
+
+    // Blit the composite cache
     ctx.clearRect(0, 0, cssW, cssH);
     ctx.drawImage(this._cache, 0, 0, cssW, cssH);
 
-    // Draw viewport rectangle (changes every scroll frame)
-    const rawTotal  = colOffsets[maxSeqLen] || (maxSeqLen * (charWidth + expandedRightPad));
-    const totalWidth = Math.max(1, rawTotal);
-    const scale      = cssW / totalWidth;
-    try {
-      const viewX = Math.round((vis && vis.scrollLeft ? vis.scrollLeft : 0) * scale);
-      const viewW = Math.max(2, Math.round((vis && vis.viewW ? vis.viewW : cssW) * scale));
-      ctx.save();
-      ctx.strokeStyle = v.OVERVIEW_VIEWPORT;
-      ctx.lineWidth   = 2;
-      ctx.globalAlpha = 0.6;
-      ctx.strokeRect(viewX + 0.5, 2.5, viewW - 1, cssH - 4);
-      ctx.restore();
-    } catch (_) { /* ignore */ }
+    // Draw bookmarks on top of cache (they change with selection, not data)
+    this._drawBookmarks(ctx, p);
+
+    // Draw viewport rectangle (changes every scroll frame — never cached)
+    const viewX = Math.round((vis && vis.scrollLeft ? vis.scrollLeft : 0) * p.scale);
+    const viewW = Math.max(2, Math.round((vis && vis.viewW ? vis.viewW : cssW) * p.scale));
+    ctx.save();
+    ctx.strokeStyle = v.OVERVIEW_VIEWPORT;
+    ctx.lineWidth   = 2;
+    ctx.globalAlpha = 0.6;
+    ctx.strokeRect(viewX + 0.5, 2.5, viewW - 1, cssH - 4);
+    ctx.restore();
   }
 
   attachEvents() {
@@ -199,135 +192,115 @@ export class OverviewRenderer extends CanvasRenderer {
     });
   }
 
-  // ── Private ──────────────────────────────────────────────────────────────────
+  // ── Private helpers ────────────────────────────────────────────────────────
 
-  _rebuildCache(cssW, cssH, pr, colOffsets, maxSeqLen, charWidth, expandedRightPad,
-                overviewTopPad, overviewBottomPad, maskStr, maskEnabled,
-                rows, refModeEnabled, refStr, refGenomeCDS, siteBookmarks) {
-    const v = this.viewer;
+  /** Collect all viewer state needed for rendering into one plain object. */
+  _buildParams() {
+    const v  = this.viewer;
+    const pr = v.pr || window.devicePixelRatio || 1;
+    const rect = this.canvas.getBoundingClientRect();
+    const cssW = Math.max(1, rect.width  || Math.max(1, this.canvas.width  / pr));
+    const cssH = Math.max(1, rect.height || Math.max(1, this.canvas.height / pr));
+
+    const colOffsets       = v.colOffsets || [];
+    const maxSeqLen        = colOffsets.length > 0 ? colOffsets.length - 1 : 0;
+    const charWidth        = v.charWidth || 8;
+    const expandedRightPad = v.EXPANDED_RIGHT_PAD   != null ? v.EXPANDED_RIGHT_PAD   : 2;
+    const overviewTopPad   = v.OVERVIEW_TOP_PAD     != null ? v.OVERVIEW_TOP_PAD     : 4;
+    const overviewBottomPad= v.OVERVIEW_BOTTOM_PAD  != null ? v.OVERVIEW_BOTTOM_PAD  : 4;
+    const maskStr          = v.maskStr || '';
+    const maskEnabled      = !!v.maskEnabled;
+    const rows             = (v.alignment && v.alignment.length != null) ? v.alignment : [];
+    const refModeEnabled   = !!v.refModeEnabled;
+    const refStr           = v.refStr || null;
+    const siteBookmarks    = v.siteBookmarks;
+
+    let refGenomeCDS = null;
+    try {
+      const acc = window && window.displayedReferenceAccession;
+      if (acc && v.alignment && v.alignment.getReferenceGenome) {
+        const rg = v.alignment.getReferenceGenome(acc);
+        if (rg && Array.isArray(rg.cds)) refGenomeCDS = rg.cds;
+      }
+      if (!refGenomeCDS && v._lastRefGenomeCDS) refGenomeCDS = v._lastRefGenomeCDS;
+    } catch (_) {}
+
+    const rawTotal   = colOffsets[maxSeqLen] || (maxSeqLen * (charWidth + expandedRightPad));
+    const totalWidth = Math.max(1, rawTotal);
+    const scale      = cssW / totalWidth;
+    const barH       = Math.max(4, cssH - overviewTopPad - overviewBottomPad);
+    const barY       = overviewTopPad;
+
+    return {
+      viewer: v, pr, cssW, cssH,
+      colOffsets, maxSeqLen, charWidth, expandedRightPad,
+      maskStr, maskEnabled, rows, refModeEnabled, refStr,
+      refGenomeCDS, siteBookmarks,
+      totalWidth, scale, barH, barY,
+    };
+  }
+
+  /** Composite string key from all layer cacheKey() contributions. */
+  _buildCacheKey(p) {
+    const layerEnabled = Object.entries(this._layers)
+      .map(([name, layer]) => `${name}:${layer.enabled ? 1 : 0}`)
+      .join('|');
+    const layerKeys = Object.values(this._layers)
+      .map(l => typeof l.cacheKey === 'function' ? l.cacheKey(p) : '')
+      .join('|');
+    const { cssW, cssH } = p;
+    return `${cssW}x${cssH}|${layerEnabled}|${layerKeys}`;
+  }
+
+  /** Composite all enabled layers into the off-screen cache canvas. */
+  _rebuildCache(p) {
+    const v = p.viewer;
 
     if (!this._cache) this._cache = document.createElement('canvas');
     this._cache.width  = this.canvas.width;
     this._cache.height = this.canvas.height;
 
     const cacheCtx = this._cache.getContext('2d');
-    cacheCtx.setTransform(pr, 0, 0, pr, 0, 0);
-    cacheCtx.clearRect(0, 0, cssW, cssH);
+    cacheCtx.setTransform(p.pr, 0, 0, p.pr, 0, 0);
+    cacheCtx.clearRect(0, 0, p.cssW, p.cssH);
+
+    // Background
     cacheCtx.fillStyle = v.OVERVIEW_BG;
-    cacheCtx.fillRect(0, 0, cssW, cssH);
+    cacheCtx.fillRect(0, 0, p.cssW, p.cssH);
 
-    const rawTotal   = colOffsets[maxSeqLen] || (maxSeqLen * (charWidth + expandedRightPad));
-    const totalWidth = Math.max(1, rawTotal);
-    const scale      = cssW / totalWidth;
-    const barH       = Math.max(4, cssH - (overviewTopPad + overviewBottomPad));
-    const barY       = overviewTopPad;
+    // Render layers in order: genomeStructure → variableSites → slidingWindow
+    for (const layer of Object.values(this._layers)) {
+      if (layer.enabled) {
+        layer.render(cacheCtx, p);
+        cacheCtx.setTransform(p.pr, 0, 0, p.pr, 0, 0); // restore after any layer reset
+      }
+    }
+  }
 
-    // Compressed / expanded column bars
-    for (let c = 0; c < maxSeqLen; c++) {
-      const left  = colOffsets[c]     != null ? colOffsets[c]     : (c       * (charWidth + expandedRightPad));
+  /** Draw site bookmarks directly on the live canvas ctx (not cached). */
+  _drawBookmarks(ctx, p) {
+    const { siteBookmarks, maxSeqLen, colOffsets, charWidth,
+            expandedRightPad, scale, cssH } = p;
+    const v = p.viewer;
+    if (!siteBookmarks || siteBookmarks.size === 0) return;
+
+    ctx.save();
+    const bookmarkColors = v.BOOKMARK_COLORS || [];
+    for (const [c, bookmarkIdx] of siteBookmarks.entries()) {
+      if (c < 0 || c >= maxSeqLen) continue;
+      const color = (bookmarkIdx >= 0 && bookmarkIdx < bookmarkColors.length)
+        ? bookmarkColors[bookmarkIdx] : null;
+      if (!color) continue;
+      const left  = colOffsets[c]     != null ? colOffsets[c]     : (c * (charWidth + expandedRightPad));
       const right = colOffsets[c + 1] != null ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
       const x  = Math.round(left  * scale);
       const x2 = Math.round(right * scale);
-      const w  = Math.max(1, x2 - x);
-      const isCompressed = maskEnabled && maskStr && maskStr.charAt(c) === '0';
-      cacheCtx.fillStyle = isCompressed ? v.OVERVIEW_COLLAPSED_COL : v.OVERVIEW_EXPANDED_COL;
-      cacheCtx.fillRect(x, barY, w, barH);
+      const r  = parseInt(color.slice(1, 3), 16);
+      const g  = parseInt(color.slice(3, 5), 16);
+      const b  = parseInt(color.slice(5, 7), 16);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.5)`;
+      ctx.fillRect(x, 0, Math.max(1, x2 - x), cssH);
     }
-
-    // Difference sites when ref mode is active
-    if (refModeEnabled && refStr && rows.length > 0) {
-      cacheCtx.save();
-      cacheCtx.fillStyle = v.OVERVIEW_DIFF_COL;
-      for (let c = 0; c < maxSeqLen; c++) {
-        const refChar = refStr.charAt(c).toUpperCase();
-        if (!refChar || refChar === '-' || refChar === 'N') continue;
-        let hasDiff = false;
-        for (let r = 0; r < rows.length; r++) {
-          const base = (rows[r].sequence || '').charAt(c).toUpperCase();
-          if (base && base !== refChar && base !== '-' && base !== 'N') { hasDiff = true; break; }
-        }
-        if (!hasDiff) continue;
-        const left  = colOffsets[c]     != null ? colOffsets[c]     : (c * (charWidth + expandedRightPad));
-        const right = colOffsets[c + 1] != null ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-        cacheCtx.fillRect(Math.round(left * scale), barY, Math.max(1, Math.round(right * scale) - Math.round(left * scale)), barH);
-      }
-      cacheCtx.restore();
-    }
-
-    // CDS features
-    this._cdsHitRegions = [];
-    if (refGenomeCDS && refGenomeCDS.length > 0) {
-      cacheCtx.save();
-      const frameColors = v.CDS_FRAME_COLORS || (v.constructor.DEFAULTS && v.constructor.DEFAULTS.CDS_FRAME_COLORS);
-      const rowHeight   = Math.max(2, barH / 3);
-      const fillAlpha   = v.CDS_FILL_ALPHA   != null ? v.CDS_FILL_ALPHA   : (v.constructor.DEFAULTS && v.constructor.DEFAULTS.CDS_FILL_ALPHA);
-      const borderAlpha = v.CDS_BORDER_ALPHA != null ? v.CDS_BORDER_ALPHA : (v.constructor.DEFAULTS && v.constructor.DEFAULTS.CDS_BORDER_ALPHA);
-
-      for (const cds of refGenomeCDS) {
-        if (!cds.coordinates) continue;
-        const segments = v.parseCDSCoordinates(cds.coordinates);
-        for (const seg of segments) {
-          const startPos = seg.start - 1;
-          const endPos   = seg.end   - 1;
-          const rowIndex = seg.frame - 1;
-          const cdsY     = barY + rowIndex * rowHeight;
-
-          const leftPixel  = colOffsets[startPos] != null ? colOffsets[startPos] : (startPos * (charWidth + expandedRightPad));
-          const rightPixel = colOffsets[endPos]   != null ? colOffsets[endPos] + charWidth : ((endPos + 1) * (charWidth + expandedRightPad));
-          const x   = Math.round(leftPixel  * scale);
-          const x2  = Math.round(rightPixel * scale);
-          const w   = Math.max(1, x2 - x);
-          const col = frameColors ? frameColors[rowIndex] : '#888';
-
-          cacheCtx.globalAlpha = fillAlpha || 0.7;
-          cacheCtx.fillStyle   = col;
-          cacheCtx.fillRect(x, cdsY, w, rowHeight);
-
-          cacheCtx.globalAlpha = borderAlpha || 1.0;
-          cacheCtx.strokeStyle = col;
-          cacheCtx.lineWidth   = 0.5;
-          cacheCtx.strokeRect(x, cdsY, w, rowHeight);
-
-          this._cdsHitRegions.push({ x, y: cdsY, width: w, height: rowHeight,
-            gene: cds.gene || '', product: cds.product || '',
-            coordinates: cds.coordinates, function: cds.function || '' });
-
-          if (w >= 30 && cds.gene) {
-            cacheCtx.globalAlpha = 1.0;
-            cacheCtx.fillStyle   = '#ffffff';
-            cacheCtx.font        = 'bold 10px sans-serif';
-            cacheCtx.textAlign   = 'center';
-            cacheCtx.textBaseline = 'middle';
-            cacheCtx.shadowColor = 'rgba(0,0,0,0.5)';
-            cacheCtx.shadowBlur  = 2;
-            cacheCtx.fillText(cds.gene, x + w / 2, cdsY + rowHeight / 2);
-            cacheCtx.shadowColor = 'transparent';
-            cacheCtx.shadowBlur  = 0;
-          }
-        }
-      }
-      cacheCtx.restore();
-    }
-
-    // Bookmarks (drawn on top)
-    if (siteBookmarks && siteBookmarks.size > 0) {
-      cacheCtx.save();
-      const bookmarkColors = v.BOOKMARK_COLORS || [];
-      for (const [c, bookmarkIdx] of siteBookmarks.entries()) {
-        if (c < 0 || c >= maxSeqLen) continue;
-        const color = (bookmarkIdx >= 0 && bookmarkIdx < bookmarkColors.length) ? bookmarkColors[bookmarkIdx] : null;
-        if (!color) continue;
-        const left  = colOffsets[c]     != null ? colOffsets[c]     : (c * (charWidth + expandedRightPad));
-        const right = colOffsets[c + 1] != null ? colOffsets[c + 1] : (left + charWidth + expandedRightPad);
-        const x  = Math.round(left  * scale);
-        const x2 = Math.round(right * scale);
-        const r = parseInt(color.slice(1, 3), 16);
-        const g = parseInt(color.slice(3, 5), 16);
-        const b = parseInt(color.slice(5, 7), 16);
-        cacheCtx.fillStyle = `rgba(${r},${g},${b},0.5)`;
-        cacheCtx.fillRect(x, 0, Math.max(1, x2 - x), cssH);
-      }
-      cacheCtx.restore();
-    }
+    ctx.restore();
   }
 }
