@@ -2904,7 +2904,7 @@
           
           // Load mpox_clade_iib.fasta
           console.log('Loading mpox_clade_iib.fasta...');
-          const fastaResponse = await fetch('mpox_clade_iib.fasta');
+          const fastaResponse = await fetch('data/mpox_clade_iib.fasta');
           if (!fastaResponse.ok) {
             throw new Error('Failed to load mpox_clade_iib.fasta');
           }
@@ -2940,7 +2940,7 @@
           // Load the reference genome NC_063383_mpox_clade_iib.gb
           try {
             console.log('Loading NC_063383_mpox_clade_iib.gb reference genome...');
-            const gbResponse = await fetch('NC_063383_mpox_clade_iib.gb');
+            const gbResponse = await fetch('data/NC_063383_mpox_clade_iib.gb');
             if (!gbResponse.ok) {
               console.warn('Failed to load reference genome NC_063383_mpox_clade_iib.gb');
               return;
